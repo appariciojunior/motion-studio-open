@@ -127,11 +127,15 @@ export function applyBoardProject(p: BoardProject) {
   // exists falls back to whatever getTemplate resolves, and we store that id so
   // the panels don't point at a phantom.
   const tpl = getTemplate(s.activeTemplateId);
-  useSceneStore.setState({
-    activeTemplateId: tpl.meta.id,
+  // Route the motion through patchTrack rather than setState: the top-level
+  // activeTemplateId/values/easing are a projection of the ACTIVE TRACK, so
+  // writing them directly would leave the track (what the renderer reads) stale.
+  // A board project carries one motion, so it lands on the active track.
+  const st = useSceneStore.getState();
+  st.patchTrack(st.activeTrackId, {
+    templateId: tpl.meta.id,
     values: s.values ?? {},
     easing: s.easing,
-    duration: s.duration ?? 8,
-    frame: 0,
   });
+  useSceneStore.setState({ duration: s.duration ?? 8, frame: 0 });
 }

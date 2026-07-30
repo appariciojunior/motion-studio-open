@@ -46,7 +46,10 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
   height: 100vh;
   display: grid;
   grid-template-columns: var(--rail-w) var(--templates-col) minmax(0, 1fr) var(--controls-col) var(--right-col);
-  grid-template-rows: 1fr var(--bottom-h);
+  /* `auto` rather than a fixed --bottom-h: the transport row keeps that exact
+     height on its own, and the row grows only when the motion-layer lanes are
+     expanded below it. */
+  grid-template-rows: minmax(0, 1fr) auto;
   grid-template-areas:
     "rail templates stage controls right"
     "rail bottom bottom bottom bottom";
@@ -105,6 +108,15 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
 }
 .rail-item:hover { color: var(--fg-muted); }
 .rail-item.active { background: var(--card-inset); color: var(--fg); }
+/* "Novo" is an action, not a section — it reads as the primary affordance and
+   never carries the active state, so a hairline separates it from the nav. */
+.rail-item.rail-action {
+  color: var(--fg-label);
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  margin-bottom: 8px; padding-bottom: 4px;
+}
+.rail-item.rail-action:hover { color: var(--fg); background: var(--card-inset); }
 .rail-ico { width: 20px; height: 20px; display: grid; place-items: center; }
 .rail-label { font-size: 8px; line-height: 10px; font-weight: 600; }
 .rail-bottom { padding: 8px; border-top: 1px solid var(--line); }
@@ -581,7 +593,11 @@ select.field { padding-right: 26px; }
    9px time labels, 4px #e5e7eb track, #374151 playhead line + chip
    ============================================================ */
 .bottom { grid-area: bottom; border-top: 1px solid var(--line); }
-.timeline { display: flex; align-items: center; gap: 16px; padding: 0 var(--pad-sect); height: 100%; }
+/* The shell stacks the transport row and (when open) the motion-layer lanes.
+   --tl-axis-left / --tl-axis-w are measured and written by Timeline.tsx so the
+   lane bars share the scrubber's exact coordinate space. */
+.timeline-shell { display: flex; flex-direction: column; --tl-axis-left: 0px; --tl-axis-w: 100%; }
+.timeline { display: flex; align-items: center; gap: 16px; padding: 0 var(--pad-sect); height: var(--bottom-h); flex: 0 0 auto; }
 .play-btn {
   width: 36px; height: 36px; border-radius: var(--r-ctrl); background: var(--inverse-bg);
   color: var(--inverse-fg); display: grid; place-items: center; flex: 0 0 auto;
@@ -631,6 +647,178 @@ select.field { padding-right: 26px; }
   transition: opacity var(--t-fast);
 }
 .export-btn:hover { opacity: 0.9; }
+
+/* ============================================================
+   MOTION LAYER LANES — the track stack under the transport row.
+   One lane per track; the bar's x-extent IS its window on the clip, so the
+   geometry the user drags is the geometry the renderer plays.
+   ============================================================ */
+.tl-lanes-btn {
+  height: var(--ctl-h); padding: 0 12px; background: var(--card-inset); color: var(--fg-label);
+  border-radius: var(--r-seg); display: flex; align-items: center; gap: 6px;
+  font-size: var(--fs-ui); flex: 0 0 auto; transition: background var(--t-fast), color var(--t-fast);
+}
+.tl-lanes-btn:hover { background: var(--card-thumb); color: var(--fg); }
+.tl-lanes-btn.active { background: var(--seg-active-bg); color: var(--seg-active-fg); }
+.tl-lanes-count {
+  font-size: var(--fs-micro); font-variant-numeric: tabular-nums;
+  padding: 1px 4px; background: var(--card); color: var(--fg-muted); line-height: 12px;
+}
+.tl-lanes-btn.active .tl-lanes-count { background: var(--card-inset); color: var(--fg-label); }
+
+.tl-lanes {
+  position: relative; border-top: 1px solid var(--line);
+  padding: 8px var(--pad-sect) 0;
+  display: flex; flex-direction: column; gap: 3px;
+  max-height: 44vh; overflow-y: auto;
+}
+
+.tl-lane {
+  display: flex; align-items: center; gap: 8px;
+  height: var(--tl-lane-h); flex: 0 0 auto; cursor: default;
+}
+.tl-lane.hidden { opacity: 0.45; }
+
+.tl-lane-gutter {
+  /* right-aligned into the space left of the shared time axis, so the bars
+     start exactly where the ruler starts */
+  width: calc(var(--tl-axis-left) - var(--pad-sect) - 8px);
+  min-width: var(--tl-gutter-w);
+  display: flex; align-items: center; justify-content: flex-end; gap: 2px; flex: 0 0 auto;
+}
+.tl-lane-eye {
+  width: 22px; height: 22px; display: grid; place-items: center; flex: 0 0 auto;
+  color: var(--fg-faint); transition: color var(--t-fast);
+}
+.tl-lane-eye:hover { color: var(--fg); }
+.tl-lane.active .tl-lane-eye { color: var(--fg-label); }
+.tl-lane-order { display: flex; flex-direction: column; flex: 0 0 auto; }
+.tl-lane-arrow {
+  width: 16px; height: 12px; display: grid; place-items: center;
+  color: var(--fg-faint); transition: color var(--t-fast);
+}
+.tl-lane-arrow:hover:not(:disabled) { color: var(--fg); }
+.tl-lane-arrow:disabled { opacity: 0.3; cursor: default; }
+
+.tl-lane-bars { position: relative; flex: 1; height: 100%; min-width: 0; }
+
+.tl-bar {
+  --tl-bar-fill: var(--tl-bar-idle);
+  position: absolute; top: 2px; bottom: 2px;
+  background: var(--tl-bar-fill); color: var(--tl-bar-idle-fg);
+  border-radius: var(--r-seg); overflow: hidden;
+  display: flex; align-items: center;
+  cursor: grab; touch-action: none;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+.tl-bar:active { cursor: grabbing; }
+.tl-lane.active .tl-bar { --tl-bar-fill: var(--tl-bar-on); color: var(--tl-bar-on-fg); }
+
+/* the alpha envelope the renderer applies at the window edges, drawn to scale */
+.tl-bar-fade { position: absolute; inset: 0; pointer-events: none; }
+
+.tl-bar-spark {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  pointer-events: none; opacity: 0.9;
+}
+.tl-bar-spark path { fill: none; stroke: var(--tl-spark); stroke-width: 1.25; vector-effect: non-scaling-stroke; }
+.tl-lane.active .tl-bar-spark path { stroke: var(--tl-spark-on); }
+.tl-bar-spark .tl-bar-spark-y { stroke-dasharray: 2 2; opacity: 0.65; }
+
+.tl-bar-label {
+  position: relative; display: flex; align-items: baseline; gap: 6px;
+  padding: 0 9px; min-width: 0; pointer-events: none;
+  font-size: var(--fs-meta); line-height: 1; white-space: nowrap;
+}
+.tl-bar-label b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+.tl-bar-label em { font-style: normal; opacity: 0.6; }
+
+/* 6px grab strips; the cursor is the affordance — no extra chrome in the bar */
+.tl-bar-edge {
+  position: absolute; top: 0; bottom: 0; width: 6px;
+  cursor: ew-resize; touch-action: none;
+}
+.tl-bar-edge.in { left: 0; }
+.tl-bar-edge.out { right: 0; }
+.tl-bar-edge:hover { background: var(--line-soft); }
+
+.tl-bar-actions {
+  position: absolute; right: 8px; top: 0; bottom: 0;
+  display: none; align-items: center; gap: 2px;
+}
+.tl-bar:hover .tl-bar-actions { display: flex; }
+.tl-bar-actions button {
+  width: 18px; height: 18px; display: grid; place-items: center;
+  color: currentColor; opacity: 0.55; transition: opacity var(--t-fast);
+}
+.tl-bar-actions button:hover { opacity: 1; }
+
+.tl-lanes-playhead {
+  position: absolute; top: 0; bottom: 34px; width: 2px; margin-left: -1px;
+  background: var(--chip-bg); pointer-events: none;
+}
+
+.tl-lanes-foot {
+  display: flex; align-items: center; gap: 12px;
+  height: 34px; flex: 0 0 auto;
+}
+.tl-add-track {
+  height: 24px; padding: 0 10px; background: var(--card-inset); color: var(--fg-label);
+  border-radius: var(--r-seg); display: flex; align-items: center; gap: 5px;
+  font-size: var(--fs-ui); flex: 0 0 auto; transition: background var(--t-fast), color var(--t-fast);
+}
+.tl-add-track:hover { background: var(--card-thumb); color: var(--fg); }
+.tl-lanes-hint { font-size: var(--fs-meta); color: var(--fg-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- track inspector (active layer's own properties) ---- */
+.trk-name {
+  max-width: 130px; border: none; text-align: right;
+  font-size: var(--fs-ui); color: var(--fg-label); background: var(--card-inset);
+}
+.trk-name:focus { color: var(--fg); }
+.trk-assets { display: flex; flex-wrap: wrap; gap: 4px; }
+.trk-asset {
+  width: 26px; height: 26px; display: grid; place-items: center; flex: 0 0 auto;
+  background: var(--card-inset); color: var(--fg-faint); border-radius: var(--r-seg);
+  font-size: var(--fs-meta); font-variant-numeric: tabular-nums;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+.trk-asset:hover { background: var(--card-thumb); color: var(--fg-label); }
+.trk-asset.on { background: var(--seg-active-bg); color: var(--seg-active-fg); }
+
+/* ============================================================
+   PROJECTS PANEL — the project list in the left column
+   ============================================================ */
+.prj-sub { font-size: var(--fs-meta); color: var(--fg-faint); padding: 6px 0 2px; }
+.prj-list { padding: 6px 0; }
+.prj-item {
+  position: relative; display: flex; align-items: center; gap: 4px;
+  padding: 0 var(--pad-card); min-height: 48px;
+  border-left: 2px solid transparent;
+  transition: background var(--t-fast);
+}
+.prj-item:hover { background: var(--card-soft); }
+.prj-item.active { border-left-color: var(--fg); background: var(--card-soft); }
+.prj-open {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px;
+  text-align: left; padding: 8px 0;
+}
+.prj-name {
+  font-size: var(--fs-label); color: var(--fg-label);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.prj-item.active .prj-name { color: var(--fg); font-weight: 500; }
+.prj-meta { font-size: var(--fs-meta); color: var(--fg-faint); }
+.prj-meta b { color: var(--fg-muted); font-weight: 500; }
+.prj-rename { flex: 1; min-width: 0; height: 30px; }
+.prj-actions { display: none; align-items: center; gap: 2px; flex: 0 0 auto; }
+.prj-item:hover .prj-actions,
+.prj-item.active .prj-actions { display: flex; }
+.prj-actions .icon-btn.danger { color: var(--gz-x); }
+.prj-confirm {
+  position: absolute; left: var(--pad-card); right: var(--pad-card); bottom: 2px;
+  font-size: var(--fs-micro); color: var(--gz-x); line-height: 1.3;
+}
 
 /* ============================================================
    MODAL

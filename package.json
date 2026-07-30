@@ -35,5 +35,8 @@
     "playwright-core": "^1.61.1",
     "puppeteer-core": "^25.3.0",
     "typescript": "^5.9.3"
+  },
+  "allowScripts": {
+    "sharp@0.34.5": true
   }
 }
