@@ -4,7 +4,8 @@ import { getTemplate } from '@/templates';
 import { getEffect } from '@/effects';
 import { useSceneStore, type SceneState } from '@/store/useSceneStore';
 import { resolveEasing } from '@/lib/easing';
-import { assetIndexForSlot } from '@/lib/motion';
+import { assetIndexForSlot, clamp } from '@/lib/motion';
+import { resolveTrackTime, trackAssetIndices, type MotionTrack } from '@/lib/tracks';
 import { cardAspectFor, coverCrop, cropKey } from '@/lib/crop';
 import { advanceVideoForExport, createCardVideo, isVideoSource, prepareVideoForSequentialExport, whenVideoReady } from '@/lib/videoTexture';
 
@@ -24,6 +25,16 @@ interface Slot {
   texW: number;
   texH: number;
   cornerR: number; // last-applied corner radius fraction, for mask caching
+}
+
+// The GPU-side realization of one motion track. Each track owns its own sprite
+// pool and its own container, so tracks composite over each other (container
+// order = stacking order) and can carry independent alpha / blend modes.
+interface TrackRT {
+  container: PIXI.Container;
+  slots: Slot[];
+  assetSig: string;
+  countSig: number;
 }
 
 // A single white rounded texture, tinted per placeholder card.
@@ -50,11 +61,11 @@ export class SceneRenderer {
   private videoEls = new Map<string, HTMLVideoElement>();  // live <video> per url, for playback + cleanup
   private exportVideoFrames = new Map<string, { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D; texture: PIXI.Texture }>();
   private liveVideoTextures = new Map<string, PIXI.Texture>();
-  private slots: Slot[] = [];
+  // One runtime per motion track, keyed by track id. `motion` holds their
+  // containers; zIndex mirrors the store's track order.
+  private trackRTs = new Map<string, TrackRT>();
   private ready = false;
 
-  private lastAssetSig = '';
-  private lastCountSig = -1;
   private lastFxSig = '';
   private bgImageUrl = '';                        // last-loaded uploaded bg url
   private bgImageTex: PIXI.Texture | null = null;
@@ -143,26 +154,58 @@ export class SceneRenderer {
     return tex;
   }
 
-  // Rebuild the sprite pool to match count; slot i binds to asset i (positional,
-  // 1:1 with the Assets panel), or to asset i % assets.length when the template
-  // opts into repeatAssets (high-count fields). Slots past the asset list cycle
-  // the available images; numbered placeholders appear only with zero assets.
+  // Reconcile the GPU track list against the store, then rebuild each track's
+  // sprite pool. Container order inside `motion` is the stacking order, so a
+  // track later in the array draws over the ones before it.
   syncAssets() {
     if (!this.ready) return;
     const s = useSceneStore.getState();
-    const count = Math.max(1, Math.round(s.values.count ?? 6));
-    const meta = getTemplate(s.activeTemplateId).meta;
+
+    // drop runtimes for tracks that no longer exist
+    for (const [id, rt] of this.trackRTs) {
+      if (!s.tracks.some((t) => t.id === id)) {
+        rt.container.destroy({ children: true });
+        this.trackRTs.delete(id);
+      }
+    }
+
+    s.tracks.forEach((track, order) => {
+      let rt = this.trackRTs.get(track.id);
+      if (!rt) {
+        const container = new PIXI.Container();
+        container.sortableChildren = true; // per-track depth sorting
+        this.motion.addChild(container);
+        rt = { container, slots: [], assetSig: '', countSig: -1 };
+        this.trackRTs.set(track.id, rt);
+      }
+      rt.container.zIndex = order;
+      this.syncTrackSlots(track, rt, s);
+    });
+  }
+
+  // Rebuild one track's sprite pool to match its count; slot i binds to the
+  // i-th asset OF THIS TRACK'S SLICE (positional, 1:1 with the Assets panel
+  // when the track takes everything), or to i % length when the template opts
+  // into repeatAssets (high-count fields). Slots past the list cycle the
+  // available images; numbered placeholders appear only with zero assets.
+  private syncTrackSlots(track: MotionTrack, rt: TrackRT, s: SceneState) {
+    const count = Math.max(1, Math.round(track.values.count ?? 6));
+    const meta = getTemplate(track.templateId).meta;
     const repeat = meta.repeatAssets === true;
     const aspect = cardAspectFor(meta, s.width, s.height, s.cardShape);
-    const assetSig = (repeat ? 'R|' : '') + 'A' + aspect.toFixed(4) + '|' +
-      s.assets.map((a) => a.id + ':' + a.url + ':' + a.visible + ':' + (a.crop ? a.crop.x + ',' + a.crop.y : 'c')).join('|');
+    // Which scene assets feed this track, in track order.
+    const indices = trackAssetIndices(track, s.assets);
+    const pool = indices.map((i) => s.assets[i]).filter(Boolean);
 
-    if (count === this.lastCountSig && assetSig === this.lastAssetSig) return;
-    this.lastCountSig = count;
-    this.lastAssetSig = assetSig;
+    const assetSig = (repeat ? 'R|' : '') + 'A' + aspect.toFixed(4) + '|' +
+      pool.map((a) => a.id + ':' + a.url + ':' + a.visible + ':' + (a.crop ? a.crop.x + ',' + a.crop.y : 'c')).join('|');
+
+    if (count === rt.countSig && assetSig === rt.assetSig) return;
+    rt.countSig = count;
+    rt.assetSig = assetSig;
 
     // grow / shrink pool
-    while (this.slots.length < count) {
+    while (rt.slots.length < count) {
       const sprite = new PIXI.Sprite(this.placeholder);
       sprite.anchor.set(0.5);
       const mask = new PIXI.Graphics();
@@ -174,19 +217,19 @@ export class SceneRenderer {
       });
       label.anchor.set(0.5);
       sprite.addChild(label);
-      this.motion.addChild(sprite);
-      this.slots.push({ sprite, mask, label, texW: 480, texH: 600, cornerR: -1 });
+      rt.container.addChild(sprite);
+      rt.slots.push({ sprite, mask, label, texW: 480, texH: 600, cornerR: -1 });
     }
-    while (this.slots.length > count) {
-      const slot = this.slots.pop()!;
+    while (rt.slots.length > count) {
+      const slot = rt.slots.pop()!;
       slot.sprite.destroy({ children: true });
     }
 
-    // assign textures — slot i ↔ asset i (or i % assets.length when repeating);
-    // slots past the list cycle the set; hidden → placeholder
-    this.slots.forEach((slot, i) => {
-      let asset = s.assets[assetIndexForSlot(i, s.assets.length, repeat)];
-      if (!asset && s.assets.length > 0) asset = s.assets[i % s.assets.length];
+    // assign textures — slot i ↔ pool asset i (or i % pool.length when
+    // repeating); slots past the list cycle the set; hidden → placeholder
+    rt.slots.forEach((slot, i) => {
+      let asset = pool[assetIndexForSlot(i, pool.length, repeat)];
+      if (!asset && pool.length > 0) asset = pool[i % pool.length];
       if (!asset || !asset.visible) {
         slot.sprite.texture = this.placeholder;
         slot.sprite.tint = PLACEHOLDER_FILL;
@@ -206,6 +249,12 @@ export class SceneRenderer {
         });
       }
     });
+  }
+
+  // Force every track to rebuild its pool on the next syncAssets — used when the
+  // texture cache is swapped wholesale (video export begin/end).
+  private invalidateTracks() {
+    this.trackRTs.forEach((rt) => { rt.assetSig = ''; rt.countSig = -1; });
   }
 
   private applyMask(slot: Slot, cornerRadiusPct: number) {
@@ -347,45 +396,71 @@ export class SceneRenderer {
     this.syncEffects();
     this.drawOverlays(s);
 
-    const template = getTemplate(s.activeTemplateId);
-    const count = this.slots.length;
+    const totalFrames = Math.max(1, Math.round(s.duration * s.fps));
 
-    // Resolve the scene easing once per frame; shape cyclic phases so each
-    // unit step follows the curve while the loop stays seamless (ease(0)=0,
-    // ease(1)=1 ⇒ continuous at every integer boundary).
-    const ease = resolveEasing(s.easing);
-    const easedPhase = (phase: number) => {
-      const base = Math.floor(phase);
-      return base + ease(phase - base);
-    };
-    const ctx = {
-      fps: s.fps, width: s.width, height: s.height,
-      duration: s.duration,
-      totalFrames: Math.max(1, Math.round(s.duration * s.fps)),
-      ease, easedPhase,
-    };
-
-    // Track the featured (front-most) card so a 'card' background can reflect it.
+    // Track the featured (front-most) card so a 'card' background can reflect
+    // it. Later tracks draw on top, so their cards win ties — the background
+    // reflects what the viewer actually sees in front.
     let featured: { tex: PIXI.Texture; x: number; y: number } | null = null;
-    let featuredDepth = -Infinity;
+    let featuredScore = -Infinity;
 
-    for (let i = 0; i < count; i++) {
-      const slot = this.slots[i];
-      const t = template.transform(frame, i, count, s.values, ctx);
-      const norm = SPRITE_BASE / Math.max(slot.texW, slot.texH);
-      slot.sprite.position.set(t.x, t.y);
-      slot.sprite.scale.set(norm * t.scale * (t.scaleX ?? 1), norm * t.scale * (t.scaleY ?? 1));
-      slot.sprite.rotation = t.rotation;
-      slot.sprite.alpha = t.alpha;
-      slot.sprite.skew.set(t.skewX ?? 0, t.skewY ?? 0);
-      slot.sprite.zIndex = t.depth * 1000 + i; // stable tiebreak
-      this.applyMask(slot, s.values.cornerRadius ?? 0);
+    s.tracks.forEach((track, order) => {
+      const rt = this.trackRTs.get(track.id);
+      if (!rt) return;
 
-      if (t.depth > featuredDepth && t.alpha > 0.15) {
-        featuredDepth = t.depth;
-        featured = { tex: slot.sprite.texture, x: t.x, y: t.y };
+      // Map the scene frame onto this track's own window. Outside it, the whole
+      // container is hidden — no per-slot work at all.
+      const time = resolveTrackTime(track, frame, totalFrames);
+      if (!time.active) { rt.container.visible = false; return; }
+
+      rt.container.visible = true;
+      rt.container.alpha = clamp(track.opacity, 0, 1) * time.envelope;
+      rt.container.blendMode = track.blend;
+      // Track-level transform, on top of whatever the template poses.
+      rt.container.position.set(track.transform.x, track.transform.y);
+      rt.container.scale.set(track.transform.scale);
+      rt.container.rotation = (track.transform.rotation * Math.PI) / 180;
+
+      const template = getTemplate(track.templateId);
+      const count = rt.slots.length;
+
+      // Resolve this track's easing once per frame; shape cyclic phases so each
+      // unit step follows the curve while the loop stays seamless (ease(0)=0,
+      // ease(1)=1 ⇒ continuous at every integer boundary).
+      const ease = resolveEasing(track.easing);
+      const easedPhase = (phase: number) => {
+        const base = Math.floor(phase);
+        return base + ease(phase - base);
+      };
+      // The track's WINDOW is its clip: templates quantize against
+      // ctx.totalFrames, so each track loops seamlessly inside its own window.
+      const ctx = {
+        fps: s.fps, width: s.width, height: s.height,
+        duration: time.localTotal / Math.max(1, s.fps),
+        totalFrames: time.localTotal,
+        ease, easedPhase,
+      };
+
+      for (let i = 0; i < count; i++) {
+        const slot = rt.slots[i];
+        const t = template.transform(time.localFrame, i, count, track.values, ctx);
+        const norm = SPRITE_BASE / Math.max(slot.texW, slot.texH);
+        slot.sprite.position.set(t.x, t.y);
+        slot.sprite.scale.set(norm * t.scale * (t.scaleX ?? 1), norm * t.scale * (t.scaleY ?? 1));
+        slot.sprite.rotation = t.rotation;
+        slot.sprite.alpha = t.alpha;
+        slot.sprite.skew.set(t.skewX ?? 0, t.skewY ?? 0);
+        slot.sprite.zIndex = t.depth * 1000 + i; // stable tiebreak
+        this.applyMask(slot, track.values.cornerRadius ?? 0);
+
+        // Rank across tracks: stacking order dominates, card depth breaks ties.
+        const score = order * 1e6 + t.depth;
+        if (score > featuredScore && t.alpha > 0.15) {
+          featuredScore = score;
+          featured = { tex: slot.sprite.texture, x: t.x, y: t.y };
+        }
       }
-    }
+    });
 
     this.updateBackground(s, featured);
   }
@@ -414,7 +489,7 @@ export class SceneRenderer {
     });
     this.croppedCache.forEach((tex) => tex.destroy(false));
     this.croppedCache.clear();
-    this.lastAssetSig = '';
+    this.invalidateTracks();
     this.syncAssets();
     await Promise.resolve();
   }
@@ -426,7 +501,7 @@ export class SceneRenderer {
     this.croppedCache.clear();
     this.exportVideoFrames.forEach(({ texture }) => texture.destroy(true));
     this.exportVideoFrames.clear();
-    this.lastAssetSig = '';
+    this.invalidateTracks();
     this.syncAssets();
   }
 

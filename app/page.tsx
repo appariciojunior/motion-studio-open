@@ -9,6 +9,8 @@ import CanvasPanel from '@/components/CanvasPanel';
 import EffectsPanel from '@/components/EffectsPanel';
 import AssetsPanel from '@/components/AssetsPanel';
 import Timeline from '@/components/Timeline';
+import BoardPanel from '@/components/BoardPanel';
+import BoardExportBar from '@/components/BoardExportBar';
 import WelcomeDialog from '@/components/WelcomeDialog';
 import Effects3DPanel from '@/components/Effects3DPanel';
 import Effect3DControls from '@/components/Effect3DControls';
@@ -19,13 +21,14 @@ import WebScenePanel from '@/components/WebScenePanel';
 import WebSelectionPanel from '@/components/WebSelectionPanel';
 import WebCodeModal from '@/components/WebCodeModal';
 import WebSourceBar from '@/components/WebSourceBar';
-import BoardPanel from '@/components/BoardPanel';
-import BoardExportBar from '@/components/BoardExportBar';
 import { CollapsedStrip } from '@/components/TplCollapse';
 import { useUIStore } from '@/store/useUIStore';
-import { useSceneStore } from '@/store/useSceneStore';
-import { loadScene, startSceneAutosave } from '@/lib/scenePersist';
+import { useProjectStore } from '@/store/useProjectStore';
+import { useHistoryStore } from '@/store/useHistoryStore';
+import { startSceneAutosave } from '@/lib/scenePersist';
 import { useWebStore } from '@/store/useWebStore';
+import ProjectsPanel from '@/components/ProjectsPanel';
+import HistoryControls from '@/components/HistoryControls';
 
 // Pixi must run client-side only.
 const PreviewStage = dynamic(() => import('@/components/PreviewStage'), { ssr: false });
@@ -44,18 +47,43 @@ export default function Home() {
   const toggleRightPanel = useUIStore((s) => s.toggleRightPanel);
   const is3D = nav === '3d';
   const isWeb = nav === 'web';
-  const isBoard = nav === 'new';
+  const isBoard = nav === 'board';
+  // Projects swaps the left column for the project list; the stage, scene column
+  // and timeline keep showing the open project, so switching is a live preview.
+  const isProjects = nav === 'projects';
   const codeOpen = useWebStore((s) => s.codeOpen);
   const tplCollapsed = useUIStore((s) => s.tplCollapsed);
 
-  // Restore the saved scene on mount (after hydration, so no SSR mismatch), then
-  // start throttled auto-save. Uploaded media urls are rebuilt from IndexedDB.
+  // Open the active project on mount (after hydration, so no SSR mismatch), then
+  // start throttled auto-save into it. bootstrap() also migrates a pre-projects
+  // scene into a project and rebuilds uploaded media urls from IndexedDB.
   useEffect(() => {
     useUIStore.getState().hydratePreferences();
-    const saved = loadScene();
-    if (saved) useSceneStore.getState().hydrate(saved);
-    void useSceneStore.getState().rehydrateUploads();
-    return startSceneAutosave();
+    useProjectStore.getState().bootstrap();
+    // History starts AFTER bootstrap, so the loaded scene is the baseline and
+    // the first undo can't rewind into the pre-load default state.
+    const stopHistory = useHistoryStore.getState().start();
+    const stopAutosave = startSceneAutosave();
+    return () => { stopHistory(); stopAutosave(); };
+  }, []);
+
+  // Undo/redo shortcuts. Skipped while typing so ⌘Z keeps its normal meaning
+  // inside a text field (project names, layer names, exact slider values).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+      const k = e.key.toLowerCase();
+      if (k !== 'z' && k !== 'y') return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      e.preventDefault();
+      const h = useHistoryStore.getState();
+      // ⌘⇧Z and ⌘Y both redo — the Mac and Windows idioms respectively.
+      if (k === 'y' || e.shiftKey) h.redo();
+      else h.undo();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, []);
 
   return (
@@ -68,7 +96,7 @@ export default function Home() {
           Web and board reuse the template list wholesale: the templates are
           pure frame→pose functions, so the picker doesn't care what renders
           them. */}
-      {tplCollapsed ? <CollapsedStrip /> : is3D ? <Effects3DPanel /> : <TemplatesCard controlsInline={isBoard} />}
+      {tplCollapsed ? <CollapsedStrip /> : isProjects ? <ProjectsPanel /> : is3D ? <Effects3DPanel /> : <TemplatesCard controlsInline={isBoard} />}
 
       {/* middle SCENE column — 2D only. 3D, web and board fold everything into
           the single right sidebar rather than run two 280px panels side by
@@ -96,6 +124,8 @@ export default function Home() {
             </button>
           </>
         )}
+        {/* scene-level undo/redo, floating top-left of the stage */}
+        <HistoryControls />
         <button
           className="panel-toggle panel-toggle-left"
           onClick={toggleLeftPanel}

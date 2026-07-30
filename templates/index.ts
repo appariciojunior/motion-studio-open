@@ -24,6 +24,7 @@ import { scatterVariants } from './scatter';
 import { revealVariants } from './reveal';
 import { blankVariants } from './blank';
 import { galleryVariants } from './gallery';
+import { tickerVariants } from './ticker';
 
 const carouselVariants: Template[] = [
   { ...carousel, meta: { ...carousel.meta, name: 'Runway 01' } },
@@ -66,6 +67,7 @@ export const templateList: Template[] = [
   ...revealVariants,
   ...blankVariants,
   ...galleryVariants,
+  ...tickerVariants,
 ];
 
 export const templates: Record<string, Template> = Object.fromEntries(

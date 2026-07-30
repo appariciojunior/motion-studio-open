@@ -21,7 +21,16 @@ export default function PreviewStage() {
   const height = useSceneStore((s) => s.height);
   // Engine flag drives a full canvas remount — a canvas can never be reused
   // across GL libraries (context attributes and loss behaviour differ).
-  const engine = useSceneStore((s) => getTemplate(s.activeTemplateId).meta.engine ?? 'pixi');
+  //
+  // Layer stacking is a 2D compositing feature: only the Pixi renderer draws a
+  // container per track. So a stack of two or more layers stays on Pixi even if
+  // the selected track's template is webgl — that template falls back to its own
+  // 2D `transform`, which every template provides. Otherwise selecting a webgl
+  // layer would swap in the single-motion 3D renderer and the other layers would
+  // vanish.
+  const engine = useSceneStore((s) =>
+    s.tracks.length > 1 ? 'pixi' : getTemplate(s.activeTemplateId).meta.engine ?? 'pixi',
+  );
 
   useEffect(() => {
     let mounted = true;
