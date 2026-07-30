@@ -41,13 +41,11 @@
 
   /* ---- Motion track lanes (timeline layer stack) ---- */
   --tl-lane-h:    30px;    /* one lane row */
-  --tl-gutter-w:  52px;    /* eye + stacking arrows, right-aligned to the axis */
+  --tl-gutter-w:  86px;    /* visibility + stacking + duplicate + remove */
   --tl-bar-idle:  #e5e7eb; /* a track bar at rest */
   --tl-bar-idle-fg: #374151;
   --tl-bar-on:    #111827; /* the selected track bar */
   --tl-bar-on-fg: #ffffff;
-  --tl-spark:     rgba(17,24,39,0.34);  /* motion sparkline inside a bar */
-  --tl-spark-on:  rgba(255,255,255,0.5);
 
   /* ---- View gizmo axes (Blender convention: X red, Y green, Z blue).
          Not theme-varying: the 3D stage background is user-set, not themed. ---- */
@@ -122,6 +120,4 @@
   --tl-bar-idle-fg: #cccccc;
   --tl-bar-on:      #ffffff;
   --tl-bar-on-fg:   #111111;
-  --tl-spark:       rgba(255,255,255,0.34);
-  --tl-spark-on:    rgba(17,17,17,0.45);
 }

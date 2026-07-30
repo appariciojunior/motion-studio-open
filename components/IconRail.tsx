@@ -3,11 +3,6 @@
 import { useUIStore } from '@/store/useUIStore';
 import { useProjectStore } from '@/store/useProjectStore';
 
-// Board mode (nav id 'board') was removed from this list on request. Its code is
-// still on disk — components/Board*.tsx, store/useBoardStore.ts, lib/board*.ts —
-// because lib/exportScene.ts (the drop-in React component zip) is built on
-// boardProject/boardPose/boardCompose. Re-adding an entry here brings the mode
-// back; app/page.tsx still has no branch for it, so that needs restoring too.
 const NAV = [
   { id: 'projects', label: 'Projects', icon: (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M2.75 6.25A1.5 1.5 0 014.25 4.75h3l1.5 1.75h6a1.5 1.5 0 011.5 1.5v6.25a1.5 1.5 0 01-1.5 1.5h-10.5a1.5 1.5 0 01-1.5-1.5V6.25z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
@@ -20,6 +15,13 @@ const NAV = [
   ) },
   { id: 'web', label: 'Web', icon: (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 6.5L4 10l3.5 3.5M12.5 6.5L16 10l-3.5 3.5M11 4.5l-2 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+  ) },
+  // Board mode — a DOM playground of arranged cards with hover interactions,
+  // and the entry point for the drop-in React component export. Its nav id is
+  // 'board' rather than the original 'new': the + button at the top of the rail
+  // now creates a project, so the two ids would collide. Kept last in the list.
+  { id: 'board', label: 'Board', icon: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="2.5" y="4.5" width="4.5" height="11" rx="1.2" stroke="currentColor" strokeWidth="1.5"/><rect x="8" y="4.5" width="4" height="11" rx="1.2" stroke="currentColor" strokeWidth="1.5" opacity="0.65"/><rect x="13" y="4.5" width="4.5" height="11" rx="1.2" stroke="currentColor" strokeWidth="1.5" opacity="0.4"/></svg>
   ) },
 ];
 

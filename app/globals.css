@@ -684,14 +684,18 @@ select.field { padding-right: 26px; }
      start exactly where the ruler starts */
   width: calc(var(--tl-axis-left) - var(--pad-sect) - 8px);
   min-width: var(--tl-gutter-w);
-  display: flex; align-items: center; justify-content: flex-end; gap: 2px; flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: flex-end; gap: 1px; flex: 0 0 auto;
 }
-.tl-lane-eye {
+/* every per-layer control: visibility, stacking, duplicate, remove */
+.tl-lane-btn {
   width: 22px; height: 22px; display: grid; place-items: center; flex: 0 0 auto;
-  color: var(--fg-faint); transition: color var(--t-fast);
+  color: var(--fg-faint); border-radius: var(--r-seg);
+  transition: color var(--t-fast), background var(--t-fast);
 }
-.tl-lane-eye:hover { color: var(--fg); }
-.tl-lane.active .tl-lane-eye { color: var(--fg-label); }
+.tl-lane-btn:hover:not(:disabled) { color: var(--fg); background: var(--card-inset); }
+.tl-lane-btn:disabled { opacity: 0.28; cursor: default; }
+.tl-lane-btn.danger:hover:not(:disabled) { color: var(--gz-x); }
+.tl-lane.active .tl-lane-btn { color: var(--fg-label); }
 .tl-lane-order { display: flex; flex-direction: column; flex: 0 0 auto; }
 .tl-lane-arrow {
   width: 16px; height: 12px; display: grid; place-items: center;
@@ -717,14 +721,6 @@ select.field { padding-right: 26px; }
 /* the alpha envelope the renderer applies at the window edges, drawn to scale */
 .tl-bar-fade { position: absolute; inset: 0; pointer-events: none; }
 
-.tl-bar-spark {
-  position: absolute; inset: 0; width: 100%; height: 100%;
-  pointer-events: none; opacity: 0.9;
-}
-.tl-bar-spark path { fill: none; stroke: var(--tl-spark); stroke-width: 1.25; vector-effect: non-scaling-stroke; }
-.tl-lane.active .tl-bar-spark path { stroke: var(--tl-spark-on); }
-.tl-bar-spark .tl-bar-spark-y { stroke-dasharray: 2 2; opacity: 0.65; }
-
 .tl-bar-label {
   position: relative; display: flex; align-items: baseline; gap: 6px;
   padding: 0 9px; min-width: 0; pointer-events: none;
@@ -741,17 +737,6 @@ select.field { padding-right: 26px; }
 .tl-bar-edge.in { left: 0; }
 .tl-bar-edge.out { right: 0; }
 .tl-bar-edge:hover { background: var(--line-soft); }
-
-.tl-bar-actions {
-  position: absolute; right: 8px; top: 0; bottom: 0;
-  display: none; align-items: center; gap: 2px;
-}
-.tl-bar:hover .tl-bar-actions { display: flex; }
-.tl-bar-actions button {
-  width: 18px; height: 18px; display: grid; place-items: center;
-  color: currentColor; opacity: 0.55; transition: opacity var(--t-fast);
-}
-.tl-bar-actions button:hover { opacity: 1; }
 
 .tl-lanes-playhead {
   position: absolute; top: 0; bottom: 34px; width: 2px; margin-left: -1px;

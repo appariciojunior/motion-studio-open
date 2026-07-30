@@ -2,72 +2,10 @@
 
 import { useMemo, useRef } from 'react';
 import { useSceneStore } from '@/store/useSceneStore';
-import { getTemplate, templateList } from '@/templates';
-import { resolveEasing } from '@/lib/easing';
+import { templateList } from '@/templates';
 import { trackWindow, type MotionTrack } from '@/lib/tracks';
 
-// How many poses to sample for a bar's motion sparkline. 48 is enough to read
-// the shape of a curve at bar width without making a drag feel heavy — the
-// sample is memoized on the values that actually change it.
-const SPARK_SAMPLES = 48;
-
 type DragMode = 'move' | 'in' | 'out';
-
-/**
- * The motion signature drawn inside a track bar: the template's own x and y for
- * slot 0, sampled across the track's window and normalized to the bar. Templates
- * are pure functions of (frame, index, count, values, ctx), so this is just a
- * cheap read of the same code the renderer runs — the bar shows the real motion,
- * not a generic waveform.
- */
-function useSparkline(track: MotionTrack, length: number, width: number, height: number) {
-  return useMemo(() => {
-    let template;
-    try { template = getTemplate(track.templateId); } catch { return null; }
-    const count = Math.max(1, Math.round(track.values.count ?? 6));
-    const ease = resolveEasing(track.easing);
-    const ctx = {
-      fps: 30,
-      width: 1080,
-      height: 1350,
-      duration: Math.max(1, length / 30),
-      totalFrames: Math.max(1, length),
-      ease,
-      easedPhase: (p: number) => { const b = Math.floor(p); return b + ease(p - b); },
-    };
-
-    const xs: number[] = [];
-    const ys: number[] = [];
-    try {
-      for (let i = 0; i < SPARK_SAMPLES; i++) {
-        const f = (i / (SPARK_SAMPLES - 1)) * Math.max(1, length);
-        const t = template.transform(f, 0, count, track.values, ctx);
-        xs.push(Number.isFinite(t.x) ? t.x : 0);
-        ys.push(Number.isFinite(t.y) ? t.y : 0);
-      }
-    } catch {
-      return null; // a template that dislikes being sampled just gets no spark
-    }
-
-    // Normalize each axis independently into the bar; a flat signal sits on the
-    // centre line instead of collapsing to an edge.
-    const toPath = (vals: number[]) => {
-      const min = Math.min(...vals);
-      const max = Math.max(...vals);
-      const span = max - min;
-      return vals
-        .map((v, i) => {
-          const px = (i / (SPARK_SAMPLES - 1)) * width;
-          const norm = span < 1e-6 ? 0.5 : (v - min) / span;
-          const py = height - norm * height;
-          return `${i === 0 ? 'M' : 'L'}${px.toFixed(1)} ${py.toFixed(1)}`;
-        })
-        .join(' ');
-    };
-
-    return { x: toPath(xs), y: toPath(ys) };
-  }, [track.templateId, track.values, track.easing, length, width, height]);
-}
 
 export default function TrackLane({
   track,
@@ -103,7 +41,6 @@ export default function TrackLane({
     [track.templateId],
   );
 
-  const spark = useSparkline(track, length, 200, 20);
   const fadePct = length > 0 ? Math.min(45, (Math.min(track.fade, length / 2) / length) * 100) : 0;
 
   // ---- window drag / trim ----
@@ -150,9 +87,12 @@ export default function TrackLane({
       className={`tl-lane ${active ? 'active' : ''} ${track.visible ? '' : 'hidden'}`}
       onPointerDown={() => setActiveTrack(track.id)}
     >
+      {/* Every per-layer control lives here, always visible — they used to hide
+          inside the bar on hover, which made them hard to find and put click
+          targets on top of the drag surface. */}
       <div className="tl-lane-gutter">
         <button
-          className="tl-lane-eye"
+          className="tl-lane-btn"
           title={track.visible ? 'Hide layer' : 'Show layer'}
           onClick={(e) => { e.stopPropagation(); toggleTrackVisible(track.id); }}
         >
@@ -182,6 +122,23 @@ export default function TrackLane({
             <svg width="9" height="9" viewBox="0 0 12 12" fill="none"><path d="M2.5 4.5L6 8l3.5-3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </button>
         </div>
+
+        <button
+          className="tl-lane-btn"
+          title="Duplicate layer (offset)"
+          onClick={(e) => { e.stopPropagation(); duplicateTrack(track.id); }}
+        >
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="2.5" y="2.5" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M5.5 13.5h6a2 2 0 002-2v-6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+        </button>
+
+        <button
+          className="tl-lane-btn danger"
+          title={trackCount > 1 ? 'Remove layer' : 'The last layer can’t be removed'}
+          disabled={trackCount <= 1}
+          onClick={(e) => { e.stopPropagation(); removeTrack(track.id); }}
+        >
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 5h10M6.5 5V3.5h3V5M5 5l.6 8h4.8L11 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
       </div>
 
       <div className="tl-lane-bars" ref={barsRef}>
@@ -194,7 +151,8 @@ export default function TrackLane({
           onPointerCancel={onPointerUp}
           title={`${track.name} · ${templateName}`}
         >
-          {/* the fade ramps, drawn as the alpha envelope the renderer applies */}
+          {/* The alpha envelope the renderer applies at the window edges. Only
+              drawn when a fade is set (default 0), so a plain bar stays plain. */}
           {fadePct > 0 && (
             <div
               className="tl-bar-fade"
@@ -204,13 +162,6 @@ export default function TrackLane({
             />
           )}
 
-          {spark && (
-            <svg className="tl-bar-spark" viewBox="0 0 200 20" preserveAspectRatio="none" aria-hidden="true">
-              <path d={spark.x} />
-              <path d={spark.y} className="tl-bar-spark-y" />
-            </svg>
-          )}
-
           <span className="tl-bar-label">
             <b>{track.name}</b>
             <em>{templateName}</em>
@@ -218,25 +169,6 @@ export default function TrackLane({
 
           <span className="tl-bar-edge in" onPointerDown={onPointerDown('in')} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp} title="Trim in" />
           <span className="tl-bar-edge out" onPointerDown={onPointerDown('out')} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp} title="Trim out" />
-
-          <span className="tl-bar-actions">
-            <button
-              title="Duplicate layer (offset)"
-              onClick={(e) => { e.stopPropagation(); duplicateTrack(track.id); }}
-              onPointerDown={(e) => e.stopPropagation()}
-            >
-              <svg width="10" height="10" viewBox="0 0 16 16" fill="none"><rect x="2.5" y="2.5" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M5.5 13.5h6a2 2 0 002-2v-6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
-            </button>
-            {trackCount > 1 && (
-              <button
-                title="Remove layer"
-                onClick={(e) => { e.stopPropagation(); removeTrack(track.id); }}
-                onPointerDown={(e) => e.stopPropagation()}
-              >
-                <svg width="10" height="10" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-              </button>
-            )}
-          </span>
         </div>
       </div>
     </div>

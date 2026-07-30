@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useProjectStore } from '@/store/useProjectStore';
-import { CollapseButton } from './TplCollapse';
 
 // Relative time, coarse on purpose — an exact timestamp is noise in a list you
 // scan to find "the one I was just working on".
@@ -50,7 +49,6 @@ export default function ProjectsPanel() {
       <div className="tpl-head">
         <div className="tpl-head-row">
           <span className="eyebrow">Projects</span>
-          <CollapseButton />
         </div>
         <div className="prj-sub">
           {projects.length} {projects.length === 1 ? 'project' : 'projects'} in this browser
