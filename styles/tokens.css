@@ -8,6 +8,16 @@
 :root {
   /* ---- Surfaces ---- */
   --stage:      #e5e7eb;   /* canvas area behind the preview */
+  /* Grid on the stage backdrop. Without it the canvas edge vanishes
+     whenever the scene background matches --stage — which the defaults do
+     exactly, in dark mode (#0d0d0d on #0d0d0d). */
+  --stage-dot:  rgba(0,0,0,0.05);
+  /* 1px ring around the canvas, so the frame edge is stated outright rather
+     than inferred from where the dot grid stops. */
+  --stage-edge: rgba(0,0,0,0.16);
+  /* Soft lift under the canvas, so it reads as sitting above the dotted
+     backdrop rather than being cut into it. */
+  --stage-shadow: rgba(0,0,0,0.12);
   --card:       #ffffff;   /* panels */
   --card-inset: #f3f4f6;   /* input tracks / wells / segmented bg */
   --card-thumb: #e5e7eb;   /* hover chips, kbd chip */
@@ -94,6 +104,11 @@
 
 :root[data-theme="dark"] {
   --stage:      #0d0d0d;
+  --stage-dot:  rgba(255,255,255,0.05);
+  --stage-edge: rgba(255,255,255,0.18);
+  /* Heavier than light mode: a black shadow on a near-black stage (#0d0d0d)
+     has very little room to darken before it stops reading at all. */
+  --stage-shadow: rgba(0,0,0,0.55);
   --card:       #171717;
   --card-inset: #232323;
   --card-thumb: #2d2d2d;

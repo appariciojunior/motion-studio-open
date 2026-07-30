@@ -13,6 +13,11 @@ import {
 } from '@/lib/projects';
 import { flushScene, setAutosaveTarget } from '@/lib/scenePersist';
 import { useSceneStore } from './useSceneStore';
+import { useHistoryStore } from './useHistoryStore';
+
+// Any switch of the open project drops undo history: undoing across a switch
+// would write one project's scene into another.
+const resetHistory = () => useHistoryStore.getState().reset();
 
 // The project list, and the switching that keeps the scene store and the
 // autosave target in step. Kept out of useSceneStore: a project is ABOUT a
@@ -70,6 +75,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       useSceneStore.getState().resetScene();
     }
     setAutosaveTarget(id, scene);
+    resetHistory();
     set(() => ({ projects: listProjects(), activeId: id }));
   },
 
@@ -85,6 +91,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     // before the first autosave tick.
     setAutosaveTarget(meta.id, null);
     flushScene();
+    resetHistory();
     set(() => ({ projects: listProjects(), activeId: meta.id }));
   },
 
@@ -94,6 +101,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const meta = duplicateProject(id);
     if (!meta) return;
     setAutosaveTarget(meta.id, readProjectScene(meta.id));
+    resetHistory();
     set(() => ({ projects: listProjects(), activeId: meta.id }));
   },
 
@@ -126,6 +134,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         flushScene();
       }
     }
+    resetHistory();
     set(() => ({ projects: listProjects(), activeId: activeProjectId() }));
   },
 }));

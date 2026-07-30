@@ -498,7 +498,28 @@ select.field { padding-right: 26px; }
 /* ============================================================
    CANVAS STAGE
    ============================================================ */
-.stage-col { grid-area: stage; position: relative; display: flex; align-items: center; justify-content: center; min-width: 0; min-height: 0; background: var(--stage); }
+/* The dot grid marks the backdrop as "not the canvas", so the frame edge stays
+   readable even when the scene background is the same colour as the stage —
+   which the defaults are, in dark mode. Any mode that fills the stage (board,
+   3D) paints over it. */
+.stage-col {
+  grid-area: stage; position: relative;
+  display: flex; align-items: center; justify-content: center;
+  min-width: 0; min-height: 0;
+  background-color: var(--stage);
+  /* A grid of isolated 2px SQUARES — square rather than round because every
+     --r-* token in this design system is 0.
+     Gradients can't intersect to make a 2D mark, so this is two layers: the
+     bottom one paints a full-width 2px band across the top of each cell, and
+     the top one covers all but the last 2px of that band with opaque --stage.
+     What survives is a 2x2 square. Order matters: the first background listed
+     paints on top. */
+  background-image:
+    linear-gradient(90deg, var(--stage) 10px, transparent 10px),
+    linear-gradient(var(--stage-dot) 2px, transparent 2px);
+  background-size: 12px 12px;
+  background-position: center;
+}
 .panel-toggle {
   position: absolute; top: 50%; z-index: 50;
   width: 32px; height: 44px;
@@ -517,7 +538,13 @@ select.field { padding-right: 26px; }
 .app:not(.left-collapsed) .panel-toggle-left svg { transform: rotate(180deg); }
 .app.right-collapsed .panel-toggle-right svg { transform: rotate(180deg); }
 .stage-wrap { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; min-height: 0; padding: 48px; }
-.stage-canvas { max-width: 100%; max-height: 100%; width: auto; height: auto; border-radius: var(--r-ctrl); }
+/* box-shadow rather than border: the canvas is sized by max-width/max-height,
+   and a border would add to its box and shrink the drawing area. */
+.stage-canvas {
+  max-width: 100%; max-height: 100%; width: auto; height: auto;
+  border-radius: var(--r-ctrl);
+  box-shadow: 0 0 0 1px var(--stage-edge), 0 4px 18px var(--stage-shadow);
+}
 
 /* ---- Board mode: DOM cards posed from the rAF loop ---- */
 .board-stage {
@@ -587,6 +614,24 @@ select.field { padding-right: 26px; }
   transition: color var(--t-fast);
 }
 .stage-fs:hover { color: var(--fg-body); }
+
+/* Undo / redo, floating at the top-left of the stage. Carries its own surface
+   because the stage backdrop can be any colour the user sets — the same reason
+   .panel-toggle does. */
+.stage-history {
+  position: absolute; left: 10px; top: 10px; z-index: 40;
+  display: flex; align-items: center;
+  background: color-mix(in srgb, var(--card) 92%, transparent);
+  border: 1px solid var(--line); border-radius: var(--r-ctrl);
+  backdrop-filter: blur(8px);
+}
+.stage-hist-btn {
+  width: 30px; height: 30px; display: grid; place-items: center;
+  color: var(--fg-muted); transition: color var(--t-fast), background var(--t-fast);
+}
+.stage-hist-btn:hover:not(:disabled) { color: var(--fg); background: var(--card-inset); }
+.stage-hist-btn:disabled { opacity: 0.32; cursor: default; }
+.stage-hist-sep { width: 1px; height: 16px; background: var(--line); flex: 0 0 auto; }
 
 /* ============================================================
    TIMELINE — 56px white bar, top border; play 36px #111827;
