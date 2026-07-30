@@ -24,9 +24,11 @@ import WebSourceBar from '@/components/WebSourceBar';
 import { CollapsedStrip } from '@/components/TplCollapse';
 import { useUIStore } from '@/store/useUIStore';
 import { useProjectStore } from '@/store/useProjectStore';
+import { useHistoryStore } from '@/store/useHistoryStore';
 import { startSceneAutosave } from '@/lib/scenePersist';
 import { useWebStore } from '@/store/useWebStore';
 import ProjectsPanel from '@/components/ProjectsPanel';
+import HistoryControls from '@/components/HistoryControls';
 
 // Pixi must run client-side only.
 const PreviewStage = dynamic(() => import('@/components/PreviewStage'), { ssr: false });
@@ -58,7 +60,30 @@ export default function Home() {
   useEffect(() => {
     useUIStore.getState().hydratePreferences();
     useProjectStore.getState().bootstrap();
-    return startSceneAutosave();
+    // History starts AFTER bootstrap, so the loaded scene is the baseline and
+    // the first undo can't rewind into the pre-load default state.
+    const stopHistory = useHistoryStore.getState().start();
+    const stopAutosave = startSceneAutosave();
+    return () => { stopHistory(); stopAutosave(); };
+  }, []);
+
+  // Undo/redo shortcuts. Skipped while typing so ⌘Z keeps its normal meaning
+  // inside a text field (project names, layer names, exact slider values).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+      const k = e.key.toLowerCase();
+      if (k !== 'z' && k !== 'y') return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      e.preventDefault();
+      const h = useHistoryStore.getState();
+      // ⌘⇧Z and ⌘Y both redo — the Mac and Windows idioms respectively.
+      if (k === 'y' || e.shiftKey) h.redo();
+      else h.undo();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, []);
 
   return (
@@ -99,6 +124,8 @@ export default function Home() {
             </button>
           </>
         )}
+        {/* scene-level undo/redo, floating top-left of the stage */}
+        <HistoryControls />
         <button
           className="panel-toggle panel-toggle-left"
           onClick={toggleLeftPanel}

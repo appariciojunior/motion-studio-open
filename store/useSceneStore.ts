@@ -9,6 +9,7 @@ import { DEFAULT_TRACK_TRANSFORM, TRACK_END, type BlendMode, type MotionTrack } 
 // ---------- canvas dimension helpers ----------
 export const ASPECTS: Record<string, [number, number]> = {
   '3:4': [3, 4],
+  '4:5': [4, 5],   // Instagram portrait
   '9:16': [9, 16],
   '1:1': [1, 1],
   '4:3': [4, 3],
