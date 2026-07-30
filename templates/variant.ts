@@ -15,5 +15,11 @@ export function variant(
       patch[c.key] !== undefined ? { ...c, default: patch[c.key] } : c
     ),
     transform: base.transform,
+    // `transform3d` has to come along too. `meta` is spread wholesale, so a
+    // variant of a webgl template inherits engine: 'webgl' — but without the 3D
+    // pose the renderer silently falls back to projecting the 2D transform, and
+    // the variant renders flat while its base renders in 3D. That is what was
+    // happening to Orbit 3D 02 and 03.
+    transform3d: base.transform3d,
   };
 }
