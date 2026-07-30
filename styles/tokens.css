@@ -8,10 +8,10 @@
 :root {
   /* ---- Surfaces ---- */
   --stage:      #e5e7eb;   /* canvas area behind the preview */
-  /* Dot grid on the stage backdrop. Without it the canvas edge vanishes
+  /* Grid on the stage backdrop. Without it the canvas edge vanishes
      whenever the scene background matches --stage — which the defaults do
      exactly, in dark mode (#0d0d0d on #0d0d0d). */
-  --stage-dot:  rgba(0,0,0,0.055);
+  --stage-dot:  rgba(0,0,0,0.05);
   /* 1px ring around the canvas, so the frame edge is stated outright rather
      than inferred from where the dot grid stops. */
   --stage-edge: rgba(0,0,0,0.16);
@@ -104,7 +104,7 @@
 
 :root[data-theme="dark"] {
   --stage:      #0d0d0d;
-  --stage-dot:  rgba(255,255,255,0.055);
+  --stage-dot:  rgba(255,255,255,0.05);
   --stage-edge: rgba(255,255,255,0.18);
   /* Heavier than light mode: a black shadow on a near-black stage (#0d0d0d)
      has very little room to darken before it stops reading at all. */

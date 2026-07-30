@@ -507,7 +507,16 @@ select.field { padding-right: 26px; }
   display: flex; align-items: center; justify-content: center;
   min-width: 0; min-height: 0;
   background-color: var(--stage);
-  background-image: radial-gradient(var(--stage-dot) 1px, transparent 1px);
+  /* A grid of isolated 2px SQUARES — square rather than round because every
+     --r-* token in this design system is 0.
+     Gradients can't intersect to make a 2D mark, so this is two layers: the
+     bottom one paints a full-width 2px band across the top of each cell, and
+     the top one covers all but the last 2px of that band with opaque --stage.
+     What survives is a 2x2 square. Order matters: the first background listed
+     paints on top. */
+  background-image:
+    linear-gradient(90deg, var(--stage) 10px, transparent 10px),
+    linear-gradient(var(--stage-dot) 2px, transparent 2px);
   background-size: 12px 12px;
   background-position: center;
 }
