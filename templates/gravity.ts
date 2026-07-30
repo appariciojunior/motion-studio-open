@@ -50,11 +50,24 @@ const gravity: Template = {
     { key: 'stagger',      label: 'Stagger',       type: 'slider', min: 0, max: 0.6, step: 0.02, default: 0.18 },
     { key: 'spread',       label: 'Spread',        type: 'slider', min: 100, max: 800, step: 1,  default: 500 },
     { key: 'spin',         label: 'Spin',          type: 'slider', min: 0, max: 3, step: 0.1,    default: 1 },
+    // A drop settles in a couple of seconds, so on a default 8s clip the pile
+    // sat frozen for most of it and then teleported back to the top. `drops`
+    // fits whole drops into the clip instead, and `recycleFade` dissolves each
+    // pile before the next one falls so the recycle isn't a hard cut.
+    { key: 'drops',        label: 'Drops',         type: 'slider', min: 1, max: 6, step: 1,      default: 2 },
+    { key: 'recycleFade',  label: 'Recycle Fade',  type: 'slider', min: 0, max: 90, step: 1,     default: 30 }, // % of each drop spent fading out
     { key: 'offset',       label: 'Offset',        type: 'xypad',                                default: { x: 0, y: 0 } },
   ],
 
   transform: (frame, index, count, v, ctx) => {
-    const T = frame / ctx.fps; // non-looping by design — physics drop settles and rests
+    // Physics runs on real seconds, not a normalized phase. Splitting the clip
+    // into whole drops makes frame totalFrames land exactly on frame 0, so this
+    // family now honours the same seamless-loop guarantee as the others — it
+    // used to be the one exception. drops = 1 restores the original single drop.
+    const cycles = Math.max(1, Math.round(v.drops));
+    const cycleFrames = ctx.totalFrames / cycles;
+    const fLocal = ((frame % cycleFrames) + cycleFrames) % cycleFrames;
+    const T = fLocal / ctx.fps;
     const sizeFactor = v.cardSize / BASE;
     const cardPx = v.cardSize * sizeFactor;     // scaled footprint used for spacing
 
@@ -111,12 +124,26 @@ const gravity: Template = {
     const restTilt = (h(index + 13) - 0.5) * 0.25;       // small ±0.125 rad
     const rotation = lerp(airRot, restTilt, settle2);
 
+    // Dissolve the settled pile over the tail of the drop, so the recycle reads
+    // as a fade rather than the pile snapping back to the top. Cards re-enter
+    // from above the frame, which is already off-canvas, so there is no matching
+    // pop on the way in.
+    let alpha = 1;
+    const fadeSpan = (v.recycleFade / 100) * cycleFrames;
+    if (fadeSpan > 0.5) {
+      const left = cycleFrames - fLocal;
+      if (left < fadeSpan) {
+        const u = clamp(left / fadeSpan, 0, 1);
+        alpha = u * u * (3 - 2 * u);                      // smooth falloff
+      }
+    }
+
     return {
       x: x + v.offset.x,
       y: y + v.offset.y,
       scale: sizeFactor,
       rotation,
-      alpha: 1,
+      alpha,
       depth: index,                                      // later cards land on top
     };
     // cornerRadius is applied where the sprite mask is built, not here.
