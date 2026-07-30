@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSceneStore } from '@/store/useSceneStore';
 import ExportDialog from './ExportDialog';
+import TrackLane from './TrackLane';
 
 function fmt(sec: number) {
   const s = Math.max(0, sec);
@@ -41,7 +42,45 @@ export default function Timeline({
   const setPlaying = useSceneStore((s) => s.setPlaying);
   const setFrame = useSceneStore((s) => s.setFrame);
   const setDuration = useSceneStore((s) => s.setDuration);
+  const tracks = useSceneStore((s) => s.tracks);
+  const addTrack = useSceneStore((s) => s.addTrack);
+  const reorderTracks = useSceneStore((s) => s.reorderTracks);
   const [showExportDialog, setShowExportDialog] = useState(false);
+  const [lanesOpen, setLanesOpen] = useState(false);
+
+  const shellRef = useRef<HTMLDivElement>(null);
+  const scrubberRef = useRef<HTMLDivElement>(null);
+
+  // Publish the scrubber's geometry as CSS vars on the shell, so the lane bars
+  // below sit in the SAME coordinate space as the ruler above. The transport row
+  // is a flex layout whose left offset depends on the time readout and the
+  // buttons in `extra`, so measuring beats hardcoding: the playhead and the bars
+  // stay aligned whatever lands in that row.
+  useEffect(() => {
+    const shell = shellRef.current;
+    const scrubber = scrubberRef.current;
+    if (!shell || !scrubber) return;
+    // Only the SCRUBBER is observed, never the shell: these vars drive the lane
+    // gutter width, so observing the shell we write to would feed its own layout
+    // change back in as a resize — the classic ResizeObserver loop. Writes are
+    // also skipped when the value is unchanged, so a nudge can't oscillate.
+    const sync = () => {
+      const a = shell.getBoundingClientRect();
+      const b = scrubber.getBoundingClientRect();
+      const left = `${Math.round(b.left - a.left)}px`;
+      const width = `${Math.round(b.width)}px`;
+      if (shell.style.getPropertyValue('--tl-axis-left') !== left) {
+        shell.style.setProperty('--tl-axis-left', left);
+      }
+      if (shell.style.getPropertyValue('--tl-axis-w') !== width) {
+        shell.style.setProperty('--tl-axis-w', width);
+      }
+    };
+    sync();
+    const ro = new ResizeObserver(sync);
+    ro.observe(scrubber);
+    return () => ro.disconnect();
+  }, [lanesOpen]);
 
   // Spacebar toggles play/pause anywhere except while typing in a field.
   useEffect(() => {
@@ -63,6 +102,7 @@ export default function Timeline({
   const { labels, dashes } = buildRuler(duration);
 
   return (
+    <div className={`timeline-shell ${lanesOpen ? 'lanes-open' : ''}`} ref={shellRef}>
     <div className="timeline">
       <button className="play-btn" onClick={() => setPlaying(!playing)} title={playing ? 'Pause' : 'Play'}>
         {playing ? (
@@ -74,7 +114,7 @@ export default function Timeline({
 
       <span className="time-readout"><b>{fmt(curTime)}</b> / {fmt(duration)}s</span>
 
-      <div className="scrubber">
+      <div className="scrubber" ref={scrubberRef}>
         <div className="tl-trackbar" />
         <div className="ruler">
           {dashes.map((pct, i) => (
@@ -100,6 +140,18 @@ export default function Timeline({
         <span>s</span>
       </label>
 
+      {/* Motion layers: the stack of tracks sharing this one timeline. */}
+      <button
+        className={`tl-lanes-btn ${lanesOpen ? 'active' : ''}`}
+        onClick={() => setLanesOpen((v) => !v)}
+        aria-expanded={lanesOpen}
+        title="Motion layers"
+      >
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 1.8l6 3-6 3-6-3 6-3z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M2 8.2l6 3 6-3" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+        Layers
+        <span className="tl-lanes-count">{tracks.length}</span>
+      </button>
+
       {extra}
 
       {showExport && (
@@ -110,6 +162,36 @@ export default function Timeline({
       )}
 
       {showExport && showExportDialog && <ExportDialog onClose={() => setShowExportDialog(false)} />}
+    </div>
+
+    {lanesOpen && (
+      <div className="tl-lanes">
+        {/* Topmost lane = topmost layer, so the list reads like the stack looks:
+            the store's array is bottom-to-top, the UI shows it reversed. */}
+        {tracks.slice().reverse().map((track) => (
+          <TrackLane
+            key={track.id}
+            track={track}
+            index={tracks.findIndex((t) => t.id === track.id)}
+            totalFrames={totalFrames}
+            onReorder={reorderTracks}
+          />
+        ))}
+
+        {/* one playhead across every lane, in the shared axis space */}
+        <div className="tl-lanes-playhead" style={{ left: `calc(var(--tl-axis-left) + var(--tl-axis-w) * ${progress / 100})` }} />
+
+        <div className="tl-lanes-foot">
+          <button className="tl-add-track" onClick={() => addTrack()}>
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 3.5v9M3.5 8h9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            Add layer
+          </button>
+          <span className="tl-lanes-hint">
+            Drag a bar to retime · drag its edges to trim · the arrows change stacking order
+          </span>
+        </div>
+      </div>
+    )}
     </div>
   );
 }

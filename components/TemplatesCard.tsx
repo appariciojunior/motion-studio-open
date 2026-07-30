@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { useSceneStore } from '@/store/useSceneStore';
 import { templateList, templateGroups, getTemplate } from '@/templates';
 import TemplateThumb from './TemplateThumb';
-import { CollapseButton } from './TplCollapse';
 import { ControlRow } from './Controls';
 
 const Chevron = ({ dir = 'right' }: { dir?: 'right' | 'left' }) => (
@@ -68,7 +67,6 @@ export default function TemplatesCard({ controlsInline = false }: { controlsInli
             <button className={`tab ${tab === 'templates' ? 'active' : ''}`} onClick={() => setTab('templates')}>Templates</button>
             <button className={`tab ${tab === 'custom' ? 'active' : ''}`} onClick={() => setTab('custom')}>Custom</button>
           </div>
-          <CollapseButton />
         </div>
 
         <div className="searchbox">

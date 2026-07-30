@@ -2,7 +2,6 @@
 
 import { threeEffects } from '@/three3d';
 import { use3DStore } from '@/store/use3DStore';
-import { CollapseButton } from './TplCollapse';
 
 // Left column in 3D mode — replaces the motion-template list. Picks the active
 // 3D effect (ASCII, …). Its controls render in the right panel.
@@ -22,7 +21,6 @@ export default function Effects3DPanel() {
               <span className="beta-tag">BETA</span>
             </button>
           </div>
-          <CollapseButton />
         </div>
         <p className="beta-note">Work in progress — expect rough edges and bugs.</p>
       </div>

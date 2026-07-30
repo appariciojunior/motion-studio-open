@@ -1,4 +1,5 @@
 import { useSceneStore, type SceneState } from '@/store/useSceneStore';
+import { writeProjectScene } from './projects';
 
 // Client-side scene persistence. Settings live in localStorage; uploaded media
 // bytes live in IndexedDB (see lib/assetDb). A refresh restores the full working
@@ -17,6 +18,12 @@ export const SCENE_KEY = 'motion-scene-v1';
 // url is rebuilt from IndexedDB on load, so a dead blob: string is never saved.
 export function buildScenePartial(s: SceneState) {
   return {
+    // Motion tracks are the source of truth for what animates; the flat
+    // activeTemplateId/values/easing triple below is the active track's
+    // projection, kept for scenes saved before tracks existed (hydrate folds a
+    // trackless save back into a single track).
+    tracks: s.tracks,
+    activeTrackId: s.activeTrackId,
     activeTemplateId: s.activeTemplateId,
     values: s.values,
     easing: s.easing,
@@ -43,7 +50,8 @@ export function buildScenePartial(s: SceneState) {
 
 export type ScenePartial = ReturnType<typeof buildScenePartial>;
 
-// Read the saved scene, or null when absent/corrupt.
+// Read the legacy single-scene blob. Projects superseded it (see lib/projects),
+// which migrates this into a project on first run; the key is kept as a backup.
 export function loadScene(): ScenePartial | null {
   try {
     const raw = localStorage.getItem(SCENE_KEY);
@@ -53,23 +61,44 @@ export function loadScene(): ScenePartial | null {
   }
 }
 
-// Start throttled auto-save. Returns an unsubscribe. At most one write every
-// ~500ms, and only when the serialized slice actually changed — so play/scrub
-// (frame churn) produces zero writes.
+// Which project the autosave writes into. Set when a project is opened; while
+// null, autosave holds its writes rather than guessing a destination and
+// stamping a scene onto the wrong project.
+let autosaveTarget: string | null = null;
+let lastSig = '';
+
+export function setAutosaveTarget(projectId: string | null, seedSig?: ScenePartial | null): void {
+  autosaveTarget = projectId;
+  // Seed the change signature with what was just loaded, so merely opening a
+  // project doesn't immediately rewrite it (and bump its updatedAt).
+  lastSig = seedSig ? JSON.stringify(seedSig) : '';
+}
+
+/**
+ * Write the live scene into the active project now, bypassing the throttle.
+ * Call before switching projects, or the last edits land in the wrong one.
+ */
+export function flushScene(): void {
+  if (!autosaveTarget) return;
+  try {
+    const partial = buildScenePartial(useSceneStore.getState());
+    const sig = JSON.stringify(partial);
+    if (sig === lastSig) return;
+    lastSig = sig;
+    writeProjectScene(autosaveTarget, partial);
+  } catch {
+    /* quota exceeded or serialize error — skip this write, non-fatal */
+  }
+}
+
+// Start throttled auto-save into the active project. Returns an unsubscribe. At
+// most one write every ~500ms, and only when the serialized slice actually
+// changed — so play/scrub (frame churn) produces zero writes.
 export function startSceneAutosave(): () => void {
-  let lastSig = '';
   let scheduled = false;
   const flush = () => {
     scheduled = false;
-    try {
-      const sig = JSON.stringify(buildScenePartial(useSceneStore.getState()));
-      if (sig !== lastSig) {
-        lastSig = sig;
-        localStorage.setItem(SCENE_KEY, sig);
-      }
-    } catch {
-      /* quota exceeded or serialize error — skip this write, non-fatal */
-    }
+    flushScene();
   };
   return useSceneStore.subscribe(() => {
     if (scheduled) return;

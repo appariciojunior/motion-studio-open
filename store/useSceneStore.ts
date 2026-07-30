@@ -1,9 +1,10 @@
 import { create } from 'zustand';
-import { defaultsFor, easingFor } from '@/templates';
+import { defaultsFor, easingFor, templates } from '@/templates';
 import type { EasingSpec } from '@/lib/easing';
 import type { CropFocus } from '@/lib/crop';
 import { DEMO_ASSETS } from '@/lib/demoAssets';
 import { idbPut, idbGet, idbDelete } from '@/lib/assetDb';
+import { DEFAULT_TRACK_TRANSFORM, TRACK_END, type BlendMode, type MotionTrack } from '@/lib/tracks';
 
 // ---------- canvas dimension helpers ----------
 export const ASPECTS: Record<string, [number, number]> = {
@@ -73,7 +74,16 @@ function persistPresets(list: CustomPreset[]) {
 }
 
 export interface SceneState {
-  // motion template
+  // ---- motion tracks: stacked motion layers, drawn in array order ----
+  // The source of truth for what animates. See lib/tracks.ts.
+  tracks: MotionTrack[];
+  activeTrackId: string;
+
+  // The active track's template / values / easing, mirrored to the top level.
+  // These predate tracks and are still what 3D (renderer3d), web (WebStage),
+  // board (BoardStage) and the zip export read, so they stay a first-class
+  // projection of `tracks[active]` rather than being removed. Every mutator
+  // goes through `projectActive` so the two can never drift.
   activeTemplateId: string;
   values: Record<string, any>;
   easing: EasingSpec;   // scene easing curve (seeded from the template default)
@@ -109,10 +119,25 @@ export interface SceneState {
   customPresets: CustomPreset[];
 
   // ---- actions ----
+  // These four act on the ACTIVE track (and mirror to the legacy fields), so
+  // every existing control panel keeps working untouched.
   setValue: (key: string, val: any) => void;
   setActiveTemplate: (id: string) => void;
   setEasing: (easing: EasingSpec) => void;
   resetValues: () => void;
+
+  // ---- track actions ----
+  setActiveTrack: (id: string) => void;
+  addTrack: (templateId?: string) => void;
+  duplicateTrack: (id: string) => void;
+  removeTrack: (id: string) => void;
+  reorderTracks: (from: number, to: number) => void;
+  renameTrack: (id: string, name: string) => void;
+  toggleTrackVisible: (id: string) => void;
+  // Patch any non-motion field of a track (window, blend, opacity, transform…).
+  patchTrack: (id: string, patch: Partial<MotionTrack>) => void;
+  setTrackBlend: (id: string, blend: BlendMode) => void;
+  toggleTrackAsset: (id: string, assetId: string) => void;
   setFrame: (frame: number) => void;
   setPlaying: (p: boolean) => void;
   setFps: (fps: number) => void;
@@ -137,6 +162,7 @@ export interface SceneState {
 
   // persistence (see lib/scenePersist)
   hydrate: (partial: Partial<SceneState>) => void;   // apply a loaded scene
+  resetScene: () => void;                            // back to defaults (new project)
   rehydrateUploads: () => Promise<void>;             // rebuild upload urls from IndexedDB
 
   loadCustomPresets: () => void;
@@ -166,49 +192,203 @@ function seedIdCounter(assets: { id: string }[]) {
   }
 }
 
+// ---------- track helpers ----------
+
+// A fresh track spans the whole clip, inherits the template's own defaults and
+// easing curve, and draws every asset — so adding one immediately shows real
+// motion over the existing stack.
+export function makeTrack(templateId: string, name: string, patch: Partial<MotionTrack> = {}): MotionTrack {
+  return {
+    id: nid('track'),
+    name,
+    templateId,
+    values: defaultsFor(templateId),
+    easing: easingFor(templateId),
+    assetIds: [],
+    visible: true,
+    opacity: 1,
+    blend: 'normal',
+    inFrame: 0,
+    outFrame: TRACK_END,
+    offset: 0,
+    timeScale: 1,
+    fade: 0,
+    transform: { ...DEFAULT_TRACK_TRANSFORM },
+    ...patch,
+  };
+}
+
+// The ONE place the legacy top-level motion fields are derived. Every action
+// that touches `tracks` or `activeTrackId` returns through here, which is what
+// guarantees `values`/`easing`/`activeTemplateId` always describe the active
+// track — the invariant 3D/web/board/persist depend on.
+function projectActive(tracks: MotionTrack[], activeTrackId: string) {
+  const active = tracks.find((t) => t.id === activeTrackId) ?? tracks[0];
+  return {
+    tracks,
+    activeTrackId: active.id,
+    activeTemplateId: active.templateId,
+    values: active.values,
+    easing: active.easing,
+  };
+}
+
+// Apply a patch to one track and re-project. `patch` may replace values/easing/
+// templateId, which is how setValue & friends reach the active track.
+function withTrack(
+  s: Pick<SceneState, 'tracks' | 'activeTrackId'>,
+  id: string,
+  patch: Partial<MotionTrack>,
+) {
+  const tracks = s.tracks.map((t) => (t.id === id ? { ...t, ...patch } : t));
+  return projectActive(tracks, s.activeTrackId);
+}
+
 const INITIAL_TEMPLATE = 'carousel';
 const initDims = dimsFor('3:4');
 
+/**
+ * The scene a fresh project starts from. Factored out (rather than inlined into
+ * create()) because "new project" has to restore exactly this — one definition,
+ * so the app's defaults and a new project's defaults can never disagree.
+ *
+ * Deliberately excludes `customPresets`: saved presets are a user-wide library,
+ * not per-project, so creating a project must not wipe them.
+ */
+function initialSceneState() {
+  const tracks = [makeTrack(INITIAL_TEMPLATE, 'Layer 1')];
+  return {
+    ...projectActive(tracks, tracks[0].id),
+
+    frame: 0,
+    fps: 30,
+    duration: 8,
+    playing: true, // autoplay loop by default
+
+    aspect: '3:4',
+    width: initDims.width,
+    height: initDims.height,
+    customW: initDims.width,
+    customH: initDims.height,
+    safeArea: false,
+    background: { source: 'color' as const, color: '#0d0d0d', gradient: false, color2: '#1f1f1f', imageUrl: null, blur: 28 },
+    logo: { url: null, position: 'br' as const, size: 96 },
+    audioUrl: null,
+
+    // start populated with the bundled demo set so every template shows real motion
+    assets: DEMO_ASSETS.map((a) => ({ ...a, id: nid('asset'), visible: true, origin: 'remote' as const })),
+    cardShape: 'auto',
+    videoEnd: 'loop' as const,
+    effects: [],
+  };
+}
+
 export const useSceneStore = create<SceneState>((set, get) => ({
-  activeTemplateId: INITIAL_TEMPLATE,
-  values: defaultsFor(INITIAL_TEMPLATE),
-  easing: easingFor(INITIAL_TEMPLATE),
-
-  frame: 0,
-  fps: 30,
-  duration: 8,
-  playing: true, // autoplay loop by default
-
-  aspect: '3:4',
-  width: initDims.width,
-  height: initDims.height,
-  customW: initDims.width,
-  customH: initDims.height,
-  safeArea: false,
-  background: { source: 'color', color: '#0d0d0d', gradient: false, color2: '#1f1f1f', imageUrl: null, blur: 28 },
-  logo: { url: null, position: 'br', size: 96 },
-  audioUrl: null,
-
-  // start populated with the bundled demo set so every template shows real motion
-  assets: DEMO_ASSETS.map((a) => ({ ...a, id: nid('asset'), visible: true, origin: 'remote' as const })),
-  cardShape: 'auto',
-  videoEnd: 'loop',
-  effects: [],
+  ...initialSceneState(),
   customPresets: [],
 
   setValue: (key, val) =>
-    set((s) => ({ values: { ...s.values, [key]: val } })),
+    set((s) => withTrack(s, s.activeTrackId, { values: { ...s.values, [key]: val } })),
 
   // full reset on template switch: wipe bag, refill from declared defaults,
-  // and seed the scene easing from the template's default curve.
+  // and seed the track easing from the template's default curve. Only the
+  // ACTIVE track switches — the other layers keep their own motion.
   setActiveTemplate: (id) =>
-    set(() => ({ activeTemplateId: id, values: defaultsFor(id), easing: easingFor(id), frame: 0 })),
+    set((s) => ({
+      ...withTrack(s, s.activeTrackId, { templateId: id, values: defaultsFor(id), easing: easingFor(id) }),
+      frame: 0,
+    })),
 
-  setEasing: (easing) => set(() => ({ easing })),
+  setEasing: (easing) => set((s) => withTrack(s, s.activeTrackId, { easing })),
 
-  // "Reset all values": restore the active template's declared defaults + easing.
+  // "Reset all values": restore the active track template's declared defaults + easing.
   resetValues: () =>
-    set((s) => ({ values: defaultsFor(s.activeTemplateId), easing: easingFor(s.activeTemplateId) })),
+    set((s) => withTrack(s, s.activeTrackId, {
+      values: defaultsFor(s.activeTemplateId),
+      easing: easingFor(s.activeTemplateId),
+    })),
+
+  // ---- track actions ----
+  setActiveTrack: (id) => set((s) => projectActive(s.tracks, id)),
+
+  // New layers start on a template that contrasts with what's already stacked,
+  // so the very first "add layer" reads as two distinct animations rather than
+  // one doubled up. Both ids must be REAL registry ids — getTemplate falls back
+  // to carousel silently, so a typo here would look like a duplicated layer.
+  addTrack: (templateId) =>
+    set((s) => {
+      const id = templateId ?? (s.activeTemplateId === 'parallax-01' ? 'carousel' : 'parallax-01');
+      const track = makeTrack(id, `Layer ${s.tracks.length + 1}`);
+      return projectActive([...s.tracks, track], track.id);
+    }),
+
+  // Duplicate + slip half a window: the copy reads as an echo of the original
+  // instead of hiding exactly behind it.
+  duplicateTrack: (id) =>
+    set((s) => {
+      const i = s.tracks.findIndex((t) => t.id === id);
+      if (i < 0) return {};
+      const src = s.tracks[i];
+      const copy: MotionTrack = {
+        ...src,
+        id: nid('track'),
+        name: `${src.name} copy`,
+        values: { ...src.values },
+        assetIds: [...src.assetIds],
+        transform: { ...src.transform },
+        offset: (src.offset + 50) % 100,
+      };
+      const tracks = s.tracks.slice();
+      tracks.splice(i + 1, 0, copy);
+      return projectActive(tracks, copy.id);
+    }),
+
+  // The last track is never removed — the scene would have nothing to animate
+  // and every panel reads through the active track.
+  removeTrack: (id) =>
+    set((s) => {
+      if (s.tracks.length <= 1) return {};
+      const tracks = s.tracks.filter((t) => t.id !== id);
+      const nextActive = s.activeTrackId === id ? tracks[tracks.length - 1].id : s.activeTrackId;
+      return projectActive(tracks, nextActive);
+    }),
+
+  // Array order IS stacking order: later = drawn on top.
+  reorderTracks: (from, to) =>
+    set((s) => {
+      if (from === to || from < 0 || from >= s.tracks.length) return {};
+      const tracks = s.tracks.slice();
+      const [moved] = tracks.splice(from, 1);
+      tracks.splice(Math.max(0, Math.min(tracks.length, to)), 0, moved);
+      return projectActive(tracks, s.activeTrackId);
+    }),
+
+  renameTrack: (id, name) => set((s) => withTrack(s, id, { name })),
+
+  toggleTrackVisible: (id) =>
+    set((s) => {
+      const t = s.tracks.find((x) => x.id === id);
+      return t ? withTrack(s, id, { visible: !t.visible }) : {};
+    }),
+
+  patchTrack: (id, patch) => set((s) => withTrack(s, id, patch)),
+
+  setTrackBlend: (id, blend) => set((s) => withTrack(s, id, { blend })),
+
+  // Toggle one asset in/out of a track's slice. Turning the last one off means
+  // "all assets" again (assetIds: []), which is what the empty list encodes.
+  toggleTrackAsset: (id, assetId) =>
+    set((s) => {
+      const t = s.tracks.find((x) => x.id === id);
+      if (!t) return {};
+      // An empty list means "all" — materialize it before removing one, or the
+      // first click would read as adding to nothing.
+      const current = t.assetIds.length > 0 ? t.assetIds : s.assets.map((a) => a.id);
+      const next = current.includes(assetId)
+        ? current.filter((x) => x !== assetId)
+        : [...current, assetId];
+      return withTrack(s, id, { assetIds: next.length === 0 ? [] : next });
+    }),
 
   setFrame: (frame) => set(() => ({ frame })),
   setPlaying: (p) => set(() => ({ playing: p })),
@@ -293,23 +473,61 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setCardShape: (shape) => set(() => ({ cardShape: shape })),
   setVideoEnd: (mode) => set(() => ({ videoEnd: mode })),
 
-  // Apply a persisted scene (from lib/scenePersist). `values` is merged over the
-  // template's current defaults so a saved scene survives added/removed controls.
+  // Apply a persisted scene (from lib/scenePersist). Each track's `values` is
+  // merged over its template's current defaults so a saved scene survives
+  // added/removed controls.
   hydrate: (partial) =>
     set((s) => {
-      const tid = partial.activeTemplateId ?? s.activeTemplateId;
-      let templateOk = true;
-      try { defaultsFor(tid); } catch { templateOk = false; } // stale/removed template → keep current
       const assets = partial.assets ?? s.assets;
       seedIdCounter(assets);
+
+      // Scenes saved before motion tracks existed carry only the flat
+      // activeTemplateId/values/easing triple — fold it into a single track so
+      // an old autosave still opens.
+      const rawTracks: MotionTrack[] = partial.tracks?.length
+        ? partial.tracks
+        : [makeTrack(partial.activeTemplateId ?? s.activeTemplateId, 'Layer 1', {
+            values: partial.values,
+            easing: partial.easing,
+          })];
+
+      // Drop tracks whose template no longer exists, and re-merge the rest over
+      // live defaults. A scene that references only removed templates keeps the
+      // current tracks rather than leaving nothing to animate.
+      //
+      // The check is registry membership, NOT a try/catch around defaultsFor:
+      // getTemplate falls back to carousel for an unknown id, so defaultsFor
+      // never throws and a catch would validate nothing. A stale id would then
+      // silently animate as Runway under the wrong name.
+      const tracks = rawTracks
+        .filter((t) => typeof t.templateId === 'string' && t.templateId in templates)
+        .map((t) => ({
+          ...makeTrack(t.templateId, t.name),
+          ...t,
+          id: t.id || nid('track'),
+          values: { ...defaultsFor(t.templateId), ...(t.values ?? {}) },
+          easing: t.easing ?? easingFor(t.templateId),
+          transform: { ...DEFAULT_TRACK_TRANSFORM, ...(t.transform ?? {}) },
+        }));
+      seedIdCounter(tracks);
+
+      const safeTracks = tracks.length > 0 ? tracks : s.tracks;
+      const activeId = safeTracks.some((t) => t.id === partial.activeTrackId)
+        ? partial.activeTrackId!
+        : safeTracks[0].id;
+
       return {
         ...s,
         ...partial,
-        activeTemplateId: templateOk ? tid : s.activeTemplateId,
-        values: templateOk ? { ...defaultsFor(tid), ...(partial.values ?? {}) } : s.values,
+        ...projectActive(safeTracks, activeId),
         frame: 0, // always start at the clip head
       };
     }),
+
+  // Back to the built-in defaults, for "new project". Uploaded bytes in
+  // IndexedDB are deliberately NOT deleted: they still belong to the scenes of
+  // other projects, which reference them by asset id.
+  resetScene: () => set(() => initialSceneState()),
 
   // Rebuild object URLs for uploaded assets from their IndexedDB bytes. Runs after
   // hydrate; assets whose bytes are gone (evicted/quota) keep an empty url and
@@ -354,15 +572,19 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       persistPresets(next);
       return { customPresets: next };
     }),
+  // A preset lands on the ACTIVE track, like picking a template does — the
+  // other layers keep their own motion.
   applyCustomPreset: (id) =>
     set((s) => {
       const p = s.customPresets.find((c) => c.id === id);
       if (!p) return {};
       // merge over current defaults so presets survive template control changes
       return {
-        activeTemplateId: p.templateId,
-        values: { ...defaultsFor(p.templateId), ...p.values },
-        easing: p.easing,
+        ...withTrack(s, s.activeTrackId, {
+          templateId: p.templateId,
+          values: { ...defaultsFor(p.templateId), ...p.values },
+          easing: p.easing,
+        }),
         frame: 0,
       };
     }),
