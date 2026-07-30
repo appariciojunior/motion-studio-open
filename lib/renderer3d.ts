@@ -406,6 +406,14 @@ export class SceneRenderer3D implements IRenderer {
         slot.mesh.rotation.set(t.rotationX ?? 0, t.rotationY ?? 0, t.rotationZ ?? 0);
         slot.mesh.scale.set(slot.texW * norm * t.scale, slot.texH * norm * t.scale, 1);
         slot.mesh.material.opacity = t.alpha;
+        // A fully opaque plane writes depth, so it genuinely OCCLUDES what sits
+        // behind it. The material is created with depthWrite: false — correct for
+        // blended planes, since a translucent card must not mask its neighbours —
+        // but with it off nothing ever occludes anything, and a closed solid (the
+        // Box family's prism) has no way to hide its own far side. Gating on full
+        // opacity gives real occlusion where it is unambiguous and keeps correct
+        // blending everywhere else.
+        slot.mesh.material.depthWrite = t.alpha > 0.995;
         slot.mesh.visible = t.alpha > 0.001 && t.scale > 0.0001;
       } else {
         // fallback: project the 2D transform onto the z=0 plane

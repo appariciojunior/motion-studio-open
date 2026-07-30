@@ -162,6 +162,9 @@ export default function TemplatesCard({ controlsInline = false }: { controlsInli
                     aria-controls={panelId}
                   >
                     <span className="tpl-name">{name}</span>
+                    {/* A family is new if any of its presets is, so the marker
+                        shows on the collapsed list without opening the group. */}
+                    {items.some((t) => t.meta.isNew) && <span className="tpl-new-inline">NEW</span>}
                     <span className="tpl-accordion-chevron"><Chevron /></span>
                   </button>
                   {isOpen && (

@@ -267,6 +267,19 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
   background: var(--card-soft); border: 1px solid var(--line);
   transition: border-color var(--t-fast), background var(--t-fast);
 }
+/* NEW next to a family name in the collapsed accordion list, so the marker is
+   visible without opening a group. .tpl-name is flex:1, which would shove the
+   badge over to the chevron, so on rows that carry a badge the name shrinks to
+   its text and the badge's own margin-right:auto holds the chevron at the far
+   edge. Scoped with :has() so every other row keeps its layout. */
+.tpl-item:has(.tpl-new-inline) .tpl-name { flex: 0 1 auto; }
+.tpl-new-inline {
+  margin-left: 6px; margin-right: auto; flex: 0 0 auto;
+  font-size: var(--fs-micro); line-height: 1; letter-spacing: 0.6px; font-weight: 500;
+  padding: 2px 4px; border-radius: var(--r-seg);
+  background: var(--inverse-bg); color: var(--inverse-fg);
+}
+
 /* NEW badge, pinned over the thumbnail's top-right corner. Reuses the beta-tag
    type treatment so the two markers read as the same family of label. */
 .tpl-new {
