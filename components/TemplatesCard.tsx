@@ -118,6 +118,7 @@ export default function TemplatesCard({ controlsInline = false }: { controlsInli
                 onClick={() => pick(t.meta.id)}
               >
                 <TemplateThumb template={t} />
+                {t.meta.isNew && <span className="tpl-new">NEW</span>}
                 <span className="tpl-card-label">{t.meta.name}</span>
               </button>
             ))}
@@ -172,6 +173,7 @@ export default function TemplatesCard({ controlsInline = false }: { controlsInli
                           onClick={() => setActiveTemplate(t.meta.id)}
                         >
                           <TemplateThumb template={t} />
+                          {t.meta.isNew && <span className="tpl-new">NEW</span>}
                           <span className="tpl-card-label">{t.meta.name}</span>
                         </button>
                       ))}

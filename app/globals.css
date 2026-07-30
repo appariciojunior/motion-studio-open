@@ -262,9 +262,19 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
   display: grid; grid-template-columns: 1fr 1fr; gap: 14px 10px; padding: 8px 0 16px;
 }
 .tpl-card {
+  position: relative;
   display: flex; flex-direction: column; gap: 8px; padding: 8px;
   background: var(--card-soft); border: 1px solid var(--line);
   transition: border-color var(--t-fast), background var(--t-fast);
+}
+/* NEW badge, pinned over the thumbnail's top-right corner. Reuses the beta-tag
+   type treatment so the two markers read as the same family of label. */
+.tpl-new {
+  position: absolute; top: 12px; right: 12px; z-index: 2;
+  font-size: var(--fs-micro); line-height: 1; letter-spacing: 0.6px; font-weight: 500;
+  padding: 3px 5px; border-radius: var(--r-seg);
+  background: var(--inverse-bg); color: var(--inverse-fg);
+  pointer-events: none;
 }
 .tpl-card:hover { border-color: var(--handle); }
 .tpl-card.active { border-color: var(--fg); }

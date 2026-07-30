@@ -69,6 +69,7 @@ export interface Template {
   meta: {
     id: string; name: string; group: string; thumbnail?: string;
     defaultEasing?: EasingSpec;               // curve the template ships with
+    isNew?: boolean;                          // shows a NEW badge on the template card
     repeatAssets?: boolean;                   // slot i shows asset i % assets.length (high-count fields)
     engine?: 'pixi' | 'webgl';                // renderer backend; default 'pixi'
     cardAspect?: number | 'canvas';           // cover-crop shape: w/h ratio (default 4/5) or the canvas aspect (full-bleed)

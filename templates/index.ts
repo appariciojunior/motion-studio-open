@@ -25,6 +25,10 @@ import { revealVariants } from './reveal';
 import { blankVariants } from './blank';
 import { galleryVariants } from './gallery';
 import { tickerVariants } from './ticker';
+import { isometricVariants } from './isometric';
+import { coverflowVariants } from './coverflow';
+import { flipVariants } from './flipgrid';
+import { boxVariants } from './box';
 
 const carouselVariants: Template[] = [
   { ...carousel, meta: { ...carousel.meta, name: 'Runway 01' } },
@@ -68,6 +72,10 @@ export const templateList: Template[] = [
   ...blankVariants,
   ...galleryVariants,
   ...tickerVariants,
+  ...isometricVariants,
+  ...coverflowVariants,
+  ...flipVariants,
+  ...boxVariants,
 ];
 
 export const templates: Record<string, Template> = Object.fromEntries(
