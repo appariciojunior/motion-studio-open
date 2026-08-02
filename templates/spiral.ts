@@ -8,15 +8,15 @@ const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 // Spiral — the camera corkscrews through a helix of cards (DNA / spiral
 // staircase): continuous rotation around the axis plus looping vertical travel.
 const spiral: Template = {
-  meta: { id: 'spiral-01', name: 'Helix 01', group: 'Helix', defaultEasing: { id: 'linear' } },
+  meta: { id: 'spiral-01', name: 'Helix 01', group: 'Helix', repeatAssets: true, defaultEasing: { id: 'linear' } },
 
   controls: [
     { key: 'direction',    label: 'Direction',     type: 'toggle', options: ['forward','reverse'], default: 'forward' },
-    { key: 'count',        label: 'Count',         type: 'slider', min: 8, max: 70, step: 1,   default: 40 },
-    { key: 'radius',       label: 'Radius',        type: 'slider', min: 80, max: 600, step: 1, default: 300 },
-    { key: 'turns',        label: 'Turns',         type: 'slider', min: 1, max: 6, step: 1,    default: 3 },
-    { key: 'pitch',        label: 'Pitch',         type: 'slider', min: 10, max: 120, step: 1, default: 40 },
-    { key: 'cardSize',     label: 'Plane Size',    type: 'slider', min: 20, max: 300, step: 1, default: 110 },
+    { key: 'count',        label: 'Count',          type: 'slider', min: 8, max: 70, step: 1,   default: 40 },
+    { key: 'radius',       label: 'Radius',         type: 'slider', min: 80, max: 600, step: 1, default: 300 },
+    { key: 'turns',        label: 'Turns',          type: 'slider', min: 1, max: 6, step: 1,    default: 3 },
+    { key: 'pitch',        label: 'Pitch',          type: 'slider', min: 10, max: 120, step: 1, default: 40 },
+    { key: 'cardSize',     label: 'Plane Size',     type: 'slider', min: 20, max: 300, step: 1, default: 110 },
     { key: 'cornerRadius', label: 'Corner Radius', type: 'slider', min: 0, max: 100, step: 1,  default: 12 },
     { key: 'speed',        label: 'Speed',         type: 'slider', min: 0, max: 3, step: 0.1,  default: 0.5 },
     { key: 'offset',       label: 'Offset',        type: 'xypad',                              default: { x: 0, y: 0 } },

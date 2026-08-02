@@ -8,11 +8,17 @@ export interface UIState {
   leftCollapsed: boolean;
   rightCollapsed: boolean;
   tplCollapsed: boolean;    // left column folded to the original compact strip
+  mobileTab: 'templates' | 'media' | 'adjust' | 'canvas';
+  mobileProjectsOpen: boolean;
+  mobilePanelOpen: boolean;
   setNav: (nav: string) => void;
   toggleTheme: () => void;
   toggleLeftPanel: () => void;
   toggleRightPanel: () => void;
   toggleTplCollapsed: () => void;
+  setMobileTab: (tab: UIState['mobileTab']) => void;
+  setMobileProjectsOpen: (open: boolean) => void;
+  setMobilePanelOpen: (open: boolean) => void;
   hydratePreferences: () => void;
 }
 
@@ -37,6 +43,9 @@ export const useUIStore = create<UIState>((set) => ({
   leftCollapsed: false,
   rightCollapsed: false,
   tplCollapsed: false,
+  mobileTab: 'templates',
+  mobileProjectsOpen: false,
+  mobilePanelOpen: false,
   setNav: (nav) => set({ nav }),
   toggleTheme: () => set((state) => {
     const next = { ...state, theme: state.theme === 'dark' ? 'light' as const : 'dark' as const };
@@ -58,6 +67,9 @@ export const useUIStore = create<UIState>((set) => ({
     savePreferences(next);
     return { tplCollapsed: next.tplCollapsed };
   }),
+  setMobileTab: (mobileTab) => set({ mobileTab, mobilePanelOpen: true }),
+  setMobileProjectsOpen: (mobileProjectsOpen) => set({ mobileProjectsOpen }),
+  setMobilePanelOpen: (mobilePanelOpen) => set({ mobilePanelOpen }),
   hydratePreferences: () => set((state) => {
     if (typeof window === 'undefined') return {};
     let saved: Partial<UIPreferences> = {};

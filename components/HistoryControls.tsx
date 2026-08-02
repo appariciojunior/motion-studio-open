@@ -1,6 +1,7 @@
 'use client';
 
 import { useHistoryStore } from '@/store/useHistoryStore';
+import { RedoIcon, UndoIcon } from './EditorIcons';
 
 // Undo / redo, floating over the stage. It sits here rather than in the
 // transport row because it acts on the scene, not on the clock — and the stage
@@ -20,7 +21,7 @@ export default function HistoryControls() {
         title="Undo (Ctrl/⌘Z)"
         aria-label="Undo"
       >
-        <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 7h6.5a3.5 3.5 0 010 7H6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/><path d="M5.5 4.5L3 7l2.5 2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        <UndoIcon size={15} />
       </button>
       <span className="stage-hist-sep" />
       <button
@@ -30,7 +31,7 @@ export default function HistoryControls() {
         title="Redo (Ctrl/⌘⇧Z)"
         aria-label="Redo"
       >
-        <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M13 7H6.5a3.5 3.5 0 000 7H10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/><path d="M10.5 4.5L13 7l-2.5 2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        <RedoIcon size={15} />
       </button>
     </div>
   );

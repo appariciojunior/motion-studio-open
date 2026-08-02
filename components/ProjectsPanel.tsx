@@ -16,7 +16,7 @@ function ago(ms: number): string {
   return d === 1 ? 'yesterday' : `${d} days ago`;
 }
 
-export default function ProjectsPanel() {
+export default function ProjectsPanel({ onProjectOpen }: { onProjectOpen?: () => void } = {}) {
   const projects = useProjectStore((s) => s.projects);
   const activeId = useProjectStore((s) => s.activeId);
   const open = useProjectStore((s) => s.open);
@@ -36,6 +36,7 @@ export default function ProjectsPanel() {
     create(newName.trim() || `Project ${projects.length + 1}`);
     setNaming(false);
     setNewName('');
+    onProjectOpen?.();
   };
 
   const commitRename = (id: string) => {
@@ -78,7 +79,7 @@ export default function ProjectsPanel() {
               ) : (
                 <button
                   className="prj-open"
-                  onClick={() => open(p.id)}
+                  onClick={() => { open(p.id); onProjectOpen?.(); }}
                   title={isActive ? 'Project open' : 'Open project'}
                 >
                   <span className="prj-name">{p.name}</span>

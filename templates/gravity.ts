@@ -1,5 +1,6 @@
 import type { Template } from '@/lib/types';
 import { variant } from './variant';
+import { smoother } from '@/lib/tilt3d';
 
 const BASE = 340;
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -50,6 +51,7 @@ const gravity: Template = {
     { key: 'stagger',      label: 'Stagger',       type: 'slider', min: 0, max: 0.6, step: 0.02, default: 0.18 },
     { key: 'spread',       label: 'Spread',        type: 'slider', min: 100, max: 800, step: 1,  default: 500 },
     { key: 'spin',         label: 'Spin',          type: 'slider', min: 0, max: 3, step: 0.1,    default: 1 },
+    { key: 'tilt',         label: 'Tilt',          type: 'slider', min: 0, max: 45, step: 1,     default: 18 },
     // A drop settles in a couple of seconds, so on a default 8s clip the pile
     // sat frozen for most of it and then teleported back to the top. `drops`
     // fits whole drops into the clip instead, and `recycleFade` dissolves each
@@ -114,14 +116,16 @@ const gravity: Template = {
     const driftVx = (h(index + 11) - 0.5) * 500 * (1 - v.friction);
     const airX = spawnX + driftVx * Math.min(tau, tTotal);
     const settle = tTotal > 1e-6 ? clamp(tau / tTotal, 0, 1) : 1;
-    const settle2 = settle * settle;                     // ease toward the column
+    // Quintic smoothstep has zero velocity and acceleration at both ends, so
+    // horizontal drift and resting tilt do not kink at the final impact.
+    const settle2 = smoother(settle);
     const x = clamp(lerp(airX, columnX, settle2), -ctx.width / 2, ctx.width / 2);
 
     // ---- Rotation: tumble in the air, relax to a slight resting tilt ----
     const spinDir = h(index + 17) < 0.5 ? -1 : 1;
     const spinSpeed = v.spin * 4;                        // rad/s at spin=1
     const airRot = spinDir * spinSpeed * Math.min(tau, tTotal);
-    const restTilt = (h(index + 13) - 0.5) * 0.25;       // small ±0.125 rad
+    const restTilt = (h(index + 13) - 0.5) * 2 * v.tilt * Math.PI / 180;
     const rotation = lerp(airRot, restTilt, settle2);
 
     // Dissolve the settled pile over the tail of the drop, so the recycle reads
@@ -158,6 +162,6 @@ export const gravityVariants: Template[] = [
   }),
   variant(gravity, 'gravity-03', 'Bounce 03', {
     // Slow-mo: low gravity, gentle spin, wide lazy scatter.
-    gravity: 0.35, bounce: 0.3, friction: 0.5, spin: 0.5, stagger: 0.3, cardSize: 160,
+    gravity: 0.35, bounce: 0.3, friction: 0.5, spin: 0.5, tilt: 12, stagger: 0.3, cardSize: 160,
   }),
 ];

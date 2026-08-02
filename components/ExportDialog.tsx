@@ -5,6 +5,7 @@ import { useSceneStore } from '@/store/useSceneStore';
 import { getRendererInstance } from '@/lib/rendererInstance';
 import { BASE_PATH, IS_STATIC_EXPORT } from '@/lib/paths';
 import { supportsWebCodecs, encodeMp4WebCodecs } from '@/lib/webcodecsExport';
+import { countDemoSlotsInUse } from '@/lib/demoUsage';
 
 // An export artifact: server files carry a /exports url; WebCodecs results are
 // local Blobs (url is an object URL for the download link).
@@ -51,6 +52,7 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
   const height = useSceneStore((s) => s.height);
   const customW = useSceneStore((s) => s.customW);
   const customH = useSceneStore((s) => s.customH);
+  const demoSlots = useSceneStore(countDemoSlotsInUse);
   const [format, setFormat] = useState<Fmt>('mp4');
   const [res, setRes] = useState<Res>('1080p');
   const [phase, setPhase] = useState<Phase>('idle');
@@ -62,6 +64,7 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
   const [saving, setSaving] = useState(false);
   const [savedTo, setSavedTo] = useState<string | null>(null);
   const [saveErr, setSaveErr] = useState('');
+  const [confirmDemo, setConfirmDemo] = useState(false);
 
   // File System Access API — Chromium (Edge/Chrome) only. Lets the user pick a
   // destination folder; falls back to the download links when unavailable.
@@ -112,6 +115,7 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
   };
 
   const run = async () => {
+    setConfirmDemo(false);
     const s = store.getState();
     const renderer = getRendererInstance();
     if (!renderer) { setErr('Renderer not ready'); setPhase('error'); return; }
@@ -275,8 +279,19 @@ npm run dev`}</code></pre>
             })()}
           </div>
 
-          {phase === 'idle' && (
-            <button className="btn primary full" onClick={run}>Start export</button>
+          {phase === 'idle' && !confirmDemo && (
+            <button className="btn primary full" onClick={() => demoSlots > 0 ? setConfirmDemo(true) : run()}>Start export</button>
+          )}
+
+          {phase === 'idle' && confirmDemo && (
+            <div className="export-demo-warning" role="alert">
+              <strong>{demoSlots} demo {demoSlots === 1 ? 'slot is' : 'slots are'} still in use</strong>
+              <p>Demo images will appear in the exported file unless you replace them in Media.</p>
+              <div className="export-demo-actions">
+                <button className="btn" onClick={() => setConfirmDemo(false)}>Cancel</button>
+                <button className="btn primary" onClick={run}>Export anyway</button>
+              </div>
+            </div>
           )}
 
           {phase === 'preparing' && <div className="progress"><span>Preparing videos…</span></div>}

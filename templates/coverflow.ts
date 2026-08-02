@@ -32,7 +32,7 @@ const coverflow: Template = {
     { key: 'cornerRadius', label: 'Corner Radius', type: 'slider', min: 0, max: 100, step: 1,    default: 10 },
     { key: 'centreGap',    label: 'Centre Gap',    type: 'slider', min: 60, max: 500, step: 1,   default: 230 }, // centre card → first neighbour
     { key: 'sideStep',     label: 'Side Step',     type: 'slider', min: 10, max: 220, step: 1,   default: 62 },  // step between packed side cards
-    { key: 'turn',         label: 'Turn',          type: 'slider', min: 0, max: 85, step: 1,     default: 58 },  // degrees a side card rotates away
+    { key: 'turn',         label: 'Turn',          type: 'slider', min: 0, max: 85, step: 1,     default: 58 },
     { key: 'shear',        label: 'Shear',         type: 'slider', min: 0, max: 100, step: 1,    default: 55 },  // % of the turn expressed as skew
     { key: 'recede',       label: 'Recede',        type: 'slider', min: 0, max: 60, step: 1,     default: 22 },  // % size lost turning away
     { key: 'depthScale',   label: 'Depth Falloff', type: 'slider', min: 0, max: 60, step: 1,     default: 26 },  // % further size lost across the pack
@@ -44,7 +44,7 @@ const coverflow: Template = {
   ],
 
   transform: (frame, index, count, v, ctx) => {
-    const horiz = v.axis === 'horizontal';
+    const horiz = v.axis !== 'vertical';
     const dir = v.direction === 'reverse' ? -1 : 1;
 
     // period = count so every cover returns to its own slot at the loop point.
