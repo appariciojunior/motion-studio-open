@@ -21,5 +21,6 @@ export function variant(
     // the variant renders flat while its base renders in 3D. That is what was
     // happening to Orbit 3D 02 and 03.
     transform3d: base.transform3d,
+    camera: base.camera,
   };
 }

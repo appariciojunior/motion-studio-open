@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useSceneStore } from '@/store/useSceneStore';
 import ExportDialog from './ExportDialog';
 import TrackLane from './TrackLane';
+import { ExportIcon, PauseIcon, PlayIcon } from './EditorIcons';
 
 function fmt(sec: number) {
   const s = Math.max(0, sec);
@@ -106,9 +107,9 @@ export default function Timeline({
     <div className="timeline">
       <button className="play-btn" onClick={() => setPlaying(!playing)} title={playing ? 'Pause' : 'Play'}>
         {playing ? (
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="3" y="2.5" width="3" height="9" rx="1" fill="currentColor"/><rect x="8" y="2.5" width="3" height="9" rx="1" fill="currentColor"/></svg>
+          <PauseIcon size={14} />
         ) : (
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M4 2.8v8.4c0 .8.9 1.3 1.6.9l6.6-4.2c.6-.4.6-1.4 0-1.8L5.6 1.9c-.7-.4-1.6.1-1.6.9z" fill="currentColor"/></svg>
+          <PlayIcon size={14} />
         )}
       </button>
 
@@ -156,7 +157,7 @@ export default function Timeline({
 
       {showExport && (
         <button className="export-btn" onClick={() => setShowExportDialog(true)}>
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0 0L5 7m3 3l3-3M3 13h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          <ExportIcon size={14} />
           Export
         </button>
       )}

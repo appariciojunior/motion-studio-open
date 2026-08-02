@@ -1,5 +1,5 @@
 import type { Template } from '@/lib/types';
-import { TAU, clamp, loopCycles, smooth } from '@/lib/motion';
+import { TAU, clamp, loopCycles, smooth, stepHold } from '@/lib/motion';
 import { variant } from './variant';
 
 const BASE = 340;
@@ -12,13 +12,12 @@ const BASE = 340;
 // to close the join.) Pulling the faces in by a fraction of a percent makes
 // their edges cross instead of touch, and the overlap hides the seam. This is a
 // rendering necessity, not a design choice, so it is not a user control.
-const CORNER_BLEED = 0.985;
+const CORNER_BLEED = 0.997;
+const BOX_ASPECT = 350 / 250;
 
 // Positive modulo — `%` keeps the sign of the dividend, and `turns` goes negative
 // when the prism spins in reverse.
 const mod = (a: number, n: number) => ((a % n) + n) % n;
-
-const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
 
 // A prism has `faces` sides but can carry more images than that, so each face
 // hands its slot over to the next image while it is turned away.
@@ -35,7 +34,20 @@ const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
 function prismGeo(count: number, v: Record<string, any>) {
   const faces = clamp(Math.round(v.faces ?? 4), 3, 12);
   const images = Math.max(faces, Math.round(count));
-  return { faces, images, gens: images / gcd(images, faces) };
+  return { faces, images };
+}
+
+function carouselFace(index: number, travel: number, geo: { faces: number; images: number }) {
+  const step = Math.floor(travel);
+  const progress = travel - step;
+  let relative = mod(index - mod(step, geo.images), geo.images);
+  if (relative > geo.images / 2) relative -= geo.images;
+  const low = -Math.floor((geo.faces - 1) / 2);
+  const high = Math.ceil((geo.faces - 1) / 2);
+  return {
+    theta: (relative - progress) * TAU / geo.faces,
+    active: relative >= low && relative <= high,
+  };
 }
 
 // Which face this slot occupies right now, or -1 when another image owns every
@@ -46,14 +58,6 @@ function prismGeo(count: number, v: Record<string, any>) {
 // floor(u + 0.5) increments exactly when frac(u) crosses 0.5 — the instant the
 // face points straight away from the camera. Every handover therefore happens
 // out of sight, and faces swap at their own moment rather than all at once.
-function faceForSlot(index: number, turns: number, geo: { faces: number; images: number }) {
-  for (let p = 0; p < geo.faces; p++) {
-    const g = Math.floor(turns + p / geo.faces + 0.5);
-    if (mod(g * geo.faces + p, geo.images) === index) return p;
-  }
-  return -1;
-}
-
 // ============================================================
 //  BOX — a real 3D prism, one image per face
 //
@@ -79,6 +83,18 @@ function faceForSlot(index: number, turns: number, geo: { faces: number; images:
 //  between their centres equals the sum of their half-widths, which solves to
 //  cardSize / (2·tan(π/N)). Any other value gaps or overlaps.
 //
+//  The prism is then pushed BACK by one apothem, so the front face lands on
+//  z = 0 instead of the prism's centre. This is the CSS box's
+//  `translateZ(-depth/2)`: there the box container is shifted back by half its
+//  depth precisely so the front face sits in the container's own plane. It
+//  matters here because renderer3d parks the camera at
+//  D = (height/2)/tan(fov/2), which makes z = 0 the plane of exact preview-pixel
+//  scale. Centring the prism instead leaves the front face an apothem closer to
+//  the lens, so it renders magnified by D/(D−apothem) — 1.22× at the defaults,
+//  and 3.1× at 12 faces, where the apothem outgrows the face itself. Anchored,
+//  `Face Width` means the pixel width you actually get, and Faces/Girth change
+//  the depth of the box behind that face rather than its size on screen.
+//
 //  `cardAspect: 1` because that apothem depends on the face dimension
 //  perpendicular to the spin axis — width for a vertical axis, height for a
 //  horizontal one. With the 4:5 default those differ and one axis would always
@@ -88,7 +104,12 @@ function faceForSlot(index: number, turns: number, geo: { faces: number; images:
 const box: Template = {
   meta: {
     id: 'box-01', name: 'Box 01', group: 'Box', isNew: true,
-    cardAspect: 1, engine: 'webgl', defaultEasing: { id: 'linear' },
+    // The reference component snaps each quarter turn with a spring of
+    // stiffness 200 / damping 30 — ζ ≈ 1.06, so it is very slightly overdamped
+    // and never overshoots. That is an ease-OUT, not the symmetric ease-in-out
+    // `smooth` was giving; cubicOut is the closest curve in the house set
+    // (within ~0.04 of the spring's normalized response across the step).
+    cardAspect: BOX_ASPECT, engine: 'webgl', catalog3d: true, defaultEasing: { id: 'cubicOut' },
   },
 
   controls: [
@@ -97,19 +118,47 @@ const box: Template = {
     // `count` is how many IMAGES ride the prism; `faces` is how many sides it
     // has. More images than faces is the point: each face hands its slot over to
     // the next image while it is turned away.
-    { key: 'count',        label: 'Images',        type: 'slider', min: 3, max: 24, step: 1,     default: 8 },
+    { key: 'count',        label: 'Images',        type: 'slider', min: 4, max: 24, step: 1,     default: 7 },
     { key: 'faces',        label: 'Faces',         type: 'slider', min: 3, max: 12, step: 1,     default: 4 },
-    { key: 'cardSize',     label: 'Face Size',     type: 'slider', min: 80, max: 600, step: 1,   default: 330 },
+    { key: 'cardSize',     label: 'Face Width',    type: 'slider', min: 80, max: 600, step: 1,   default: 350 },
     { key: 'cornerRadius', label: 'Corner Radius', type: 'slider', min: 0, max: 100, step: 1,    default: 0 },
     { key: 'girth',        label: 'Girth',         type: 'slider', min: 0.5, max: 2, step: 0.05, default: 1 }, // ×apothem: <1 squeezes, >1 opens the prism
-    // Drives the 3D camera's field of view in renderer3d: low is a long lens
-    // (little keystone), high is wide (strong keystone).
-    { key: 'perspective',  label: 'Perspective',   type: 'slider', min: 0, max: 200, step: 1,    default: 110 },
-    { key: 'shade',        label: 'Edge Shade',    type: 'slider', min: 0, max: 100, step: 1,    default: 35 }, // dims faces as they turn away
+    // Not the house 0–200 lens control — this is the CSS `perspective` distance
+    // in px, the same number and the same default the reference component takes
+    // (`CSSBox` ships 600; the carousel example passes 800). See `camera` below.
+    { key: 'perspective',  label: 'Perspective',   type: 'slider', min: 200, max: 2400, step: 10, default: 600 },
+    { key: 'shade',        label: 'Edge Shade',    type: 'slider', min: 0, max: 100, step: 1,    default: 12 }, // dims faces as they turn away
+    { key: 'hold',         label: 'Hold',          type: 'slider', min: 0, max: 85, step: 1,     default: 42 },
     { key: 'tilt',         label: 'Tilt',          type: 'slider', min: -45, max: 45, step: 1,   default: 0 },  // rolls the whole prism in the view plane
     { key: 'offset',       label: 'Offset',        type: 'xypad',                                default: { x: 0, y: 0 } },
-    { key: 'speed',        label: 'Speed',         type: 'slider', min: 0, max: 3, step: 0.1,    default: 0.35 }, // turns/sec
+    { key: 'speed',        label: 'Speed',         type: 'slider', min: 0, max: 3, step: 0.1,    default: 0.8 }, // face steps/sec
   ],
+
+  // ---- Camera. This is what makes the box read as a box. ----
+  //
+  // CSS `perspective: Npx` on a wrapper puts the viewer exactly N px in front of
+  // the element plane and projects with the factor N/(N−z). A Three perspective
+  // camera does the same thing when it sits at z = N AND its fov subtends the
+  // canvas at that distance — fov = 2·atan((height/2)/N). Deriving both from one
+  // number is what makes `Perspective` here mean what it means in the reference
+  // component, and it keeps z = 0 at exact preview-pixel scale, which the
+  // front-face anchor above depends on.
+  //
+  // Without this the house 0–200 control ran the show, and its distance is a
+  // function of the CANVAS, not the box: `D = (height/2)/tan(fov/2)`. On a
+  // 1080-tall stage the old default landed at D = 954 px against a 350 px face —
+  // a 2.7× lens. The reference is 600 px against a 400 px face, 1.5×. That gap
+  // is the whole complaint: at 2.7× the keystone is so shallow the box reads as
+  // two hinged flat panels, and no amount of correct geometry fixes it, because
+  // the geometry was never what was wrong.
+  camera: (v, ctx) => {
+    const p = clamp(Number(v.perspective) || 600, 200, 2400);
+    return {
+      position: { x: 0, y: 0, z: p },
+      target: { x: 0, y: 0, z: 0 },
+      fov: (2 * Math.atan((ctx.height / 2) / p) * 180) / Math.PI,
+    };
+  },
 
   // ---- Real 3D pose. y is canvas-down; the renderer flips it. ----
   transform3d: (frame, index, count, v, ctx) => {
@@ -118,18 +167,12 @@ const box: Template = {
 
     const geo = prismGeo(count, v);
 
-    // Period = generations, so every face is back on its starting image at the
-    // loop point and frame totalFrames poses like frame 0.
-    const turns = ctx.easedPhase((frame / ctx.totalFrames) * loopCycles(v.speed, ctx.duration, geo.gens)) * dir;
-
-    const pos = faceForSlot(index, turns, geo);
-    // Not this image's turn: park it fully transparent. Position still has to be
-    // finite, so it waits at face 0's spot.
-    const waiting = pos < 0;
-    const u = turns + (waiting ? 0 : pos) / geo.faces;
-    const theta = u * TAU;
-
-    const apothem = (v.cardSize / (2 * Math.tan(Math.PI / geo.faces))) * v.girth * CORNER_BLEED;
+    const rawSteps = (frame / ctx.totalFrames) * loopCycles(v.speed, ctx.duration, geo.images);
+    const travel = stepHold(rawSteps, v.hold / 100, ctx.ease) * dir;
+    const face = carouselFace(index, travel, geo);
+    const theta = face.theta;
+    const crossSize = vertical ? v.cardSize : v.cardSize / BOX_ASPECT;
+    const apothem = (crossSize / (2 * Math.tan(Math.PI / geo.faces))) * v.girth * CORNER_BLEED;
 
     // Face centre on the prism surface, plus the orientation that aims its
     // normal outward. A plane's normal starts at +Z.
@@ -164,19 +207,26 @@ const box: Template = {
     const facing = smooth(clamp(Math.cos(theta) / 0.12, 0, 1));
     // Faces turning away also darken — the drum has no real lighting.
     const shaded = 1 - (v.shade / 100) * (1 - Math.max(0, Math.cos(theta)));
-    const mine = waiting ? 0 : 1;
+    const mine = face.active ? 1 : 0;
 
     return {
       x: px + v.offset.x,
       // The renderer negates y (canvas-down → three y-up), so a world-up offset
       // is handed over negated.
       y: -py + v.offset.y,
-      z: pz,
+      // `translateZ(-depth/2)`. The roll above turns the prism about Z, which
+      // leaves Z alone, so the shift is a plain world-space subtraction here.
+      z: pz - apothem,
       rotationX: rotX,
       rotationY: rotY,
       rotationZ: roll,
       scale: v.cardSize / BASE,
       alpha: clamp(facing * shaded * mine, 0, 1),
+      // The prism itself supplies the volume. Giving every face a separate
+      // thick rounded body creates doubled corners and visible gaps.
+      thickness: 0,
+      shadowStrength: 0,
+      materialExposure: shaded,
     };
   },
 
@@ -190,22 +240,20 @@ const box: Template = {
     const dir = v.direction === 'reverse' ? -1 : 1;
 
     const geo = prismGeo(count, v);
-    const turns = ctx.easedPhase((frame / ctx.totalFrames) * loopCycles(v.speed, ctx.duration, geo.gens)) * dir;
-
-    // Same ownership as the 3D path, so a thumbnail shows the image the stage
-    // shows at that frame.
-    const pos = faceForSlot(index, turns, geo);
-    const waiting = pos < 0;
-    const theta = (turns + (waiting ? 0 : pos) / geo.faces) * TAU;
+    const rawSteps = (frame / ctx.totalFrames) * loopCycles(v.speed, ctx.duration, geo.images);
+    const travel = stepHold(rawSteps, v.hold / 100, ctx.ease) * dir;
+    const face = carouselFace(index, travel, geo);
+    const theta = face.theta;
 
     const cosT = Math.cos(theta);
-    const apothem = (v.cardSize / (2 * Math.tan(Math.PI / geo.faces))) * v.girth * CORNER_BLEED;
+    const crossSize = vertical ? v.cardSize : v.cardSize / BOX_ASPECT;
+    const apothem = (crossSize / (2 * Math.tan(Math.PI / geo.faces))) * v.girth * CORNER_BLEED;
     const along = Math.sin(theta) * apothem;
 
     const facing = smooth(clamp(cosT / 0.12, 0, 1));
     const shaded = 1 - (v.shade / 100) * (1 - Math.max(0, cosT));
     const squash = Math.abs(cosT);
-    const mine = waiting ? 0 : 1;
+    const mine = face.active ? 1 : 0;
 
     return {
       x: (vertical ? along : 0) + v.offset.x,
@@ -222,11 +270,16 @@ const box: Template = {
 
 export const boxVariants: Template[] = [
   box,
+  // Perspective is a px distance now, so each variant carries its own — the
+  // number that matters is the ratio to the face, and the reference sits at
+  // 1.5–2×. 520/300 = 1.7 here.
   variant(box, 'box-02', 'Box Tumble', {
-    axis: 'horizontal', count: 4, faces: 4, cardSize: 300, perspective: 140, shade: 50, speed: 0.3,
+    axis: 'horizontal', count: 4, faces: 4, cardSize: 300, perspective: 520, shade: 50, speed: 0.3,
   }),
   // A wide drum: every image gets its own side, so there is no handover at all.
+  // Eight faces make the solid much deeper than it is wide, so this one takes a
+  // longer lens (480/200 = 2.4) — at 1.5× the far side of the drum smears.
   variant(box, 'box-03', 'Box Drum', {
-    count: 8, faces: 8, cardSize: 200, girth: 1.1, perspective: 160, shade: 45, tilt: -10, speed: 0.45,
+    count: 8, faces: 8, cardSize: 200, girth: 1.1, perspective: 480, shade: 45, tilt: -10, speed: 0.45,
   }),
 ];

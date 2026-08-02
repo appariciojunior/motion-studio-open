@@ -10,7 +10,7 @@ const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const h = (k: number) => { const s = Math.sin(k * 127.1 + 1.7) * 43758.5453; return s - Math.floor(s); };
 
 const tour: Template = {
-  meta: { id: 'tour-01', name: 'Voyage 01', group: 'Voyage', defaultEasing: { id: 'smooth' } },
+  meta: { id: 'tour-01', name: 'Voyage 01', group: 'Voyage', repeatAssets: true, defaultEasing: { id: 'smooth' } },
 
   controls: [
     { key: 'count',        label: 'Count',         type: 'slider', min: 4, max: 24, step: 1,    default: 14 },

@@ -1,11 +1,50 @@
 'use client';
 
 import { useState } from 'react';
-import { useSceneStore } from '@/store/useSceneStore';
+import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { useSceneStore, type ActiveEffect } from '@/store/useSceneStore';
 import { effectList, getEffect, effectDefaults } from '@/effects';
 import { ControlRow } from './Controls';
+import { useMobileInteractions } from './MobileInteractions';
+
+function MobileEffectCard({
+  effect,
+  onToggle,
+  onRemove,
+  onValue,
+}: {
+  effect: ActiveEffect;
+  onToggle: () => void;
+  onRemove: () => void;
+  onValue: (key: string, value: unknown) => void;
+}) {
+  const def = getEffect(effect.effectId);
+  const [confirming, setConfirming] = useState(false);
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: effect.instanceId });
+  if (!def) return null;
+  return (
+    <div ref={setNodeRef} className={`effect-card mobile-effect-card ${effect.enabled ? '' : 'disabled'} ${isDragging ? 'is-dragging' : ''}`} style={{ transform: CSS.Transform.toString(transform), transition }}>
+      <div className="effect-card-head">
+        <button className="mobile-effect-grip" aria-label={`Reorder ${def.meta.name}`} {...attributes} {...listeners}>⠿</button>
+        <span className="effect-title">{def.meta.name}</span>
+        <button className="icon-btn" aria-label={effect.enabled ? `Disable ${def.meta.name}` : `Enable ${def.meta.name}`} onClick={onToggle}>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z" stroke="currentColor" strokeWidth="1.3"/><circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.3"/></svg>
+        </button>
+        <button className={`icon-btn ${confirming ? 'danger' : ''}`} aria-label={confirming ? `Confirm remove ${def.meta.name}` : `Remove ${def.meta.name}`} onClick={() => confirming ? onRemove() : setConfirming(true)} onBlur={() => setConfirming(false)}>
+          {confirming ? <span className="mobile-remove-confirm">Remove?</span> : <span aria-hidden="true">×</span>}
+        </button>
+      </div>
+      <div className="effect-card-body">
+        {def.controls.map((control) => <ControlRow key={control.key} def={control} value={effect.values[control.key]} onChange={(value) => onValue(control.key, value)} />)}
+      </div>
+    </div>
+  );
+}
 
 export default function EffectsPanel() {
+  const mobile = useMobileInteractions();
   const effects = useSceneStore((s) => s.effects);
   const addEffect = useSceneStore((s) => s.addEffect);
   const removeEffect = useSceneStore((s) => s.removeEffect);
@@ -14,6 +53,14 @@ export default function EffectsPanel() {
   const setEffectValue = useSceneStore((s) => s.setEffectValue);
   const [pick, setPick] = useState(effectList[0]?.meta.id ?? '');
   const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+
+  const finishMobileDrag = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return;
+    const from = effects.findIndex((effect) => effect.instanceId === active.id);
+    const to = effects.findIndex((effect) => effect.instanceId === over.id);
+    if (from >= 0 && to >= 0) reorderEffects(from, to);
+  };
 
   return (
     <>
@@ -26,7 +73,23 @@ export default function EffectsPanel() {
           <button className="btn" onClick={() => pick && addEffect(pick, effectDefaults(pick))}>Add</button>
         </div>
 
-        {effects.map((e, i) => {
+        {mobile ? (
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={finishMobileDrag}>
+            <SortableContext items={effects.map((effect) => effect.instanceId)} strategy={verticalListSortingStrategy}>
+              <div className="mobile-effects-list">
+                {effects.map((effect) => (
+                  <MobileEffectCard
+                    key={effect.instanceId}
+                    effect={effect}
+                    onToggle={() => toggleEffect(effect.instanceId)}
+                    onRemove={() => removeEffect(effect.instanceId)}
+                    onValue={(key, value) => setEffectValue(effect.instanceId, key, value)}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
+        ) : effects.map((e, i) => {
           const def = getEffect(e.effectId);
           if (!def) return null;
           return (

@@ -25,6 +25,7 @@ interface Slot {
   texW: number;
   texH: number;
   cornerR: number; // last-applied corner radius fraction, for mask caching
+  bindKey: string; // guards async image/video loads from overwriting a newer slot
 }
 
 // The GPU-side realization of one motion track. Each track owns its own sprite
@@ -57,6 +58,7 @@ export class SceneRenderer {
   private logoSprite: PIXI.Sprite | null = null;
   private placeholder!: PIXI.Texture;
   private textureCache = new Map<string, PIXI.Texture>();
+  private texturePromises = new Map<string, Promise<PIXI.Texture | null>>();
   private croppedCache = new Map<string, PIXI.Texture>(); // cover-crop views over cached base textures
   private videoEls = new Map<string, HTMLVideoElement>();  // live <video> per url, for playback + cleanup
   private exportVideoFrames = new Map<string, { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D; texture: PIXI.Texture }>();
@@ -116,7 +118,18 @@ export class SceneRenderer {
   // Loads via HTMLImageElement instead of PIXI.Assets: uploads are blob: URLs
   // with no file extension, which Assets can't route to a parser (resolves null).
   // Video assets decode into a VideoSource whose texture auto-updates each frame.
-  private async loadTexture(url: string, kind?: string): Promise<PIXI.Texture | null> {
+  private loadTexture(url: string, kind?: string): Promise<PIXI.Texture | null> {
+    const cached = this.textureCache.get(url);
+    if (cached) return Promise.resolve(cached);
+    const pending = this.texturePromises.get(url);
+    if (pending) return pending;
+    const promise = this.decodeTexture(url, kind)
+      .finally(() => { this.texturePromises.delete(url); });
+    this.texturePromises.set(url, promise);
+    return promise;
+  }
+
+  private async decodeTexture(url: string, kind?: string): Promise<PIXI.Texture | null> {
     const cached = this.textureCache.get(url);
     if (cached) return cached;
     try {
@@ -124,6 +137,7 @@ export class SceneRenderer {
         const video = this.videoEls.get(url) ?? createCardVideo(url);
         this.videoEls.set(url, video);
         await whenVideoReady(video); // videoWidth/height valid past here
+        if (!this.ready) return null;
         // updateFPS:0 → re-upload the frame on every render (Ticker-driven).
         const source = new PIXI.VideoSource({ resource: video, autoPlay: true, loop: true, muted: true, updateFPS: 0 });
         const tex = new PIXI.Texture({ source });
@@ -134,6 +148,7 @@ export class SceneRenderer {
       const img = new Image();
       img.src = url;
       await img.decode();
+      if (!this.ready) return null;
       const tex = PIXI.Texture.from(img);
       this.textureCache.set(url, tex);
       return tex;
@@ -218,7 +233,7 @@ export class SceneRenderer {
       label.anchor.set(0.5);
       sprite.addChild(label);
       rt.container.addChild(sprite);
-      rt.slots.push({ sprite, mask, label, texW: 480, texH: 600, cornerR: -1 });
+      rt.slots.push({ sprite, mask, label, texW: 480, texH: 600, cornerR: -1, bindKey: '' });
     }
     while (rt.slots.length > count) {
       const slot = rt.slots.pop()!;
@@ -230,6 +245,11 @@ export class SceneRenderer {
     rt.slots.forEach((slot, i) => {
       let asset = pool[assetIndexForSlot(i, pool.length, repeat)];
       if (!asset && pool.length > 0) asset = pool[i % pool.length];
+      const binding = asset
+        ? `${asset.id}|${asset.url}|${aspect.toFixed(4)}|${asset.crop?.x ?? 0.5},${asset.crop?.y ?? 0.5}`
+        : `placeholder|${i}`;
+      const bindingChanged = slot.bindKey !== binding;
+      slot.bindKey = binding;
       if (!asset || !asset.visible) {
         slot.sprite.texture = this.placeholder;
         slot.sprite.tint = PLACEHOLDER_FILL;
@@ -237,13 +257,21 @@ export class SceneRenderer {
         slot.label.visible = true;
         slot.texW = 480; slot.texH = 600; slot.cornerR = -1;
       } else {
+        if (bindingChanged) {
+          // Never leave the previous template's image visible while a new crop
+          // is decoding. Local/demo files replace this again in the same tick.
+          slot.sprite.texture = this.placeholder;
+          slot.sprite.tint = PLACEHOLDER_FILL;
+          slot.label.text = String(i + 1);
+          slot.label.visible = true;
+        }
         slot.sprite.tint = 0xffffff;
-        slot.label.visible = false;
         const { url, crop, kind } = asset;
         this.loadTexture(url, kind).then((base) => {
-          if (!base || slot.sprite.destroyed) return; // slot may be gone by now
+          if (!base || slot.sprite.destroyed || slot.bindKey !== binding) return;
           const tex = this.croppedView(url, base, aspect, crop);
           slot.sprite.texture = tex;
+          slot.label.visible = false;
           slot.texW = tex.width; slot.texH = tex.height; slot.cornerR = -1;
           this.onDirty?.(); // texture arrived — an idle preview must redraw
         });
@@ -439,6 +467,9 @@ export class SceneRenderer {
         duration: time.localTotal / Math.max(1, s.fps),
         totalFrames: time.localTotal,
         ease, easedPhase,
+        // Resolved the same way the sprites themselves are cropped, so a
+        // lattice template spaces cards by the shape actually on screen.
+        cardAspect: cardAspectFor(template.meta, s.width, s.height, s.cardShape),
       };
 
       for (let i = 0; i < count; i++) {
@@ -577,6 +608,7 @@ export class SceneRenderer {
 
   destroy() {
     this.ready = false;
+    this.texturePromises.clear();
     this.videoEls.forEach((v) => { try { v.pause(); v.removeAttribute('src'); v.load(); } catch { /* noop */ } });
     this.videoEls.clear();
     try { this.app.destroy(true, { children: true, texture: false }); } catch { /* noop */ }

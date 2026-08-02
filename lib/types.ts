@@ -19,6 +19,12 @@ export interface ControlDef {
   min?: number; max?: number; step?: number;  // slider
   options?: string[];          // pills / select / toggle
   default: number | string | boolean | { x: number; y: number };
+  section?: 'Layout' | 'Motion' | 'Depth' | 'Finish';
+  unit?: '°' | '%' | 'px' | '×' | '';
+  description?: string;
+  precision?: number;
+  visibleWhen?: { key: string; equals?: any; not?: any };
+  advanced?: boolean;
 }
 
 // ----- What a template's transform returns for ONE layer at ONE frame -----
@@ -45,6 +51,12 @@ export interface LayerTransform3D {
   rotationX?: number;  // radians
   rotationY?: number;
   rotationZ?: number;
+  quaternion?: { x: number; y: number; z: number; w: number };
+  thickness?: number;        // px before the card's uniform pose scale
+  shadowStrength?: number;   // 0..1, per-card cast/receive contribution
+  materialExposure?: number; // linear multiplier, 1 = neutral
+  bend?: number;             // centre sag in normalized card-width units; 0 = flat
+  velocity?: { x: number; y: number; z: number }; // px/s, used by finish passes
   scale: number;
   alpha: number;
 }
@@ -62,6 +74,22 @@ export interface TransformCtx {
   // loop seamless: floor(p) + ease(frac(p)). Templates route their raw
   // (time·speed) phase through this to inherit the scene easing.
   easedPhase: (phase: number) => number;
+  // The card's RESOLVED width/height, after the scene's card shape has had its
+  // say over the template's declared `cardAspect` (see lib/crop cardAspectFor).
+  // Templates that lay out a lattice need this: the renderer normalizes a
+  // sprite's LONG edge, so a card's other dimension — and therefore the gap left
+  // between neighbours — moves with the shape the user picked. Assuming the
+  // declared aspect instead leaves the horizontal and vertical gutters unequal.
+  // Optional so older ctx builders keep compiling; fall back to the declared one.
+  cardAspect?: number;
+}
+
+export interface CameraPose {
+  fov?: number;
+  position?: { x: number; y: number; z: number };
+  target?: { x: number; y: number; z: number };
+  near?: number;
+  far?: number;
 }
 
 // ----- A motion template (SEAM 1) -----
@@ -72,6 +100,8 @@ export interface Template {
     isNew?: boolean;                          // shows a NEW badge on the template card
     repeatAssets?: boolean;                   // slot i shows asset i % assets.length (high-count fields)
     engine?: 'pixi' | 'webgl';                // renderer backend; default 'pixi'
+    catalog3d?: boolean;                      // visual family is genuinely spatial; display as "<group> 3D"
+    catalogHidden?: boolean;                  // keep loading old scenes while hiding an unfinished preset from pickers
     cardAspect?: number | 'canvas';           // cover-crop shape: w/h ratio (default 4/5) or the canvas aspect (full-bleed)
   };
   controls: ControlDef[];                     // its FULL own set
@@ -91,6 +121,7 @@ export interface Template {
     values: Record<string, any>,
     ctx: TransformCtx
   ) => LayerTransform3D;                       // PURE. no side effects.
+  camera?: (values: Record<string, any>, ctx: TransformCtx) => CameraPose;
 }
 
 // ----- An effect (SEAM 2) -----

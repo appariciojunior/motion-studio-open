@@ -1,5 +1,5 @@
 import type { Template } from '@/lib/types';
-import { TAU, frac, wave, clamp, lerp, hash2, loopCycles } from '@/lib/motion';
+import { TAU, frac, wave, clamp, lerp, hash2, loopCycles, smooth } from '@/lib/motion';
 import { variant } from './variant';
 
 const BASE = 340;
@@ -57,11 +57,12 @@ const proximity: Template = {
 
     const dist = Math.hypot(baseX - fx, baseY - fy);
     const r = v.focusRadius;
-    const mag = 1 + v.magnify * Math.max(0, 1 - dist / r);
+    const influence = smooth(clamp(1 - dist / r, 0, 1));
+    const mag = 1 + v.magnify * influence;
 
     // per-tile variety: deterministic size mix and rotation wobble
     const mix = 1 - (v.sizeMix / 100) * 0.6 * hash2(index, 13.7);
-    const rotation = ((hash2(index, 71.3) - 0.5) * 2 * v.tilt * Math.PI) / 180;
+    const rotation = ((hash2(index, 71.3) - 0.5) * 2 * v.tilt * Math.PI) / 180 * influence;
 
     // whole-field build in/out envelope (0 at both ends → loop-safe)
     const env = v.buildInOut === 'on' ? Math.pow(wave(frame / ctx.totalFrames), 0.75) : 1;

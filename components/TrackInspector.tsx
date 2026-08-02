@@ -27,6 +27,8 @@ export default function TrackInspector() {
   const patch = (p: Parameters<typeof patchTrack>[1]) => patchTrack(track.id, p);
   // Which assets this layer draws. An empty list means "all of them".
   const usesAll = track.assetIds.length === 0;
+  const realAssets = assets.filter((asset) => asset.origin !== 'demo');
+  const selectedRealCount = realAssets.filter((asset) => track.assetIds.includes(asset.id)).length;
 
   return (
     <>
@@ -107,12 +109,12 @@ export default function TrackInspector() {
         )}
       </div>
       <div className="section-body">
-        {assets.length === 0 ? (
-          <div className="ctl-hint">No images in the scene.</div>
+        {realAssets.length === 0 ? (
+          <div className="ctl-hint">Add images from the Media tab to assign them to this layer.</div>
         ) : (
           <>
             <div className="trk-assets">
-              {assets.map((a, i) => {
+              {realAssets.map((a, i) => {
                 const on = usesAll || track.assetIds.includes(a.id);
                 return (
                   <button
@@ -127,7 +129,7 @@ export default function TrackInspector() {
               })}
             </div>
             <div className="ctl-hint">
-              {usesAll ? 'Using every image in the scene.' : `${track.assetIds.length} of ${assets.length} selected.`}
+              {usesAll ? 'Using every added image.' : `${selectedRealCount} of ${realAssets.length} selected.`}
             </div>
           </>
         )}

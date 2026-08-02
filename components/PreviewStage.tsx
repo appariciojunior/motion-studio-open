@@ -8,7 +8,7 @@ import { useSceneStore } from '@/store/useSceneStore';
 import { getTemplate } from '@/templates';
 
 export default function PreviewStage() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<IRenderer | null>(null);
   const rafRef = useRef<number>(0);
   const anchorTimeRef = useRef<number>(0);   // wall-clock at playback start
@@ -16,6 +16,10 @@ export default function PreviewStage() {
   const lastRenderedFrameRef = useRef<number | null>(null);
   const dirtyRef = useRef<boolean>(true);    // a paused preview redraws only when this is set
   const lastPlayingRef = useRef<boolean>(true);
+  // React Strict Mode deliberately starts, cleans up and starts effects again
+  // in development. The renderer import is asynchronous, so an obsolete start
+  // must not claim (and later force-loss) the canvas owned by the newer one.
+  const initGenerationRef = useRef(0);
 
   const width = useSceneStore((s) => s.width);
   const height = useSceneStore((s) => s.height);
@@ -29,12 +33,21 @@ export default function PreviewStage() {
   // layer would swap in the single-motion 3D renderer and the other layers would
   // vanish.
   const engine = useSceneStore((s) =>
-    s.tracks.length > 1 ? 'pixi' : getTemplate(s.activeTemplateId).meta.engine ?? 'pixi',
+    s.tracks.some((track) => track.visible && getTemplate(track.templateId).meta.engine === 'webgl')
+      ? 'webgl'
+      : 'pixi',
   );
 
   useEffect(() => {
+    const initGeneration = ++initGenerationRef.current;
     let mounted = true;
     let renderer: IRenderer | null = null;
+    const canvas = document.createElement('canvas');
+    canvas.className = 'stage-canvas';
+    // The canvas belongs to this exact renderer generation. Keeping it in a
+    // local variable prevents an obsolete async Pixi init/cleanup from ever
+    // claiming the canvas created for Three (or vice versa).
+    stageRef.current?.replaceChildren(canvas);
 
     // Render only when there's something new to show: while playing (frame
     // advancing), or once after any state/texture change while paused. An idle
@@ -92,10 +105,11 @@ export default function PreviewStage() {
       } else {
         renderer = new SceneRenderer();
       }
+      if (!mounted || initGeneration !== initGenerationRef.current) return;
       // async texture loads (images/videos) also need a redraw when they arrive
       renderer.onDirty = () => { dirtyRef.current = true; };
-      await renderer.init(canvasRef.current!);
-      if (!mounted) { renderer.destroy(); return; }
+      await renderer.init(canvas);
+      if (!mounted || initGeneration !== initGenerationRef.current) { renderer.destroy(); return; }
       rendererRef.current = renderer;
       setRendererInstance(renderer);
       dirtyRef.current = true;
@@ -110,6 +124,7 @@ export default function PreviewStage() {
       setRendererInstance(null);
       rendererRef.current = null;
       renderer?.destroy();
+      if (canvas.parentNode) canvas.remove();
     };
   }, [engine]);
 
@@ -120,8 +135,6 @@ export default function PreviewStage() {
   }, [width, height]);
 
   return (
-    <div className="stage-wrap">
-      <canvas key={engine} ref={canvasRef} className="stage-canvas" />
-    </div>
+    <div ref={stageRef} className="stage-wrap" />
   );
 }
