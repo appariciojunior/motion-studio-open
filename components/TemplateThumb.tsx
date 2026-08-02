@@ -20,13 +20,19 @@ interface CardPose {
   rotation: number; skewX: number; alpha: number; z: number; r: number;
 }
 
-export default function TemplateThumb({ template }: { template: Template }) {
+export default function TemplateThumb({
+  template,
+  autoPreview = false,
+}: {
+  template: Template;
+  autoPreview?: boolean;
+}) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [frame, setFrame] = useState(THUMB_FRAME);
   const [isPreviewing, setIsPreviewing] = useState(false);
 
-  // Only the hovered or keyboard-focused card gets an animation loop. Every
-  // other thumbnail remains a cheap static pose.
+  // Desktop previews follow hover/focus. Mobile groups can opt into autoplay;
+  // an IntersectionObserver keeps off-screen cards at the cheap static pose.
   useEffect(() => {
     const root = rootRef.current;
     const card = root?.closest<HTMLElement>('.tpl-card');
@@ -36,6 +42,9 @@ export default function TemplateThumb({ template }: { template: Template }) {
     let running = false;
     let startedAt = 0;
     let lastFrame = -1;
+    let hovered = false;
+    let focused = false;
+    let autoVisible = false;
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
     const tick = (now: number) => {
@@ -65,23 +74,49 @@ export default function TemplateThumb({ template }: { template: Template }) {
       setFrame(THUMB_FRAME);
     };
 
-    const stopAfterFocus = (event: FocusEvent) => {
-      if (!card.contains(event.relatedTarget as Node | null)) stop();
+    const reconcile = () => {
+      if ((autoPreview && autoVisible) || hovered || focused) start();
+      else stop();
     };
 
-    card.addEventListener('pointerenter', start);
-    card.addEventListener('pointerleave', stop);
-    card.addEventListener('focusin', start);
+    const pointerEnter = () => { hovered = true; reconcile(); };
+    const pointerLeave = () => { hovered = false; reconcile(); };
+    const focusIn = () => { focused = true; reconcile(); };
+
+    const stopAfterFocus = (event: FocusEvent) => {
+      if (!card.contains(event.relatedTarget as Node | null)) {
+        focused = false;
+        reconcile();
+      }
+    };
+
+    card.addEventListener('pointerenter', pointerEnter);
+    card.addEventListener('pointerleave', pointerLeave);
+    card.addEventListener('focusin', focusIn);
     card.addEventListener('focusout', stopAfterFocus);
+    let observer: IntersectionObserver | null = null;
+    if (autoPreview) {
+      if ('IntersectionObserver' in window) {
+        observer = new IntersectionObserver(([entry]) => {
+          autoVisible = entry.isIntersecting;
+          reconcile();
+        }, { threshold: 0.05 });
+        observer.observe(card);
+      } else {
+        autoVisible = true;
+        reconcile();
+      }
+    }
     return () => {
       running = false;
       cancelAnimationFrame(raf);
-      card.removeEventListener('pointerenter', start);
-      card.removeEventListener('pointerleave', stop);
-      card.removeEventListener('focusin', start);
+      observer?.disconnect();
+      card.removeEventListener('pointerenter', pointerEnter);
+      card.removeEventListener('pointerleave', pointerLeave);
+      card.removeEventListener('focusin', focusIn);
       card.removeEventListener('focusout', stopAfterFocus);
     };
-  }, []);
+  }, [autoPreview]);
 
   const poses = useMemo<CardPose[]>(() => {
     const v = defaultsFor(template.meta.id);

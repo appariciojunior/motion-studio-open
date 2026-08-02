@@ -904,6 +904,13 @@ select.field { padding-right: 26px; }
   font-size: var(--fs-label); color: var(--fg-body);
 }
 .modal-body { padding: 18px; display: flex; flex-direction: column; gap: 16px; }
+.export-mobile-back,
+.export-mobile-preview,
+.export-mobile-transport,
+.export-action-mobile,
+.export-label-mobile { display: none; }
+.export-primary-action { align-items: center; justify-content: center; gap: 8px; }
+.export-primary-action > svg { display: none; }
 .btn.solid, .btn.primary {
   background: var(--inverse-bg); color: var(--inverse-fg); font-weight: 600; letter-spacing: 0.2px;
   border-radius: var(--r-seg); font-size: var(--fs-label);
@@ -1266,6 +1273,8 @@ select.field { padding-right: 26px; }
   .mobile-editor .pills { overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; scroll-snap-type: x proximity; }
   .mobile-editor .pills::-webkit-scrollbar { display: none; }
   .mobile-editor .pills .pill { flex: 0 0 auto; min-width: 64px; scroll-snap-align: start; }
+  .mobile-editor .pills.pills-fit { overflow-x: hidden; scroll-snap-type: none; }
+  .mobile-editor .pills.pills-fit .pill { flex: 1 1 0; min-width: 0; }
   .mobile-editor .segmented .seg { min-width: 64px; }
   .mobile-editor .color input[type=color] { width: 52px; height: 52px; flex: 0 0 52px; }
   .mobile-editor button:active { transform: scale(.97); }
@@ -1370,6 +1379,86 @@ select.field { padding-right: 26px; }
   body:has(.mobile-editor) .modal-body { overflow-y: auto; padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
   body:has(.mobile-editor) .modal.welcome { width: 100%; height: 100dvh; max-height: none; }
 
+  /* Mobile export is a dedicated review screen: a large live preview, compact
+     transport, then output controls. Desktop keeps the regular modal above. */
+  .mobile-editor .export-modal,
+  body:has(.mobile-editor) .export-modal {
+    display: grid;
+    grid-template-rows: minmax(260px, 1fr) 66px minmax(220px, 36dvh);
+    background: var(--card);
+    overflow: hidden;
+  }
+  .mobile-editor .export-modal .modal-head,
+  body:has(.mobile-editor) .export-modal .modal-head {
+    position: absolute; inset: env(safe-area-inset-top) 0 auto; z-index: 3;
+    min-height: 58px; padding: 8px 14px; border: 0; background: transparent;
+    pointer-events: none;
+  }
+  .mobile-editor .export-modal .modal-head > span,
+  .mobile-editor .export-modal .modal-head > .icon-btn:last-child,
+  body:has(.mobile-editor) .export-modal .modal-head > span,
+  body:has(.mobile-editor) .export-modal .modal-head > .icon-btn:last-child { display: none; }
+  .mobile-editor .export-mobile-back,
+  body:has(.mobile-editor) .export-mobile-back {
+    display: grid; place-items: center; width: 44px; height: 44px;
+    border-radius: 11px; color: #f7f7f7; background: rgba(28,28,28,.86);
+    box-shadow: 0 6px 18px rgba(0,0,0,.16); pointer-events: auto;
+  }
+  .mobile-editor .export-mobile-preview,
+  body:has(.mobile-editor) .export-mobile-preview {
+    min-height: 0; display: flex; align-items: center; justify-content: center;
+    padding: calc(62px + env(safe-area-inset-top)) 32px 28px;
+    background: #050505; overflow: hidden;
+  }
+  .mobile-editor .export-mobile-preview canvas,
+  body:has(.mobile-editor) .export-mobile-preview canvas {
+    display: block; width: auto; height: auto; max-width: 100%; max-height: 100%;
+    object-fit: contain; background: #000;
+  }
+  .mobile-editor .export-mobile-transport,
+  body:has(.mobile-editor) .export-mobile-transport {
+    display: grid; grid-template-columns: 48px 1fr 48px; align-items: center;
+    padding: 0 14px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+    background: var(--card);
+  }
+  .mobile-editor .export-mobile-transport::after,
+  body:has(.mobile-editor) .export-mobile-transport::after { content: ''; width: 48px; }
+  .mobile-editor .export-mobile-play,
+  body:has(.mobile-editor) .export-mobile-play {
+    width: 42px; height: 42px; display: grid; place-items: center;
+    border-radius: 9px; background: var(--card-thumb); color: var(--fg);
+  }
+  .mobile-editor .export-mobile-transport > span,
+  body:has(.mobile-editor) .export-mobile-transport > span {
+    text-align: center; color: var(--fg-faint); font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+  .mobile-editor .export-mobile-transport b,
+  body:has(.mobile-editor) .export-mobile-transport b { color: var(--fg-body); font-weight: 500; }
+  .mobile-editor .export-modal-body,
+  body:has(.mobile-editor) .export-modal-body {
+    min-height: 0; padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+    gap: 13px; border: 0; background: var(--card);
+  }
+  .mobile-editor .export-modal-body .pills,
+  body:has(.mobile-editor) .export-modal-body .pills { border-radius: 9px; }
+  .mobile-editor .export-modal-body .pill,
+  body:has(.mobile-editor) .export-modal-body .pill { min-height: 42px; }
+  .mobile-editor .export-action-desktop,
+  .mobile-editor .export-label-desktop,
+  body:has(.mobile-editor) .export-action-desktop,
+  body:has(.mobile-editor) .export-label-desktop { display: none; }
+  .mobile-editor .export-action-mobile,
+  .mobile-editor .export-label-mobile,
+  body:has(.mobile-editor) .export-action-mobile,
+  body:has(.mobile-editor) .export-label-mobile { display: inline; }
+  .mobile-editor .export-primary-action,
+  body:has(.mobile-editor) .export-primary-action {
+    min-height: 48px; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .mobile-editor .export-primary-action > svg,
+  body:has(.mobile-editor) .export-primary-action > svg { display: block; }
+
   @media (orientation: landscape) and (max-height: 560px) {
     .mobile-editor {
       grid-template-rows: calc(44px + env(safe-area-inset-top)) minmax(0, 1fr) 48px 0 calc(54px + env(safe-area-inset-bottom));
@@ -1381,6 +1470,8 @@ select.field { padding-right: 26px; }
     }
     .mobile-transport { height: 48px; }
     .mobile-nav-item { height: 53px; }
+    .mobile-editor .export-modal,
+    body:has(.mobile-editor) .export-modal { grid-template-rows: minmax(150px, 1fr) 56px minmax(180px, 48dvh); }
   }
 }
 
