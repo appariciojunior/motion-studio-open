@@ -1401,7 +1401,7 @@ select.field { padding-right: 26px; }
   .mobile-editor .export-mobile-back,
   body:has(.mobile-editor) .export-mobile-back {
     display: grid; place-items: center; width: 44px; height: 44px;
-    border-radius: 11px; color: #f7f7f7; background: rgba(28,28,28,.86);
+    border-radius: var(--r-ctrl); color: #f7f7f7; background: rgba(28,28,28,.86);
     box-shadow: 0 6px 18px rgba(0,0,0,.16); pointer-events: auto;
   }
   .mobile-editor .export-mobile-preview,
@@ -1426,7 +1426,7 @@ select.field { padding-right: 26px; }
   .mobile-editor .export-mobile-play,
   body:has(.mobile-editor) .export-mobile-play {
     width: 42px; height: 42px; display: grid; place-items: center;
-    border-radius: 9px; background: var(--card-thumb); color: var(--fg);
+    border-radius: var(--r-ctrl); background: var(--card-thumb); color: var(--fg);
   }
   .mobile-editor .export-mobile-transport > span,
   body:has(.mobile-editor) .export-mobile-transport > span {
@@ -1441,7 +1441,7 @@ select.field { padding-right: 26px; }
     gap: 13px; border: 0; background: var(--card);
   }
   .mobile-editor .export-modal-body .pills,
-  body:has(.mobile-editor) .export-modal-body .pills { border-radius: 9px; }
+  body:has(.mobile-editor) .export-modal-body .pills { border-radius: var(--r-ctrl); }
   .mobile-editor .export-modal-body .pill,
   body:has(.mobile-editor) .export-modal-body .pill { min-height: 42px; }
   .mobile-editor .export-action-desktop,
@@ -1454,7 +1454,7 @@ select.field { padding-right: 26px; }
   body:has(.mobile-editor) .export-label-mobile { display: inline; }
   .mobile-editor .export-primary-action,
   body:has(.mobile-editor) .export-primary-action {
-    min-height: 48px; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 8px;
+    min-height: 48px; border-radius: var(--r-ctrl); display: flex; align-items: center; justify-content: center; gap: 8px;
   }
   .mobile-editor .export-primary-action > svg,
   body:has(.mobile-editor) .export-primary-action > svg { display: block; }
