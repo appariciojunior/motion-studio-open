@@ -5,6 +5,7 @@ import { useSceneStore } from '@/store/useSceneStore';
 import { catalogTemplateList, templateList, templateGroups, getTemplate } from '@/templates';
 import TemplateThumb from './TemplateThumb';
 import { ControlRow } from './Controls';
+import { useMobileInteractions } from './MobileInteractions';
 
 const Chevron = ({ dir = 'right' }: { dir?: 'right' | 'left' }) => (
   <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={dir === 'left' ? { transform: 'rotate(180deg)' } : undefined}>
@@ -26,6 +27,7 @@ export default function TemplatesCard({
   onSelect?: () => void;
   customPresetsEnabled?: boolean;
 }) {
+  const mobile = useMobileInteractions();
   const activeTemplateId = useSceneStore((s) => s.activeTemplateId);
   const setActiveTemplate = useSceneStore((s) => s.setActiveTemplate);
   const values = useSceneStore((s) => s.values);
@@ -202,7 +204,7 @@ export default function TemplatesCard({
                           className={`tpl-card ${activeTemplateId === t.meta.id ? 'active' : ''}`}
                           onClick={() => pick(t.meta.id)}
                         >
-                          <TemplateThumb template={t} />
+                          <TemplateThumb template={t} autoPreview={mobile} />
                           {t.meta.isNew && <span className="tpl-new">NEW</span>}
                           <span className="tpl-card-label">{t.meta.name}</span>
                         </button>

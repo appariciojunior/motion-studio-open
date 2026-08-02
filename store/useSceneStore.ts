@@ -396,7 +396,15 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setFrame: (frame) => set(() => ({ frame })),
   setPlaying: (p) => set(() => ({ playing: p })),
 
-  setFps: (fps) => set(() => ({ fps })),
+  setFps: (fps) => set((s) => {
+    const nextFps = Math.max(1, Math.round(fps));
+    const currentTime = s.frame / Math.max(1, s.fps);
+    const maxFrame = Math.max(0, Math.round(s.duration * nextFps) - 1);
+    return {
+      fps: nextFps,
+      frame: Math.min(maxFrame, Math.round(currentTime * nextFps)),
+    };
+  }),
   setAspect: (aspect) =>
     set(() => ({ aspect, ...dimsFor(aspect) })),
   // Custom canvas: preview stays normalized to BASE on the longest edge so
