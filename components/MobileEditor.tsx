@@ -14,7 +14,7 @@ import ExportDialog from './ExportDialog';
 import { useUIStore } from '@/store/useUIStore';
 import { useProjectStore } from '@/store/useProjectStore';
 import { useSceneStore } from '@/store/useSceneStore';
-import { AdjustIcon, BackIcon, CanvasIcon, ChevronDownIcon, ExportIcon, InfoIcon, LibraryIcon, MediaIcon, ProjectsIcon } from './EditorIcons';
+import { AdjustIcon, BackIcon, CanvasIcon, ChevronDownIcon, ExportIcon, InfoIcon, LibraryIcon, MediaIcon, MoonIcon, ProjectsIcon, SunIcon } from './EditorIcons';
 import { MobileInteractionProvider } from './MobileInteractions';
 
 const PreviewStage = dynamic(() => import('./PreviewStage'), { ssr: false });
@@ -36,6 +36,8 @@ export default function MobileEditor() {
   const setTab = useUIStore((s) => s.setMobileTab);
   const setPanelOpen = useUIStore((s) => s.setMobilePanelOpen);
   const setProjectsOpen = useUIStore((s) => s.setMobileProjectsOpen);
+  const theme = useUIStore((s) => s.theme);
+  const toggleTheme = useUIStore((s) => s.toggleTheme);
   const projects = useProjectStore((s) => s.projects);
   const activeId = useProjectStore((s) => s.activeId);
   const trackCount = useSceneStore((s) => s.tracks.length);
@@ -66,6 +68,14 @@ export default function MobileEditor() {
         </button>
         <div className="mobile-top-actions">
           <HistoryControls />
+          <button
+            className="mobile-icon-button"
+            onClick={toggleTheme}
+            aria-label={theme === 'dark' ? 'Use light theme' : 'Use dark theme'}
+            title={theme === 'dark' ? 'Light theme' : 'Dark theme'}
+          >
+            {theme === 'dark' ? <SunIcon size={18} /> : <MoonIcon size={18} />}
+          </button>
           <button className="mobile-icon-button" onClick={() => setDesktopNotice(true)} aria-label="Desktop tools information">
             <InfoIcon size={18} />
           </button>

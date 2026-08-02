@@ -173,9 +173,10 @@ function ToggleControl({ def, value, onChange }: RowProps) {
 }
 
 function PillsControl({ def, value, onChange }: RowProps) {
+  const options = def.options ?? [];
   return (
-    <div className="pills">
-      {(def.options ?? []).map((opt) => (
+    <div className={`pills ${options.length <= 4 ? 'pills-fit' : ''}`}>
+      {options.map((opt) => (
         <button key={opt} className={`pill ${value === opt ? 'active' : ''}`} onClick={() => onChange(opt)}>{opt}</button>
       ))}
     </div>
