@@ -83,7 +83,8 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
   // The mobile export page mirrors the existing renderer instead of creating
   // a second Pixi/Three instance. Desktop hides this canvas completely.
   useEffect(() => {
-    if (!window.matchMedia('(max-width: 767px)').matches) return;
+    // same bound as MOBILE_QUERY in app/page.tsx — see the note there
+    if (!window.matchMedia('(max-width: 919px)').matches) return;
     let raf = 0;
     const draw = () => {
       const target = previewCanvasRef.current;
