@@ -1,6 +1,6 @@
 import type { Template } from '@/lib/types';
 import { DEFAULT_EASING, type EasingSpec } from '@/lib/easing';
-import { carousel } from './carousel';
+import { carousel, carouselRefVariants } from './carousel';
 import { variant } from './variant';
 import { wheelVariants } from './wheel';
 import { orbitVariants } from './orbit';
@@ -57,6 +57,7 @@ const carouselVariants: Template[] = [
 // Order follows the reference catalogue's sidebar.
 export const templateList: Template[] = [
   ...carouselVariants,
+  ...carouselRefVariants,
   ...orbitVariants,
   ...orbit3dVariants,
   ...premium3dTemplates,
