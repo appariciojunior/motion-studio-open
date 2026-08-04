@@ -8,7 +8,7 @@ const BASE = 340;
 // Wheel — cards on a rotating ring (or a fan arc). Featured card is the one
 // nearest the top of the wheel; Spin Thumbs tilts cards along the tangent.
 const wheel: Template = {
-  meta: { id: 'wheel-01', name: 'Ferris 01', group: 'Ferris', defaultEasing: { id: 'flow' } },
+  meta: { id: 'wheel-01', name: 'Ferris 01', group: 'Ferris', repeatAssets: true, defaultEasing: { id: 'flow' } },
 
   controls: [
     { key: 'direction',    label: 'Direction',     type: 'toggle', options: ['forward','reverse'], default: 'forward' },

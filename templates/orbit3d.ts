@@ -1,86 +1,158 @@
 import type { Template } from '@/lib/types';
-import { TAU, lerp, loopCycles } from '@/lib/motion';
-import { cardPath } from '@/lib/cardPath';
+import { TAU, clamp, loopCycles, smooth } from '@/lib/motion';
+import {
+  backfaceFade,
+  multiplyQuaternion,
+  quaternionFromEuler,
+  tiltNormalCanvas,
+  tiltPointCanvas,
+  velocityLean,
+} from '@/lib/tilt3d';
 import { variant } from './variant';
 
 const BASE = 340;
 
-// Orbit 3D — real WebGL orbit: cards ride a circle in actual 3D space, seen
-// through a perspective camera (the `perspective` control maps to camera FOV
-// in the 3D renderer). `facing` chooses billboarded cards (screen) or cards
-// lying on the ring like a carousel drum (ring). The 2D transform below is a
-// cheap projection of the same motion for thumbnails.
-const orbit3d: Template = {
-  meta: {
-    id: 'orbit-3d-01', name: 'Orbit 3D 01', group: 'Orbit',
-    defaultEasing: { id: 'flow' }, engine: 'webgl',
-  },
+function ringMetrics(v: Record<string, any>, count: number, ctx: { width: number; height: number }) {
+  const minDim = Math.min(ctx.width, ctx.height);
+  const padding = clamp(v.padding / 100, 0, 0.2);
+  const usable = minDim * (1 - padding * 2);
+  // Opening is relative to the ring's own outer diameter. Previously it was
+  // measured against the canvas, so opening and ring size fought each other.
+  const outer = usable * clamp(v.ringSizePct / 100, 0.4, 0.98);
+  const inner = outer * clamp(v.opening / 100, 0.15, 0.85);
+  const radius = (outer + inner) / 4;
 
+  // A card must never consume more arc than its slot owns. This keeps every
+  // count airy instead of collapsing the cards into a closed black drum.
+  const requested = usable * clamp(v.cardSizePct / 100, 0.08, 0.36);
+  const arcPerCard = (TAU * radius) / Math.max(4, count);
+  return {
+    radius,
+    // Use the full long edge for the safety bound. Assets may be landscape or
+    // square when Card shape is Auto; assuming 4:5 here made wide images touch.
+    cardPx: Math.min(requested, arcPerCard * 0.72),
+  };
+}
+
+// A continuously turning ring must NOT route its angle through ctx.easedPhase.
+//
+// easedPhase is floor(p) + ease(frac(p)): it shapes every UNIT STEP of the
+// phase. That is exactly right for a conveyor that advances one slot at a time —
+// a ticker, a deck — where each step should accelerate and settle. A ring is the
+// opposite case: its period is `count`, so an ease-in-out curve makes it
+// accelerate and decelerate once PER CARD, twelve times per revolution at the
+// default count. Measured with the shipped `flow` curve, the instantaneous
+// angular velocity swung 23.5x between its slowest and fastest frame; with a
+// linear phase the same ring holds a flat rate. That lurch is what reads as
+// stiff next to a smoothly spinning reference.
+//
+// It also made `velocity` lie. That vector is derived from cycles/duration —
+// the AVERAGE rate — and is handed to the finish pass for motion blur, so under
+// an eased phase the blur was being told a speed up to 23x off from the truth.
+// On a linear phase the average IS the instantaneous rate, and it becomes exact.
+//
+// The seam is unaffected either way: loopCycles returns a whole multiple of
+// `count`, so at frame totalFrames the angle has advanced by a multiple of TAU.
+function ringPhase(frame: number, v: Record<string, any>, count: number, ctx: { duration: number; totalFrames: number }) {
+  const dir = v.direction === 'reverse' ? -1 : 1;
+  const cycles = loopCycles(v.speed, ctx.duration, count);
+  return { dir, cycles, phase: (frame / ctx.totalFrames) * cycles * dir };
+}
+
+const ringStream: Template = {
+  meta: {
+    id: 'orbit-3d-01', name: 'Ring Stream', group: 'Orbit',
+    // Linear on purpose — see ringPhase above. The curve picker still works for
+    // anyone who wants the stepped feel back.
+    defaultEasing: { id: 'linear' }, engine: 'webgl', catalog3d: true, repeatAssets: true,
+  },
   controls: [
-    { key: 'direction',   label: 'Direction',   type: 'toggle', options: ['forward','reverse'], default: 'forward' },
-    { key: 'count',       label: 'Count',       type: 'slider', min: 2, max: 16, step: 1,   default: 8 },
-    { key: 'cardSize',    label: 'Plane Size',  type: 'slider', min: 50, max: 800, step: 1, default: 300 },
-    { key: 'radius',      label: 'Orbit Radius',type: 'slider', min: 100, max: 700, step: 1, default: 380 },
-    { key: 'perspective', label: 'Perspective', type: 'slider', min: 0, max: 200, step: 1,  default: 120 },
-    { key: 'tiltX',       label: 'Tilt',        type: 'slider', min: -45, max: 45, step: 1, default: 10 },
-    { key: 'facing',      label: 'Facing',      type: 'pills', options: ['screen','ring'],  default: 'screen' },
-    { key: 'fade',        label: 'Depth Fade',  type: 'slider', min: 0, max: 100, step: 1,  default: 25 },
-    { key: 'speed',       label: 'Speed',       type: 'slider', min: 0, max: 2, step: 0.1,  default: 0.3 },
-    { key: 'offset',      label: 'Offset',      type: 'xypad',                              default: { x: 0, y: 0 } },
+    { key: 'style', label: 'Style', type: 'pills', options: ['stream','showcase','bloom'], default: 'stream', section: 'Layout', advanced: true },
+    { key: 'direction', label: 'Direction', type: 'toggle', options: ['forward','reverse'], default: 'forward', section: 'Motion' },
+    { key: 'count', label: 'Count', type: 'slider', min: 4, max: 24, step: 1, default: 12, section: 'Layout' },
+    { key: 'padding', label: 'Padding', type: 'slider', min: 0, max: 20, step: 1, default: 6, section: 'Layout', unit: '%' },
+    { key: 'ringSizePct', label: 'Ring Size', type: 'slider', min: 45, max: 95, step: 1, default: 94, section: 'Layout', unit: '%' },
+    { key: 'opening', label: 'Ring Opening', type: 'slider', min: 15, max: 85, step: 1, default: 70, section: 'Layout', unit: '%', description: 'Controls the inner diameter while keeping the ring complete.' },
+    { key: 'cardSizePct', label: 'Card Size', type: 'slider', min: 8, max: 36, step: 1, default: 18, section: 'Layout', unit: '%' },
+    { key: 'cornerRadius', label: 'Corner Radius', type: 'slider', min: 0, max: 20, step: 0.5, default: 3, section: 'Finish', unit: '%', precision: 1 },
+    { key: 'cardBend', label: 'Card Bend', type: 'slider', min: 0, max: 12, step: 0.5, default: 4, section: 'Depth', unit: '%', precision: 1, description: 'Curves each image surface gently around the ring.' },
+    { key: 'tiltX', label: 'Ring Tilt', type: 'slider', min: -60, max: 60, step: 1, default: -8, section: 'Depth', unit: '°', description: 'Rotates the complete physical ring without changing its radius.' },
+    { key: 'perspective', label: 'Perspective', type: 'slider', min: 0, max: 40, step: 1, default: 18, section: 'Depth', unit: '%' },
+    { key: 'facing', label: 'Facing', type: 'pills', options: ['camera','ring'], default: 'ring', section: 'Depth' },
+    { key: 'fade', label: 'Back Fade', type: 'slider', min: 0, max: 100, step: 1, default: 15, section: 'Finish', unit: '%' },
+    { key: 'shadow', label: 'Shadow', type: 'toggle', options: ['on','off'], default: 'on', section: 'Finish' },
+    { key: 'spread', label: 'Ring Width', type: 'slider', min: 55, max: 135, step: 1, default: 100, section: 'Layout', unit: '%', visibleWhen: { key: 'style', equals: 'showcase' } },
+    { key: 'pulse', label: 'Bloom', type: 'slider', min: 0, max: 35, step: 1, default: 15, section: 'Motion', unit: '%', visibleWhen: { key: 'style', equals: 'bloom' } },
+    { key: 'curve', label: 'Curve', type: 'slider', min: -100, max: 100, step: 1, default: 0, section: 'Depth', unit: '%', visibleWhen: { key: 'style', equals: 'bloom' } },
+    { key: 'speed', label: 'Speed', type: 'slider', min: 0, max: 2, step: 0.1, default: 0.3, section: 'Motion', unit: '×', precision: 1 },
+    { key: 'offset', label: 'Offset', type: 'xypad', default: { x: 0, y: 0 }, section: 'Layout' },
   ],
 
-  // Real 3D pose (renderer3d). y is canvas-down; the renderer flips it.
+  camera: (v) => ({ fov: 15 + clamp(v.perspective / 40, 0, 1) * 14 }),
+
   transform3d: (frame, index, count, v, ctx) => {
-    const dir = v.direction === 'reverse' ? -1 : 1;
-    const phase = ctx.easedPhase((frame / ctx.totalFrames) * loopCycles(v.speed, ctx.duration, count) * dir);
+    const { dir, cycles, phase } = ringPhase(frame, v, count, ctx);
     const a = TAU * ((index - phase) / count);
-
-    // ring in the XZ plane, tilted around the X axis
-    const tilt = (v.tiltX * Math.PI) / 180;
-    const x0 = Math.sin(a) * v.radius;
-    const z0 = Math.cos(a) * v.radius;
-    const y = -z0 * Math.sin(tilt) + v.offset.y; // tilt lifts the far side
-    const z = z0 * Math.cos(tilt);
-
-    const depthN = (z0 / v.radius + 1) / 2; // 1 = front, 0 = back
-    const alpha = 1 - (v.fade / 100) * (1 - depthN);
-
+    const metrics = ringMetrics(v, count, ctx);
+    const pulse = v.style === 'bloom' ? 1 + (v.pulse / 100) * Math.sin((phase / count) * TAU) : 1;
+    const width = metrics.radius * (v.style === 'showcase' ? v.spread / 100 : 1) * pulse;
+    const depth = metrics.radius * pulse;
+    const curveY = v.style === 'bloom' ? (1 - Math.cos(a)) * metrics.radius * (v.curve / 100) * 0.28 : 0;
+    const base = { x: Math.sin(a) * width, y: curveY, z: Math.cos(a) * depth };
+    const point = tiltPointCanvas(base, { pitch: v.tiltX });
+    const normal = tiltNormalCanvas({ x: Math.sin(a), y: 0, z: Math.cos(a) }, { pitch: v.tiltX });
+    const depthN = clamp((normal.z + 1) / 2, 0, 1);
+    const lean = velocityLean(dir * v.speed, 1, 3) * Math.PI / 180;
+    const qTilt = quaternionFromEuler(v.tiltX * Math.PI / 180, 0, 0);
+    const qRadial = quaternionFromEuler(0, v.facing === 'ring' ? a : 0, 0);
+    const qLean = quaternionFromEuler(0, 0, lean);
+    const quaternion = multiplyQuaternion(multiplyQuaternion(qTilt, qRadial), qLean);
+    const angularRate = (cycles / Math.max(0.001, ctx.duration)) * TAU / count * dir;
     return {
-      x: x0 + v.offset.x,
-      y,
-      z,
-      rotationX: v.facing === 'ring' ? tilt : 0,
-      rotationY: v.facing === 'ring' ? a : 0,
-      rotationZ: 0,
-      scale: v.cardSize / BASE,
-      alpha,
+      x: point.x + v.offset.x,
+      y: point.y + v.offset.y,
+      z: point.z,
+      quaternion,
+      scale: (metrics.cardPx / BASE) * (1 + smooth(depthN) * 0.035),
+      alpha: backfaceFade(normal.z, v.fade),
+      bend: v.cardBend / 100,
+      thickness: 0,
+      shadowStrength: v.shadow === 'on' ? 1 : 0,
+      materialExposure: 0.78 + depthN * 0.28,
+      velocity: {
+        x: Math.cos(a) * width * angularRate,
+        y: Math.sin(a) * depth * angularRate * Math.sin(v.tiltX * Math.PI / 180),
+        z: -Math.sin(a) * depth * angularRate,
+      },
     };
   },
 
-  // 2D projection of the same orbit (thumbnails + non-webgl fallback).
   transform: (frame, index, count, v, ctx) => {
-    const dir = v.direction === 'reverse' ? -1 : 1;
-    const phase = ctx.easedPhase((frame / ctx.totalFrames) * loopCycles(v.speed, ctx.duration, count) * dir);
-    const p = cardPath({ kind: 'ring', index, count, phase, radius: v.radius });
-    const tiltSquash = Math.abs(Math.sin((v.tiltX * Math.PI) / 180)) * 0.8 + 0.1;
-    const scale = (v.cardSize / BASE) * lerp(0.55, 1.1, p.depthNorm);
+    // Same linear phase as the 3D path, so the thumbnail matches the stage.
+    const { phase } = ringPhase(frame, v, count, ctx);
+    const a = TAU * ((index - phase) / count);
+    const metrics = ringMetrics(v, count, ctx);
+    const base = { x: Math.sin(a) * metrics.radius, y: 0, z: Math.cos(a) * metrics.radius };
+    const p = tiltPointCanvas(base, { pitch: v.tiltX });
+    const normal = tiltNormalCanvas({ x: Math.sin(a), y: 0, z: Math.cos(a) }, { pitch: v.tiltX });
+    const depthN = clamp((normal.z + 1) / 2, 0, 1);
     return {
       x: p.x + v.offset.x,
-      y: -p.y * tiltSquash + v.offset.y,
-      scale,
+      y: p.y + v.offset.y,
+      scale: (metrics.cardPx / BASE) * (0.84 + depthN * 0.19),
       rotation: 0,
-      alpha: 1 - (v.fade / 100) * (1 - p.depthNorm),
-      depth: p.depthNorm,
+      alpha: backfaceFade(normal.z, v.fade),
+      depth: p.z,
     };
   },
 };
 
 export const orbit3dVariants: Template[] = [
-  orbit3d,
-  variant(orbit3d, 'orbit-3d-02', 'Orbit 3D 02', {
-    facing: 'ring', count: 10, radius: 460, tiltX: 0, perspective: 160, speed: 0.25,
+  ringStream,
+  variant(ringStream, 'orbit-3d-02', 'Orbit Showcase', {
+    style: 'showcase', count: 10, ringSizePct: 86, opening: 48, tiltX: 0, perspective: 28, spread: 92, speed: 0.25,
   }),
-  variant(orbit3d, 'orbit-3d-03', 'Orbit 3D 03', {
-    count: 6, radius: 300, tiltX: 28, perspective: 80, cardSize: 380, fade: 45,
+  variant(ringStream, 'orbit-3d-03', 'Orbit Bloom', {
+    style: 'bloom', count: 8, ringSizePct: 72, opening: 42, tiltX: -29, perspective: 26, cardSizePct: 25, fade: 45, pulse: 16,
   }),
 ];

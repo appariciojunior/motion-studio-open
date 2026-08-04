@@ -10,7 +10,7 @@ const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const h = (k: number) => { const s = Math.sin(k * 127.1 + 1.7) * 43758.5453; return s - Math.floor(s); };
 
 const parallax: Template = {
-  meta: { id: 'parallax-01', name: 'Drift 01', group: 'Drift', defaultEasing: { id: 'smooth' } },
+  meta: { id: 'parallax-01', name: 'Drift 01', group: 'Drift', repeatAssets: true, defaultEasing: { id: 'smooth' } },
 
   controls: [
     { key: 'count',        label: 'Count',         type: 'slider', min: 3, max: 16, step: 1,    default: 9 },

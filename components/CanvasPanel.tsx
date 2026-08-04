@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useSceneStore, ASPECTS } from '@/store/useSceneStore';
 import { ControlRow } from './Controls';
 
-const FPS_OPTIONS = [30, 60];
+const FPS_OPTIONS = [15, 25, 30, 60] as const;
 const BG_SOURCES: { id: 'color' | 'image' | 'card'; label: string }[] = [
   { id: 'color', label: 'Color' },
   { id: 'image', label: 'Image' },
@@ -97,9 +97,17 @@ export default function CanvasPanel() {
 
         <div className="ctl-row">
           <label className="ctl-label">FPS</label>
-          <div className="pills">
+          <div className="pills pills-fit">
             {FPS_OPTIONS.map((f) => (
-              <button key={f} className={`pill ${fps === f ? 'active' : ''}`} onClick={() => setFps(f)}>{f}</button>
+              <button
+                key={f}
+                type="button"
+                className={`pill ${fps === f ? 'active' : ''}`}
+                aria-pressed={fps === f}
+                onClick={() => setFps(f)}
+              >
+                {f}
+              </button>
             ))}
           </div>
         </div>

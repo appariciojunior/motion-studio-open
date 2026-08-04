@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { useSceneStore } from '@/store/useSceneStore';
-import { templateList, templateGroups, getTemplate } from '@/templates';
+import { catalogTemplateList, templateList, templateGroups, getTemplate } from '@/templates';
 import TemplateThumb from './TemplateThumb';
 import { ControlRow } from './Controls';
+import { useMobileInteractions } from './MobileInteractions';
 
 const Chevron = ({ dir = 'right' }: { dir?: 'right' | 'left' }) => (
   <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={dir === 'left' ? { transform: 'rotate(180deg)' } : undefined}>
@@ -17,7 +18,16 @@ const Chevron = ({ dir = 'right' }: { dir?: 'right' | 'left' }) => (
 // controls in. Selecting a template opens its sliders right here, over the same
 // left bar, keeping the search and back that already exist. Off (2D/web), the
 // card behaves exactly as before: selecting only sets the active template.
-export default function TemplatesCard({ controlsInline = false }: { controlsInline?: boolean }) {
+export default function TemplatesCard({
+  controlsInline = false,
+  onSelect,
+  customPresetsEnabled = true,
+}: {
+  controlsInline?: boolean;
+  onSelect?: () => void;
+  customPresetsEnabled?: boolean;
+}) {
+  const mobile = useMobileInteractions();
   const activeTemplateId = useSceneStore((s) => s.activeTemplateId);
   const setActiveTemplate = useSceneStore((s) => s.setActiveTemplate);
   const values = useSceneStore((s) => s.values);
@@ -36,7 +46,13 @@ export default function TemplatesCard({ controlsInline = false }: { controlsInli
   const [presetName, setPresetName] = useState('');
 
   // saved presets live in localStorage — pick them up after mount
-  useEffect(() => { loadCustomPresets(); }, [loadCustomPresets]);
+  useEffect(() => {
+    if (customPresetsEnabled) loadCustomPresets();
+  }, [customPresetsEnabled, loadCustomPresets]);
+
+  // Mobile deliberately exposes only the template catalogue. Keeping this as
+  // a derived value prevents custom state from leaking in if the prop changes.
+  const activeTab = customPresetsEnabled ? tab : 'templates';
 
   const activeMeta = templateList.find((t) => t.meta.id === activeTemplateId)?.meta;
 
@@ -44,6 +60,12 @@ export default function TemplatesCard({ controlsInline = false }: { controlsInli
   const pick = (id: string) => {
     setActiveTemplate(id);
     if (controlsInline) setShowControls(true);
+    onSelect?.();
+  };
+
+  const pickCustom = (id: string) => {
+    applyCustomPreset(id);
+    onSelect?.();
   };
 
   const commitPreset = () => {
@@ -56,29 +78,31 @@ export default function TemplatesCard({ controlsInline = false }: { controlsInli
 
   const q = query.trim().toLowerCase();
   const searching = q.length > 0;
-  const matches = templateList.filter(
+  const matches = catalogTemplateList.filter(
     (t) => t.meta.name.toLowerCase().includes(q) || t.meta.group.toLowerCase().includes(q)
   );
   return (
     <section className="card templates">
       <div className="tpl-head">
         <div className="tpl-head-row">
-          <div className="tabs">
-            <button className={`tab ${tab === 'templates' ? 'active' : ''}`} onClick={() => setTab('templates')}>Templates</button>
-            <button className={`tab ${tab === 'custom' ? 'active' : ''}`} onClick={() => setTab('custom')}>Custom</button>
-          </div>
+          {customPresetsEnabled && (
+            <div className="tabs">
+              <button className={`tab ${activeTab === 'templates' ? 'active' : ''}`} onClick={() => setTab('templates')}>Templates</button>
+              <button className={`tab ${activeTab === 'custom' ? 'active' : ''}`} onClick={() => setTab('custom')}>Custom</button>
+            </div>
+          )}
         </div>
 
         <div className="searchbox">
           <span className="ico">
             <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.4"/><path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
           </span>
-          <input placeholder={`Search ${templateList.length} templates`} value={query} onChange={(e) => setQuery(e.target.value)} />
+          <input placeholder={`Search ${catalogTemplateList.length} templates`} value={query} onChange={(e) => setQuery(e.target.value)} />
         </div>
       </div>
 
       <div className="tpl-list">
-        {tab === 'custom' ? (
+        {activeTab === 'custom' ? (
           customPresets.length === 0 ? (
             <div className="tpl-group-label">No custom presets yet</div>
           ) : (
@@ -91,8 +115,13 @@ export default function TemplatesCard({ controlsInline = false }: { controlsInli
                     className="tpl-card tpl-card-custom"
                     role="button"
                     tabIndex={0}
-                    onClick={() => applyCustomPreset(p.id)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') applyCustomPreset(p.id); }}
+                    onClick={() => pickCustom(p.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        pickCustom(p.id);
+                      }
+                    }}
                   >
                     {base && <TemplateThumb template={base} />}
                     <span className="tpl-card-label">{p.name}</span>
@@ -118,6 +147,7 @@ export default function TemplatesCard({ controlsInline = false }: { controlsInli
                 onClick={() => pick(t.meta.id)}
               >
                 <TemplateThumb template={t} />
+                {t.meta.isNew && <span className="tpl-new">NEW</span>}
                 <span className="tpl-card-label">{t.meta.name}</span>
               </button>
             ))}
@@ -161,6 +191,9 @@ export default function TemplatesCard({ controlsInline = false }: { controlsInli
                     aria-controls={panelId}
                   >
                     <span className="tpl-name">{name}</span>
+                    {/* A family is new if any of its presets is, so the marker
+                        shows on the collapsed list without opening the group. */}
+                    {items.some((t) => t.meta.isNew) && <span className="tpl-new-inline">NEW</span>}
                     <span className="tpl-accordion-chevron"><Chevron /></span>
                   </button>
                   {isOpen && (
@@ -169,9 +202,10 @@ export default function TemplatesCard({ controlsInline = false }: { controlsInli
                         <button
                           key={t.meta.id}
                           className={`tpl-card ${activeTemplateId === t.meta.id ? 'active' : ''}`}
-                          onClick={() => setActiveTemplate(t.meta.id)}
+                          onClick={() => pick(t.meta.id)}
                         >
-                          <TemplateThumb template={t} />
+                          <TemplateThumb template={t} autoPreview={mobile} />
+                          {t.meta.isNew && <span className="tpl-new">NEW</span>}
                           <span className="tpl-card-label">{t.meta.name}</span>
                         </button>
                       ))}
@@ -184,26 +218,28 @@ export default function TemplatesCard({ controlsInline = false }: { controlsInli
         )}
       </div>
 
-      <div className="tpl-foot">
-        {naming ? (
-          <div className="tpl-save-row">
-            <input
-              className="field"
-              autoFocus
-              placeholder={`${activeMeta?.name ?? 'Preset'} custom`}
-              value={presetName}
-              onChange={(e) => setPresetName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') commitPreset();
-                if (e.key === 'Escape') { setNaming(false); setPresetName(''); }
-              }}
-            />
-            <button className="btn solid" onClick={commitPreset}>Save</button>
-          </div>
-        ) : (
-          <button className="btn full" onClick={() => setNaming(true)}>Save as custom</button>
-        )}
-      </div>
+      {customPresetsEnabled && (
+        <div className="tpl-foot">
+          {naming ? (
+            <div className="tpl-save-row">
+              <input
+                className="field"
+                autoFocus
+                placeholder={`${activeMeta?.name ?? 'Preset'} custom`}
+                value={presetName}
+                onChange={(e) => setPresetName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitPreset();
+                  if (e.key === 'Escape') { setNaming(false); setPresetName(''); }
+                }}
+              />
+              <button className="btn solid" onClick={commitPreset}>Save</button>
+            </div>
+          ) : (
+            <button className="btn full" onClick={() => setNaming(true)}>Save as custom</button>
+          )}
+        </div>
+      )}
     </section>
   );
 }

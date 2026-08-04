@@ -20,11 +20,23 @@ import { scaleVariants } from './scale';
 import { proximityVariants } from './proximity';
 import { storiesFocusVariants } from './storiesFocus';
 import { zoomVariants } from './zoom';
+import { bloomVariants } from './bloom';
 import { scatterVariants } from './scatter';
 import { revealVariants } from './reveal';
+import { framesVariants } from './frames';
+import { gridVariants } from './grid';
 import { blankVariants } from './blank';
 import { galleryVariants } from './gallery';
 import { tickerVariants } from './ticker';
+import { isometricVariants } from './isometric';
+import { coverflowVariants } from './coverflow';
+import { deckVariants } from './deck';
+import { flipVariants } from './flipgrid';
+import { boxVariants } from './box';
+import { surfaceVariants } from './surface';
+import { premium3dTemplates } from './premium3d';
+import { showcaseVariants } from './showcase';
+import { helix3dVariants } from './helix3d';
 
 const carouselVariants: Template[] = [
   { ...carousel, meta: { ...carousel.meta, name: 'Runway 01' } },
@@ -47,6 +59,8 @@ export const templateList: Template[] = [
   ...carouselVariants,
   ...orbitVariants,
   ...orbit3dVariants,
+  ...premium3dTemplates,
+  ...showcaseVariants,
   ...spinVariants,
   ...stackVariants,
   ...wheelVariants,
@@ -56,31 +70,49 @@ export const templateList: Template[] = [
   ...storiesFocusVariants,
   ...flickerVariants,
   ...globeVariants,
+  ...surfaceVariants,
   ...spiralVariants,
+  ...helix3dVariants,
   ...tourVariants,
   ...gravityVariants,
   ...parallaxVariants,
   ...scatterVariants,
   ...scaleVariants,
   ...zoomVariants,
+  ...bloomVariants,
   ...proximityVariants,
   ...revealVariants,
+  ...framesVariants,
+  ...gridVariants,
   ...blankVariants,
   ...galleryVariants,
   ...tickerVariants,
+  ...isometricVariants,
+  ...coverflowVariants,
+  ...deckVariants,
+  ...flipVariants,
+  ...boxVariants,
 ];
 
 export const templates: Record<string, Template> = Object.fromEntries(
   templateList.map((t) => [t.meta.id, t])
 );
 
+// Templates can remain addressable for persisted scenes while being withheld
+// from every picker until their visual quality is ready for the catalogue.
+export const catalogTemplateList = templateList.filter((t) => !t.meta.catalogHidden);
+
 // Group order follows the reference catalogue.
 export const templateGroups: { group: string; items: Template[] }[] = (() => {
   const order: string[] = [];
   const map = new Map<string, Template[]>();
-  for (const t of templateList) {
-    if (!map.has(t.meta.group)) { map.set(t.meta.group, []); order.push(t.meta.group); }
-    map.get(t.meta.group)!.push(t);
+  // A renderer is an implementation detail, not a catalogue category. Runway
+  // may use WebGL for perspective and Ticker Tilt may use it for a rigid plane,
+  // but neither belongs to the same family as Box, Globe or Surface.
+  for (const t of catalogTemplateList) {
+    const group = t.meta.catalog3d ? `${t.meta.group} 3D` : t.meta.group;
+    if (!map.has(group)) { map.set(group, []); order.push(group); }
+    map.get(group)!.push(t);
   }
   return order.map((group) => ({ group, items: map.get(group)! }));
 })();

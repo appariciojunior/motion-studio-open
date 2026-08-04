@@ -4,10 +4,12 @@
   "description": "Motion Studio — an open-source factory for quick videos and GIFs.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node scripts/verify-tilt.cjs",
     "dev": "next dev",
+    "dev:network": "next dev -H 0.0.0.0",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "start:network": "next start -H 0.0.0.0"
   },
   "keywords": [],
   "author": "",
@@ -15,9 +17,13 @@
   "type": "module",
   "private": "true",
   "dependencies": {
-    "mp4-muxer": "^5.2.2",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@react-three/fiber": "^9.0.0",
     "@tailwindcss/browser": "^4.3.3",
     "jszip": "^3.10.1",
+    "mp4-muxer": "^5.2.2",
     "next": "^16.2.10",
     "pixi-filters": "^6.1.5",
     "pixi.js": "^8.19.0",
@@ -25,6 +31,7 @@
     "react-dom": "^19.2.7",
     "sucrase": "^3.35.1",
     "three": "^0.185.1",
+    "use-sync-external-store": "^1.5.0",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
