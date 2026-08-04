@@ -16,7 +16,9 @@ const mOffYDef: ControlDef = { key: 'my', label: 'Mask Offset Y', type: 'slider'
 
 // Stage background — same fill pattern as model parts (solid / linear / radial),
 // paint-stroke texture amount, plus the warm sun (masked by an alpha window).
-export default function BackgroundFill() {
+// `hideTexture` drops the two paint-relief rows — the Mockup effect has no
+// painted wall to apply them to (its background is the stage CSS gradient).
+export default function BackgroundFill({ hideTexture }: { hideTexture?: boolean }) {
   const bgFill = use3DStore((s) => s.bgFill);
   const setBgFill = use3DStore((s) => s.setBgFill);
   const bgTexAmount = use3DStore((s) => s.bgTexAmount);
@@ -48,8 +50,8 @@ export default function BackgroundFill() {
           onType={(t) => setBgFill({ type: t === 'none' ? 'solid' : t })}
           onColor={(which, hex) => setBgFill({ [which]: hex })}
         />
-        <ControlRow def={amtDef} value={bgTexAmount} onChange={(v) => setBgTexAmount(v)} />
-        <ControlRow def={scaleDef} value={bgTexScale} onChange={(v) => setBgTexScale(v)} />
+        {!hideTexture && <ControlRow def={amtDef} value={bgTexAmount} onChange={(v) => setBgTexAmount(v)} />}
+        {!hideTexture && <ControlRow def={scaleDef} value={bgTexScale} onChange={(v) => setBgTexScale(v)} />}
         <ControlRow def={sunDef} value={sunIntensity} onChange={(v) => setSunIntensity(v)} />
         <ControlRow def={shadowDef} value={sunShadow} onChange={(v) => setSunShadow(v)} />
 

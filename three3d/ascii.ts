@@ -34,6 +34,8 @@ export interface AsciiOptions {
   getSunMaskTransform?: () => { scale: number; offX: number; offY: number };
   // effect hands out a camera handle (null on teardown) — drives the view gizmo
   onCamera?: (rig: CameraRig | null) => void;
+  // Mockup mode — image/video to composite onto the device's "Screen" mesh.
+  getScreenMedia?: () => { url: string; kind: 'image' | 'video' } | null;
 }
 
 // ── Value noise (fBm) — the background "height map" that drives BG glyphs ─────

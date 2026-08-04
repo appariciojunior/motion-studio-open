@@ -17,9 +17,14 @@ export default function ModelControl() {
   const setModelScale = use3DStore((s) => s.setModelScale);
   const nudgeRot = use3DStore((s) => s.nudgeRot);
   const setModelOffset = use3DStore((s) => s.setModelOffset);
-  const centerModel = use3DStore((s) => s.centerModel);
+  const storeCenterModel = use3DStore((s) => s.centerModel);
   const setModelUrl = use3DStore((s) => s.setModelUrl);
+  const effectId = use3DStore((s) => s.effectId);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Device mockups are already bbox-centred by fitAndCenter — recentring
+  // should return to (0, 0), not the daisy model's hand-tuned offset.
+  const centerModel = () => (effectId === 'mockup' ? storeCenterModel(0, 0) : storeCenterModel());
 
   const onFile = (f: File | undefined) => {
     if (!f) return;

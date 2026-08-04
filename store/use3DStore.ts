@@ -36,7 +36,10 @@ export interface ThreeDState {
   setModelScale: (v: number) => void;
   nudgeRot: (dx: number, dy: number) => void;
   setModelOffset: (x: number, y: number) => void;
-  centerModel: () => void;
+  // offsetX/offsetY default to the bundled daisy model's hand-tuned centring;
+  // callers with a different model (e.g. a device mockup, which is already
+  // bbox-centred by fitAndCenter) pass (0, 0) explicitly.
+  centerModel: (offsetX?: number, offsetY?: number) => void;
   setModelUrl: (url: string | null, name: string | null) => void;
   setParts: (keys: string[]) => void;             // reported by the effect on load
   setPartFill: (key: string, patch: Partial<FillSpec>) => void;
@@ -50,7 +53,13 @@ export interface ThreeDState {
   setSunMask: (url: string | null) => void;
   setSunMaskScale: (v: number) => void;
   setSunMaskOffset: (x: number, y: number) => void;
+  // Mockup mode only — the image/video composited onto a device's "Screen"
+  // mesh. null = the device's own bundled screen material (wallpaper/UI shot).
+  screenMedia: ScreenMedia | null;
+  setScreenMedia: (m: ScreenMedia | null) => void;
 }
+
+export interface ScreenMedia { url: string; kind: 'image' | 'video'; }
 
 // A part's fill: solid, or a two-colour gradient (linear along Y bottom→top,
 // or radial centre→edge). c1 = start/centre, c2 = end/edge.
@@ -89,6 +98,7 @@ export const use3DStore = create<ThreeDState>((set) => ({
   sunMaskScale: 46,
   sunMaskOffsetX: 0,
   sunMaskOffsetY: -2,
+  screenMedia: null,
   setEffect: (effectId) => set({ effectId }),
   setParam: (effectId, key, value) =>
     set((s) => ({
@@ -97,7 +107,7 @@ export const use3DStore = create<ThreeDState>((set) => ({
   setModelScale: (v) => set((s) => ({ model: { ...s.model, scale: v } })),
   nudgeRot: (dx, dy) => set((s) => ({ model: { ...s.model, rotX: s.model.rotX + dx, rotY: s.model.rotY + dy } })),
   setModelOffset: (x, y) => set((s) => ({ model: { ...s.model, offsetX: x, offsetY: y } })),
-  centerModel: () => set((s) => ({ model: { ...s.model, rotX: 0, rotY: 0, offsetX: DEF_OFFSET.x, offsetY: DEF_OFFSET.y, centerNonce: s.model.centerNonce + 1 } })),
+  centerModel: (offsetX = DEF_OFFSET.x, offsetY = DEF_OFFSET.y) => set((s) => ({ model: { ...s.model, rotX: 0, rotY: 0, offsetX, offsetY, centerNonce: s.model.centerNonce + 1 } })),
   setModelUrl: (url, name) => set((s) => ({ model: { ...s.model, url, name } })),
   setParts: (keys) => set((s) => {
     const same = keys.length === s.parts.length && keys.every((k, i) => k === s.parts[i]);
@@ -123,4 +133,5 @@ export const use3DStore = create<ThreeDState>((set) => ({
   setSunMask: (url) => set({ sunMask: url }),
   setSunMaskScale: (v) => set({ sunMaskScale: v }),
   setSunMaskOffset: (x, y) => set({ sunMaskOffsetX: x, sunMaskOffsetY: y }),
+  setScreenMedia: (m) => set({ screenMedia: m }),
 }));

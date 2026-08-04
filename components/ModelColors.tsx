@@ -1,6 +1,7 @@
 'use client';
 
 import { use3DStore } from '@/store/use3DStore';
+import { findDevice } from '@/three3d/devices';
 import FillRow from './FillRow';
 
 // Friendly display names for the bundled daisy groups (keys stay unchanged).
@@ -11,6 +12,7 @@ const PART_LABELS: Record<string, string> = { Cube: 'Center', Cylinder: 'Stem', 
 // radial), same pattern as the background. Click a part in the viewport to
 // select/highlight its group here.
 export default function ModelColors() {
+  const modelUrl = use3DStore((s) => s.model.url);
   const parts = use3DStore((s) => s.parts);
   const partFills = use3DStore((s) => s.partFills);
   const selected = use3DStore((s) => s.selectedPart);
@@ -18,10 +20,14 @@ export default function ModelColors() {
   const clearPartFill = use3DStore((s) => s.clearPartFill);
   const selectPart = use3DStore((s) => s.selectPart);
 
+  // Bundled devices use the Finish swatches (left panel) instead — their part
+  // keys are raw, obfuscated glTF material names, meaningless as a colour list.
+  if (findDevice(modelUrl)) return null;
+
   return (
     <>
       <div className="section-head">
-        <span className="eyebrow">Daisy Colors</span>
+        <span className="eyebrow">Model Colors</span>
         {selected && <button className="mc-reset-model" onClick={() => selectPart(null)}>clear selection</button>}
       </div>
       <div className="section-body mc-colors">

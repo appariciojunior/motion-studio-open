@@ -48,6 +48,7 @@ export default function ThreeStage3D() {
         return { scale: s.sunMaskScale, offX: s.sunMaskOffsetX, offY: s.sunMaskOffsetY };
       },
       onCamera: setRig,
+      getScreenMedia: () => use3DStore.getState().screenMedia,
     });
     return () => dispose();
     // eslint-disable-next-line react-hooks/exhaustive-deps

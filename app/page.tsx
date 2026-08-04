@@ -13,6 +13,8 @@ import BoardPanel from '@/components/BoardPanel';
 import BoardExportBar from '@/components/BoardExportBar';
 import WelcomeDialog from '@/components/WelcomeDialog';
 import Effects3DPanel from '@/components/Effects3DPanel';
+import MockupPanel from '@/components/MockupPanel';
+import ScreenContent from '@/components/ScreenContent';
 import Effect3DControls from '@/components/Effect3DControls';
 import ModelControl from '@/components/ModelControl';
 import ModelColors from '@/components/ModelColors';
@@ -46,6 +48,7 @@ export default function Home() {
   const toggleLeftPanel = useUIStore((s) => s.toggleLeftPanel);
   const toggleRightPanel = useUIStore((s) => s.toggleRightPanel);
   const is3D = nav === '3d';
+  const isMockup = nav === 'mockup';
   const isWeb = nav === 'web';
   const isBoard = nav === 'board';
   // Projects swaps the left column for the project list; the stage, scene column
@@ -87,7 +90,7 @@ export default function Home() {
   }, []);
 
   return (
-    <div className={`app ${is3D ? 'app-3d' : ''} ${isWeb || isBoard ? 'app-web' : ''} ${tplCollapsed ? 'app-tpl-collapsed' : ''} ${leftCollapsed ? 'left-collapsed' : ''} ${rightCollapsed ? 'right-collapsed' : ''}`}>
+    <div className={`app ${is3D || isMockup ? 'app-3d' : ''} ${isWeb || isBoard ? 'app-web' : ''} ${tplCollapsed ? 'app-tpl-collapsed' : ''} ${leftCollapsed ? 'left-collapsed' : ''} ${rightCollapsed ? 'right-collapsed' : ''}`}>
 
       <IconRail />
 
@@ -96,12 +99,12 @@ export default function Home() {
           Web and board reuse the template list wholesale: the templates are
           pure frame→pose functions, so the picker doesn't care what renders
           them. */}
-      {tplCollapsed ? <CollapsedStrip /> : isProjects ? <ProjectsPanel /> : is3D ? <Effects3DPanel /> : <TemplatesCard controlsInline={isBoard} />}
+      {tplCollapsed ? <CollapsedStrip /> : isProjects ? <ProjectsPanel /> : is3D ? <Effects3DPanel /> : isMockup ? <MockupPanel /> : <TemplatesCard controlsInline={isBoard} />}
 
-      {/* middle SCENE column — 2D only. 3D, web and board fold everything into
-          the single right sidebar rather than run two 280px panels side by
-          side. */}
-      {!is3D && !isWeb && !isBoard && (
+      {/* middle SCENE column — 2D only. 3D, mockup, web and board fold
+          everything into the single right sidebar rather than run two 280px
+          panels side by side. */}
+      {!is3D && !isMockup && !isWeb && !isBoard && (
         <section className="card controls card-scroll">
           <ScenePanel />
           <div className="hairline" />
@@ -114,7 +117,7 @@ export default function Home() {
           <BoardStage />
         ) : isWeb ? (
           <WebStage />
-        ) : is3D ? (
+        ) : is3D || isMockup ? (
           <ThreeStage3D />
         ) : (
           <>
@@ -157,13 +160,15 @@ export default function Home() {
             <div className="hairline" />
             <WebScenePanel />
           </>
-        ) : is3D ? (
+        ) : is3D || isMockup ? (
           <>
+            {isMockup && <ScreenContent />}
+            {isMockup && <div className="hairline" />}
             <ModelControl />
             <div className="hairline" />
             <ModelColors />
             <div className="hairline" />
-            <BackgroundFill />
+            <BackgroundFill hideTexture={isMockup} />
             <div className="hairline" />
             <Effect3DControls />
           </>

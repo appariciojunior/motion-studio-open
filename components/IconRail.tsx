@@ -2,6 +2,8 @@
 
 import { useUIStore } from '@/store/useUIStore';
 import { useProjectStore } from '@/store/useProjectStore';
+import { use3DStore } from '@/store/use3DStore';
+import { findDevice, selectDevice } from '@/three3d/devices';
 
 const NAV = [
   { id: 'projects', label: 'Projects', icon: (
@@ -12,6 +14,9 @@ const NAV = [
   ) },
   { id: '3d', label: '3D', icon: (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 2.5l6.5 3.75v7.5L10 17.5l-6.5-3.75v-7.5L10 2.5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><path d="M3.7 6.4L10 10l6.3-3.6M10 10v7.4" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
+  ) },
+  { id: 'mockup', label: 'Mockup', icon: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="6" y="2.5" width="8" height="15" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M8.5 15h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
   ) },
   { id: 'web', label: 'Web', icon: (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 6.5L4 10l3.5 3.5M12.5 6.5L16 10l-3.5 3.5M11 4.5l-2 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -32,12 +37,33 @@ export default function IconRail() {
   const toggleTheme = useUIStore((s) => s.toggleTheme);
   const createProject = useProjectStore((s) => s.create);
   const projectCount = useProjectStore((s) => s.projects.length);
+  const effectId = use3DStore((s) => s.effectId);
+  const setEffect = use3DStore((s) => s.setEffect);
 
   // An ACTION, not a nav section — so it never takes the active state. The +
   // icon at the top of the rail now creates what it looks like it creates.
   const newProject = () => {
     createProject(`Project ${projectCount + 1}`);
     setActive('projects');
+  };
+
+  // '3d' and 'mockup' share one ThreeStage3D + use3DStore.effectId (one 3D
+  // canvas, one active effect at a time). 'mockup' always forces the 'mockup'
+  // effect; leaving it back to '3d' hands the id back to a real pickable
+  // effect so the two tabs never show the wrong stage.
+  const goNav = (id: string) => {
+    if (id === 'mockup') {
+      setEffect('mockup');
+      // First time in — land on a real device + a clean, dark stage rather
+      // than an empty scene. Only when nothing's loaded yet: re-entering the
+      // tab shouldn't clobber a device (or background) the user already set.
+      const s3d = use3DStore.getState();
+      if (!findDevice(s3d.model.url)) {
+        selectDevice('iphone17pro');
+        s3d.setBgFill({ type: 'solid', c1: '#000000', c2: '#000000' });
+      }
+    } else if (id === '3d' && effectId === 'mockup') setEffect('cartoon');
+    setActive(id);
   };
 
   return (
@@ -57,7 +83,7 @@ export default function IconRail() {
           <span className="rail-label">New</span>
         </button>
         {NAV.map((n) => (
-          <button key={n.id} className={`rail-item ${active === n.id ? 'active' : ''}`} onClick={() => setActive(n.id)}>
+          <button key={n.id} className={`rail-item ${active === n.id ? 'active' : ''}`} onClick={() => goNav(n.id)}>
             <span className="rail-ico">{n.icon}</span>
             <span className="rail-label">{n.label}</span>
           </button>
