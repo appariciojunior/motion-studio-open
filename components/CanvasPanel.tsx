@@ -73,7 +73,7 @@ export default function CanvasPanel() {
       <div className="section-body">
         <div className="ctl-row">
           <label className="ctl-label">Aspect</label>
-          <div className="pills">
+          <div className="pills aspect-pills">
             {Object.keys(ASPECTS).map((a) => (
               <button key={a} className={`pill ${aspect === a ? 'active' : ''}`} onClick={() => setAspect(a)}>{a}</button>
             ))}

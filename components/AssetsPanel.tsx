@@ -324,7 +324,7 @@ export default function AssetsPanel() {
         {fullBleed ? (
           <div className="asset-meta"><span className="asset-name-empty">Full-bleed template — cards match the canvas</span></div>
         ) : (
-          <div className="pills shape-pills">
+          <div className="pills shape-pills card-shape-pills">
             {SHAPE_OPTIONS.map((opt) => (
               <button
                 key={opt}
