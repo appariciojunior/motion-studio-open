@@ -87,8 +87,12 @@ for (const hidden of templateList.filter((item) => item.meta.catalogHidden)) {
   assert(!groupedTemplates.some((item) => item.meta.id === hidden.meta.id), `${hidden.meta.id} leaked into the catalogue`);
   assert(getTemplate(hidden.meta.id).meta.id === hidden.meta.id, `${hidden.meta.id} can no longer load persisted scenes`);
 }
-assert(templateGroups.every((group) => group.items.every((item) => group.group === (item.meta.catalog3d ? `${item.meta.group} 3D` : item.meta.group))), 'A template leaked into a different visual family');
-const relevantGroups = new Set(['Runway', 'Orbit', 'Globe', 'Surface', 'Helix', 'Isometric', 'Coverflow', 'Ticker', 'Deck', 'Depth', 'Box', 'Bounce', 'Dock', 'Editorial']);
+assert(templateGroups.every((group) => group.items.every((item) => group.group === (
+  item.meta.group === '3D & Perspective'
+    ? item.meta.group
+    : item.meta.catalog3d ? `${item.meta.group} 3D` : item.meta.group
+))), 'A template leaked into a different visual family');
+const relevantGroups = new Set(['3D & Perspective', 'Runway', 'Orbit', 'Globe', 'Surface', 'Helix', 'Isometric', 'Coverflow', 'Ticker', 'Deck', 'Depth', 'Box', 'Bounce', 'Dock', 'Editorial']);
 
 // Box Carousel follows the CSS 3D model: it rests on a face, then rotates
 // exactly one face step. Seven assets repeat after seven steps, not after the
@@ -105,6 +109,24 @@ for (let i = 0; i < boxCount; i++) {
 const turningFaces = Array.from({ length: boxCount }, (_, i) => box.transform3d(23, i, boxCount, boxValues, ctx))
   .filter((pose) => pose.alpha > 0.01);
 assert(turningFaces.length === 2, `Box turn should expose exactly two faces, got ${turningFaces.length}`);
+
+// Card shape changes the real mesh width/height. The Box apothem must follow
+// that same resolved dimension or its corners open on one of the spin axes.
+const boxCross = (axis, cardAspect) => {
+  const pose = box.transform3d(0, 1, boxCount, { ...boxValues, axis, faces: 4, girth: 1 }, { ...ctx, cardAspect });
+  return Math.abs(axis === 'vertical' ? pose.x : pose.y);
+};
+const defaultAspect = box.meta.cardAspect;
+const defaultVerticalCross = boxCross('vertical', defaultAspect);
+const defaultHorizontalCross = boxCross('horizontal', defaultAspect);
+for (const aspect of [4 / 5, 1, 16 / 9]) {
+  const expectedVerticalRatio = Math.min(1, aspect) / Math.min(1, defaultAspect);
+  const expectedHorizontalRatio = Math.min(1, 1 / aspect) / Math.min(1, 1 / defaultAspect);
+  assert(Math.abs(boxCross('vertical', aspect) / defaultVerticalCross - expectedVerticalRatio) < 1e-7,
+    `Box vertical geometry ignored card aspect ${aspect}`);
+  assert(Math.abs(boxCross('horizontal', aspect) / defaultHorizontalCross - expectedHorizontalRatio) < 1e-7,
+    `Box horizontal geometry ignored card aspect ${aspect}`);
+}
 
 for (const template of templateList.filter((item) => relevantGroups.has(item.meta.group))) {
   const values = defaultsFor(template.meta.id);

@@ -123,6 +123,15 @@ export class R3FSceneBridge {
       shadows: { enabled: true, type: THREE.PCFShadowMap },
       dpr: 1,
     });
+
+    // R3F configures an HTML canvas with `gl.setSize(..., true)`, which writes
+    // the initial logical width/height as inline CSS. Motion Studio resizes the
+    // same renderer itself with `updateStyle = false`; leaving those inline
+    // values behind pins the Box preview to its first aspect even though the
+    // drawing buffer has already changed. Release visual sizing back to the
+    // shared `.stage-canvas` rule so canvas aspect behaves exactly like Pixi.
+    canvas.style.removeProperty('width');
+    canvas.style.removeProperty('height');
     this.render();
   }
 
