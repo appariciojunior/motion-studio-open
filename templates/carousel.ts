@@ -199,6 +199,26 @@ const LINEAR: EasingSpec = { id: 'linear' };
 const SMOOTH: EasingSpec = { id: 'smooth' };
 const FLOW: EasingSpec = { id: 'flow' };
 
+// This family's own presets. They lived inline in templates/index.ts, which made
+// Runway the only family whose presets were declared outside its own file — and
+// invisible to scripts/genExportSources.mjs, since that walks templates/*.ts and
+// skips index.ts. So "export scene as code" silently omitted Runway 02-05.
+export const carouselVariants: Template[] = [
+  { ...carousel, meta: { ...carousel.meta, name: 'Runway 01' } },
+  variant(carousel, 'carousel-02', 'Runway 02', {
+    gap: 140, bigScale: 145, perspective: 0, fade: 45, speed: 0.4,
+  }),
+  variant(carousel, 'carousel-03', 'Runway 03', {
+    tiltStyle: 'fan', tiltAmount: 10, gap: 300, bigScale: 130, speed: 0.5,
+  }),
+  variant(carousel, 'carousel-04', 'Runway 04', {
+    scaleFocus: 'start', bigScale: 160, gap: 260, fade: 30, direction: 'right',
+  }),
+  variant(carousel, 'carousel-05', 'Runway 05', {
+    tiltStyle: 'alternate', tiltAmount: 6, direction: 'up', gap: 420, cornerRadius: 24,
+  }),
+];
+
 export const carouselRefVariants: Template[] = [
   // Flat strip, no featured card.
   refPreset('carousel-r01', 'Runway 06', { planeSize: 600, gap: 40, seconds: 1.6 }, GLIDE),
