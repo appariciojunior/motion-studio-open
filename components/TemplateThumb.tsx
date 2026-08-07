@@ -11,7 +11,7 @@ import { resolveEasing } from '@/lib/easing';
 const THUMB_FRAME = 40;              // ~1.3s in — useful idle pose
 const PREVIEW_FPS = 30;
 const CTX_BASE = { fps: 30, width: 810, height: 1080, duration: 8, totalFrames: 240 }; // 3:4 preview space, nominal 8s clip
-const TEX_W = 480, TEX_H = 600;      // placeholder texture proportions
+const TEX_LONG = 600;                 // placeholder long edge
 const DRAW_BUDGET = 28;              // max cards a thumbnail paints; layout still uses the real count
 const SPRITE_BASE = 340;
 
@@ -120,13 +120,18 @@ export default function TemplateThumb({
 
   const poses = useMemo<CardPose[]>(() => {
     const v = defaultsFor(template.meta.id);
+    const texAspect = template.meta.cardAspect === 'canvas'
+      ? CTX_BASE.width / CTX_BASE.height
+      : template.meta.cardAspect ?? 4 / 5;
+    const texW = TEX_LONG * Math.min(1, texAspect);
+    const texH = TEX_LONG * Math.min(1, 1 / texAspect);
     // The REAL count. It is a layout input, not a drawing cost: lattice families
     // derive their columns, rows and wrap period from it, so clamping it here
     // used to lay out a different grid than the stage — measured at up to
     // 2645px of divergence on Grid, on an 810px-wide canvas. The draw budget is
     // enforced further down instead, by showing fewer of the correct cards.
     const count = Math.max(1, Math.round(v.count ?? 6));
-    const norm = SPRITE_BASE / Math.max(TEX_W, TEX_H);
+    const norm = SPRITE_BASE / TEX_LONG;
     const ease = resolveEasing(easingFor(template.meta.id));
     const ctx = {
       ...CTX_BASE,
@@ -135,13 +140,13 @@ export default function TemplateThumb({
       // The thumbnail draws every card at the placeholder proportions, so a
       // lattice template has to space them by THAT shape or its gutters come out
       // uneven here even when they are right on the stage.
-      cardAspect: TEX_W / TEX_H,
+      cardAspect: texAspect,
     };
     const out: CardPose[] = [];
     for (let i = 0; i < count; i++) {
       const t = template.transform(frame, i, count, v, ctx);
-      const w = TEX_W * norm * t.scale * (t.scaleX ?? 1);
-      const h = TEX_H * norm * t.scale * (t.scaleY ?? 1);
+      const w = texW * norm * t.scale * (t.scaleX ?? 1);
+      const h = texH * norm * t.scale * (t.scaleY ?? 1);
       out.push({
         x: t.x, y: t.y, w, h,
         rotation: t.rotation,
@@ -177,7 +182,7 @@ export default function TemplateThumb({
           className="tpl-thumb-el"
           style={{
             width: `${(p.w / CTX_BASE.width) * 100}%`,
-            aspectRatio: `${TEX_W} / ${TEX_H}`,
+            aspectRatio: `${Math.max(0.001, p.w)} / ${Math.max(0.001, p.h)}`,
             left: `${50 + (p.x / CTX_BASE.width) * 100}%`,
             top: `${50 + (p.y / CTX_BASE.height) * 100}%`,
             transform: `translate(-50%, -50%) rotate(${p.rotation}rad) skewX(${p.skewX}rad)`,

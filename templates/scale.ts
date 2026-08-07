@@ -43,8 +43,15 @@ const scale: Template = {
 
     const zoomAmt = v.zoom / 100;
     const s = v.direction === 'out' ? lerp(1 + zoomAmt, 1, z) : lerp(1, 1 + zoomAmt, z);
-    // near full-frame Ken-Burns fit
-    const scl = sizeFactor * (ctx.height / BASE) * 0.9 * s;
+    // Full-frame Ken-Burns fit. Two things had to change here: the renderer
+    // normalizes a sprite's LONG edge, so a full-bleed card covers by matching
+    // the canvas's long edge rather than its height — reading the height only
+    // worked while the canvas was portrait, and left 351px bare on 4:3 and 533px
+    // on 16:9. And the old 0.9 undershot even in portrait, so every image opened
+    // with a 108px border before the zoom grew past it; at s = 1 the card should
+    // exactly cover, and the zoom then overscans from there, which is what
+    // Ken-Burns means.
+    const scl = sizeFactor * (Math.max(ctx.width, ctx.height) / BASE) * s;
 
     // anchor pan: shift toward the chosen corner as it zooms
     const ax = v.anchor.includes('l') ? -1 : v.anchor.includes('r') ? 1 : 0;

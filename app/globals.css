@@ -45,7 +45,19 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
   --right-col: var(--panel-w);
   height: 100vh;
   display: grid;
-  grid-template-columns: var(--rail-w) var(--templates-col) minmax(0, 1fr) var(--controls-col) var(--right-col);
+  /* The stage carries a real minimum and the side columns are allowed to shrink.
+     With rigid side columns and a minmax(0, 1fr) stage, the four fixed tracks
+     (64 + 296 + 280 + 280 = 920px) win every tie and the stage is what collapses:
+     measured on a 1024px window, the stage column came out 104px and the canvas
+     8x5. Giving the stage the floor and the panels the give inverts that, and it
+     does so without a media query — so the collapse toggles keep working instead
+     of fighting a rule that forces the columns to zero. */
+  grid-template-columns:
+    var(--rail-w)
+    minmax(0, var(--templates-col))
+    minmax(min(320px, 100%), 1fr)
+    minmax(0, var(--controls-col))
+    minmax(0, var(--right-col));
   /* `auto` rather than a fixed --bottom-h: the transport row keeps that exact
      height on its own, and the row grows only when the motion-layer lanes are
      expanded below it. */
@@ -499,6 +511,13 @@ select.field { padding-right: 26px; }
 
 /* card-shape pills (scene-level crop aspect) */
 .shape-pills .pill { padding: 0 2px; font-size: 11px; }
+.aspect-pills,
+.card-shape-pills {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.aspect-pills .pill,
+.card-shape-pills .pill { min-width: 0; padding-inline: 4px; }
 
 /* crop-focus popover (per-asset cover-fit anchor) */
 .asset-item { position: relative; }
@@ -577,7 +596,9 @@ select.field { padding-right: 26px; }
 .panel-toggle-right { right: 12px; }
 .app:not(.left-collapsed) .panel-toggle-left svg { transform: rotate(180deg); }
 .app.right-collapsed .panel-toggle-right svg { transform: rotate(180deg); }
-.stage-wrap { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; min-height: 0; padding: 48px; }
+/* The padding is generous on a wide screen and pure waste on a narrow one: at a
+   320px stage a fixed 48px each side ate 96 of it. Scale it with the viewport. */
+.stage-wrap { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; min-height: 0; padding: clamp(12px, 2.5vw, 48px); }
 /* box-shadow rather than border: the canvas is sized by max-width/max-height,
    and a border would add to its box and shrink the drawing area. */
 .stage-canvas {
@@ -1077,23 +1098,14 @@ select.field { padding-right: 26px; }
 .three3d-picker .field { width: 100%; }
 
 /* ============================================================
-   3D MODE LAYOUT — drop the middle SCENE column (nav: "3D")
-   ============================================================ */
-.app-3d {
-  grid-template-columns: var(--rail-w) var(--templates-col) minmax(0, 1fr) var(--right-col);
-  grid-template-areas:
-    "rail templates stage right"
-    "bottom bottom bottom bottom";
-}
-
-/* ============================================================
    WEB MODE LAYOUT — nav: "Web"
    One sidebar, not two: layout + selection + the template's controls share
    the right panel, and the source controls ride in the timeline. Two 280px
    columns side by side cost the stage more than their content was worth.
    ============================================================ */
 .app-web {
-  grid-template-columns: var(--rail-w) var(--templates-col) minmax(0, 1fr) var(--right-col);
+  /* same reasoning as .app: the stage keeps a floor, the panels give way */
+  grid-template-columns: var(--rail-w) minmax(0, var(--templates-col)) minmax(min(320px, 100%), 1fr) minmax(0, var(--right-col));
   grid-template-areas:
     "rail templates stage right"
     "rail bottom bottom bottom";
@@ -1122,7 +1134,10 @@ select.field { padding-right: 26px; }
    The desktop grid is not mounted below 768px, so there are no duplicate
    renderers or hidden sidebars doing work behind this layout.
    ============================================================ */
-@media (max-width: 767px) {
+/* Matches MOBILE_QUERY in app/page.tsx. The bound is the width the desktop grid
+   needs (920px), not a phone size: below it the stage column collapses to zero
+   and the preview disappears entirely. */
+@media (max-width: 919px) {
   html, body { width: 100%; overflow: hidden; overscroll-behavior: none; }
 
   .mobile-editor {
@@ -1665,6 +1680,31 @@ select.field { padding-right: 26px; }
 .mc-arrow.center { grid-area: center; font-size: 9px; }
 .mc-reset-model { background: none; border: 0; color: var(--fg-muted); font-size: var(--fs-label); cursor: pointer; padding: 0; text-align: left; }
 .mc-reset-model:hover { color: var(--fg); }
+
+/* ---- Mockup: device finish swatches ---- */
+.finish-swatches { display: flex; gap: 10px; flex-wrap: wrap; }
+.finish-swatch {
+  width: 28px; height: 28px; border-radius: 50%; padding: 0; cursor: pointer;
+  border: 1px solid var(--line);
+  box-shadow: 0 0 0 0 var(--fg);
+  transition: box-shadow var(--t-fast), transform var(--t-fast);
+}
+.finish-swatch:hover { transform: scale(1.08); }
+/* Ring sits OUTSIDE the circle so it never eats into the colour it describes. */
+.finish-swatch.active { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--fg); }
+
+/* ---- Mockup: the asset currently on the device's screen ---- */
+.sc-asset {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px; border-radius: var(--r-ctrl); background: var(--card-inset);
+}
+.sc-asset-thumb {
+  width: 34px; height: 34px; flex: none; object-fit: cover;
+  border-radius: 4px; background: var(--card-thumb);
+}
+.sc-asset-name { flex: 1; min-width: 0; font-size: var(--fs-ui); color: var(--fg-label); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-asset-x { flex: none; background: none; border: 0; color: var(--fg-muted); cursor: pointer; padding: 4px 6px; font-size: 12px; }
+.sc-asset-x:hover { color: var(--fg); }
 
 /* ---- 3D Model Colors (per-part) ---- */
 .mc-colors { display: flex; flex-direction: column; gap: 6px; }

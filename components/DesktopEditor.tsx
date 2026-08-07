@@ -13,8 +13,10 @@ import HistoryControls from '@/components/HistoryControls';
 import IconRail from '@/components/IconRail';
 import ModelColors from '@/components/ModelColors';
 import ModelControl from '@/components/ModelControl';
+import MockupPanel from '@/components/MockupPanel';
 import ProjectsPanel from '@/components/ProjectsPanel';
 import ScenePanel from '@/components/ScenePanel';
+import ScreenContent from '@/components/ScreenContent';
 import TemplatesCard from '@/components/TemplatesCard';
 import Timeline from '@/components/Timeline';
 import { CollapsedStrip } from '@/components/TplCollapse';
@@ -39,26 +41,41 @@ export default function DesktopEditor() {
   const tplCollapsed = useUIStore((s) => s.tplCollapsed);
   const codeOpen = useWebStore((s) => s.codeOpen);
   const is3D = nav === '3d';
+  const isMockup = nav === 'mockup';
   const isWeb = nav === 'web';
   const isBoard = nav === 'board';
   const isProjects = nav === 'projects';
 
   return (
-    <div className={`app ${is3D ? 'app-3d' : ''} ${isWeb || isBoard ? 'app-web' : ''} ${tplCollapsed ? 'app-tpl-collapsed' : ''} ${leftCollapsed ? 'left-collapsed' : ''} ${rightCollapsed ? 'right-collapsed' : ''}`}>
+    <div className={`app ${isWeb || isBoard ? 'app-web' : ''} ${tplCollapsed ? 'app-tpl-collapsed' : ''} ${leftCollapsed ? 'left-collapsed' : ''} ${rightCollapsed ? 'right-collapsed' : ''}`}>
       <IconRail />
 
-      {tplCollapsed ? <CollapsedStrip /> : isProjects ? <ProjectsPanel /> : is3D ? <Effects3DPanel /> : <TemplatesCard controlsInline={isBoard} />}
+      {tplCollapsed ? <CollapsedStrip /> : isProjects ? <ProjectsPanel /> : is3D ? <Effects3DPanel /> : isMockup ? <MockupPanel /> : <TemplatesCard controlsInline={isBoard} />}
 
-      {!is3D && !isWeb && !isBoard && (
+      {!isWeb && !isBoard && (
         <section className="card controls card-scroll">
-          <ScenePanel />
-          <div className="hairline" />
-          <EffectsPanel />
+          {is3D || isMockup ? (
+            <>
+              {isMockup && <ScreenContent />}
+              {isMockup && <div className="hairline" />}
+              <ModelControl />
+              <div className="hairline" />
+              <ModelColors />
+              <div className="hairline" />
+              <Effect3DControls effectId={isMockup ? 'mockup' : undefined} />
+            </>
+          ) : (
+            <>
+              <ScenePanel />
+              <div className="hairline" />
+              <EffectsPanel />
+            </>
+          )}
         </section>
       )}
 
       <main className="stage-col">
-        {isBoard ? <BoardStage /> : isWeb ? <WebStage /> : is3D ? <ThreeStage3D /> : (
+        {isBoard ? <BoardStage /> : isWeb ? <WebStage /> : is3D || isMockup ? <ThreeStage3D effectId={isMockup ? 'mockup' : undefined} /> : (
           <>
             <PreviewStage />
             <button className="stage-fs" title="Fullscreen">
@@ -79,7 +96,9 @@ export default function DesktopEditor() {
         {isBoard ? <BoardPanel /> : isWeb ? (
           <><WebSelectionPanel /><div className="hairline" /><WebScenePanel /></>
         ) : is3D ? (
-          <><ModelControl /><div className="hairline" /><ModelColors /><div className="hairline" /><BackgroundFill /><div className="hairline" /><Effect3DControls /></>
+          <><CanvasPanel is3DMode /><div className="hairline" /><BackgroundFill /></>
+        ) : isMockup ? (
+          <><CanvasPanel is3DMode /><div className="hairline" /><BackgroundFill hideTexture /></>
         ) : (
           <><CanvasPanel /><div className="hairline" /><AssetsPanel /></>
         )}

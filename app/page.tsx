@@ -18,7 +18,14 @@ const DesktopEditor = dynamic(() => import('@/components/DesktopEditor'), {
   loading: () => <EditorLoading />,
 });
 
-const MOBILE_QUERY = '(max-width: 767px)';
+// The desktop shell is a five-column grid whose four fixed columns need
+// 64 + 296 + 280 + 280 = 920px before the stage — minmax(0, 1fr) — gets ANY
+// width. Below that the preview collapses to zero and the editor looks broken:
+// measured on the deploy at 769px, the stage column was 0px and the canvas 0x525.
+// So the phone layout has to own everything up to the width where the desktop
+// grid actually fits. Keep this in step with the same breakpoint in
+// app/globals.css and components/ExportDialog.tsx.
+const MOBILE_QUERY = '(max-width: 919px)';
 type ViewportMode = 'pending' | 'mobile' | 'desktop';
 
 function useViewportMode(): ViewportMode {

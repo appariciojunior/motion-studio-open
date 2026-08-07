@@ -65,7 +65,7 @@ const helixFov = (perspective: number) => lerp(19, 48, clamp(perspective, 0, 40)
 // Both distances are estimated analytically (not by scanning all pairs from
 // inside a per-card pure function) and the smaller one bounds the card.
 function helixMetrics(v: Record<string, any>, count: number, ctx: { width: number; height: number }) {
-  const stage = Math.min(ctx.width, ctx.height);
+  const stage = Math.min(ctx.width, ctx.height) * (1 - clamp(v.padding ?? 6, 0, 20) / 50);
   const radius = (stage * (v.spiralSize / 100)) / 2;
   const risePerTurn = stage * (v.cardGap / 100) * 0.9;
   const totalRise = v.turns * risePerTurn;
@@ -105,19 +105,25 @@ function helixMetrics(v: Record<string, any>, count: number, ctx: { width: numbe
   // per-pixel, which is what reads as interleaved stripes rather than a soft
   // double-exposure. 0.52 leaves real clearance for that diagonal.
   const bound = Math.min(spacing1, spacing2);
-  const cardPx = Number.isFinite(bound) ? Math.min(requested, bound * 0.28) : requested;
+  // The original intentionally overlaps neighbouring turns. The previous
+  // safety factor treated that overlap as an error and reduced the cards to
+  // thumbnail-sized fragments. Keep a modest collision guard, but preserve the
+  // large ribbon-like cards that define Spiral Stream.
+  const cardPx = Number.isFinite(bound) ? Math.min(requested, bound * 1.3) : requested;
   return { radius, risePerTurn, totalRise, cardPx };
 }
 
 const helix3d: Template = {
   meta: {
-    id: 'helix3d-01', name: 'Spiral Stream', group: 'Helix',
-    catalog3d: true, isNew: true, engine: 'webgl', repeatAssets: true,
+    id: 'helix3d-01', name: 'Spiral Stream', group: '3D & Perspective',
+    catalog3d: true, isNew: true, engine: 'webgl', repeatAssets: true, cardAspect: 1,
     defaultEasing: { id: 'linear' },
   },
 
   controls: [
-    { key: 'direction',    label: 'Direction',     type: 'toggle', options: ['forward','reverse'], default: 'forward', section: 'Motion' },
+    { key: 'padding',      label: 'Padding',       type: 'slider', min: 0, max: 20, step: 0.5,    default: 6, section: 'Layout', unit: '%', precision: 1 },
+    { key: 'direction',    label: 'Direction',     type: 'toggle', options: ['downward','upward'], default: 'downward', section: 'Motion' },
+    { key: 'motion',       label: 'Motion',        type: 'pills', options: ['continuous','fast-slow-fast','step-per-card'], default: 'continuous', section: 'Motion' },
     { key: 'count',        label: 'Card Count',    type: 'slider', min: 8, max: 48, step: 1,      default: 24, section: 'Layout' },
     { key: 'turns',        label: 'Spiral Turns',  type: 'slider', min: 1, max: 6, step: 0.25,    default: 3.75, section: 'Layout', precision: 2 },
     { key: 'spiralSize',   label: 'Spiral Size',   type: 'slider', min: 35, max: 90, step: 1,     default: 62, section: 'Layout', unit: '%' },
@@ -129,28 +135,29 @@ const helix3d: Template = {
     { key: 'ringTilt',     label: 'Ring Tilt',     type: 'slider', min: -45, max: 45, step: 1,    default: 0, section: 'Depth', unit: '°',
       description: 'Tips the whole helix axis. The cards stay attached to the curve.' },
     { key: 'perspective',  label: 'Perspective',   type: 'slider', min: 0, max: 40, step: 2,      default: 20, section: 'Depth', unit: '%' },
-    { key: 'facing',       label: 'Card Facing',   type: 'pills',  options: ['surface','camera'], default: 'surface', section: 'Depth' },
+    { key: 'facing',       label: 'Card Style',    type: 'pills',  options: ['curved','upright'], default: 'curved', section: 'Depth' },
     { key: 'scalePulse',   label: 'Scale Pulse',   type: 'slider', min: 0, max: 60, step: 5,      default: 0, section: 'Motion', unit: '%',
       description: 'Breathes the card size once per lap. Period is exactly one lap, so the loop stays seamless.' },
     { key: 'backFade',     label: 'Back Fade',     type: 'slider', min: 10, max: 95, step: 5,     default: 55, section: 'Finish', unit: '%' },
     { key: 'cornerRadius', label: 'Corner Radius', type: 'slider', min: 0, max: 12, step: 0.5,    default: 3, section: 'Finish', unit: '%', precision: 1 },
-    { key: 'thickness',    label: 'Thickness',     type: 'slider', min: 0, max: 24, step: 1,      default: 8, section: 'Finish', unit: 'px',
+    { key: 'thickness',    label: 'Thickness',     type: 'slider', min: 0, max: 24, step: 1,      default: 8, section: 'Finish', unit: 'px', advanced: true,
       description: 'Gives the cards a physical edge. Also what lets depth shading register at all.' },
-    { key: 'shadow',       label: 'Shadow',        type: 'toggle', options: ['on','off'],         default: 'on', section: 'Finish' },
-    { key: 'speed',        label: 'Speed',         type: 'slider', min: 0, max: 2, step: 0.1,     default: 0.35, section: 'Motion', unit: '×', precision: 1 },
-    { key: 'offset',       label: 'Offset',        type: 'xypad',                                 default: { x: 0, y: 0 }, section: 'Layout' },
+    { key: 'shadow',       label: 'Shadow',        type: 'toggle', options: ['on','off'],         default: 'off', section: 'Finish' },
+    { key: 'speed',        label: 'Speed',         type: 'slider', min: 0, max: 2, step: 0.1,     default: 0.35, section: 'Motion', unit: '×', precision: 1, advanced: true },
+    { key: 'offset',       label: 'Offset',        type: 'xypad',                                 default: { x: 0, y: 0 }, section: 'Layout', advanced: true },
   ],
 
   camera: (v) => ({ fov: helixFov(v.perspective) }),
 
   transform3d: (frame, index, count, v, ctx) => {
-    const dir = v.direction === 'reverse' ? -1 : 1;
+    const dir = v.direction === 'upward' ? -1 : 1;
     // Period is `count`: each card advances exactly one slot per cycle, so frame
     // totalFrames poses like frame 0.
     // Raw phase: a helix advances continuously, so easedPhase would make it
     // accelerate and settle once per card. Seam holds — loopCycles returns a
     // whole multiple of `count`.
-    const phase = (frame / ctx.totalFrames) * loopCycles(v.speed, ctx.duration, count) * dir;
+    const rawPhase = (frame / ctx.totalFrames) * loopCycles(v.speed, ctx.duration, count) * dir;
+    const phase = v.motion === 'continuous' ? rawPhase : ctx.easedPhase(rawPhase);
     // u wraps in [0,1) along the whole spiral. Every term below is a function of
     // u with integer period, which is what keeps the seam closed.
     const u = (((index - phase) % count + count) % count) / count;
@@ -170,7 +177,7 @@ const helix3d: Template = {
     // by the same rig so the facing cannot drift off the curve.
     const n = tiltNormalCanvas({ x: Math.sin(a), y: 0, z: Math.cos(a) }, rig);
 
-    const surface = v.facing === 'surface';
+    const surface = v.facing === 'curved';
     const quaternion = surface
       // Aim +Z (a plane's own normal) along n. Same construction as globe.ts:
       // solving for the angles rather than reusing `a` is what stays correct
@@ -204,11 +211,12 @@ const helix3d: Template = {
 
   // ---- 2D fallback, for thumbnails and the non-webgl path ----
   transform: (frame, index, count, v, ctx) => {
-    const dir = v.direction === 'reverse' ? -1 : 1;
+    const dir = v.direction === 'upward' ? -1 : 1;
     // Raw phase: a helix advances continuously, so easedPhase would make it
     // accelerate and settle once per card. Seam holds — loopCycles returns a
     // whole multiple of `count`.
-    const phase = (frame / ctx.totalFrames) * loopCycles(v.speed, ctx.duration, count) * dir;
+    const rawPhase = (frame / ctx.totalFrames) * loopCycles(v.speed, ctx.duration, count) * dir;
+    const phase = v.motion === 'continuous' ? rawPhase : ctx.easedPhase(rawPhase);
     const u = (((index - phase) % count + count) % count) / count;
 
     const m = helixMetrics(v, count, ctx);
@@ -248,4 +256,6 @@ export const helix3dVariants: Template[] = [
     turns: 2.5, count: 18, spiralSize: 86, cardSizePct: 28, cardGap: 16,
     taper: -70, ringTilt: 24, perspective: 30, backFade: 70, speed: 0.3,
   }),
-];
+].map((template, index) => index === 0
+  ? template
+  : { ...template, meta: { ...template.meta, catalogHidden: true } });

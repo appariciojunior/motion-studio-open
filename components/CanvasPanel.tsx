@@ -50,7 +50,9 @@ function Collapsible({ title, children }: { title: string; children: React.React
   );
 }
 
-export default function CanvasPanel() {
+// `is3DMode` drops Safe area and the Background/Logo/Audio collapsibles — 3D
+// and Mockup mode have their own BackgroundFill panel and no overlay concept.
+export default function CanvasPanel({ is3DMode = false }: { is3DMode?: boolean } = {}) {
   const aspect = useSceneStore((s) => s.aspect);
   const setAspect = useSceneStore((s) => s.setAspect);
   const customW = useSceneStore((s) => s.customW);
@@ -73,7 +75,7 @@ export default function CanvasPanel() {
       <div className="section-body">
         <div className="ctl-row">
           <label className="ctl-label">Aspect</label>
-          <div className="pills">
+          <div className="pills aspect-pills">
             {Object.keys(ASPECTS).map((a) => (
               <button key={a} className={`pill ${aspect === a ? 'active' : ''}`} onClick={() => setAspect(a)}>{a}</button>
             ))}
@@ -112,15 +114,19 @@ export default function CanvasPanel() {
           </div>
         </div>
 
-        <div className="ctl-row">
-          <label className="ctl-label">Safe area</label>
-          <div className="segmented">
-            <button className={`seg ${!safeArea ? 'active' : ''}`} onClick={() => safeArea && toggleSafeArea()}>Off</button>
-            <button className={`seg ${safeArea ? 'active' : ''}`} onClick={() => !safeArea && toggleSafeArea()}>On</button>
+        {!is3DMode && (
+          <div className="ctl-row">
+            <label className="ctl-label">Safe area</label>
+            <div className="segmented">
+              <button className={`seg ${!safeArea ? 'active' : ''}`} onClick={() => safeArea && toggleSafeArea()}>Off</button>
+              <button className={`seg ${safeArea ? 'active' : ''}`} onClick={() => !safeArea && toggleSafeArea()}>On</button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
+      {!is3DMode && (
+      <>
       <div className="hairline" />
       <div className="section-body" style={{ paddingTop: 4 }}>
         <Collapsible title="Background">
@@ -198,6 +204,8 @@ export default function CanvasPanel() {
           </div>
         </Collapsible>
       </div>
+      </>
+      )}
     </>
   );
 }

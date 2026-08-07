@@ -1,6 +1,8 @@
 import type { Template } from '@/lib/types';
 import { clamp, loopCycles, smooth } from '@/lib/motion';
 import { cardPath } from '@/lib/cardPath';
+import type { EasingSpec } from '@/lib/easing';
+import { variant } from './variant';
 
 // Reference size (px) shared with the renderer's sprite normalization, so that
 // `cardSize` reads directly in on-screen pixels.
@@ -130,3 +132,127 @@ export const carousel: Template = {
     };
   },
 };
+
+// ============================================================
+//  Reference-catalogue presets (Carousel 01–18)
+//
+//  The reference ships nine looks, each as a vertical/horizontal pair. Its sizing
+//  was measured off two presets with `stagger: 0` and no centre scaling, so the
+//  cards sit at base size and neighbours are unambiguous:
+//
+//    planeSize 730, gap 80  -> card 548x730, pitch 810
+//    planeSize 850, gap 500 -> card 638x850, pitch 1350
+//
+//  So a card is 3:4 with `height = planeSize`, and `pitch = planeSize + gap`.
+//  This family's `gap` is a centre distance AT BASE SIZE, so converting divides
+//  the 0.75 canvas factor straight out and leaves no measured constant behind:
+//
+//    cardSize = 0.75 * planeSize
+//    gap      = BASE * (1 + gapRef / planeSize)
+//
+//  Cross-check: Carousel 01 is planeSize 600 / gap 40, giving 340 * (1 + 40/600)
+//  = 363 — and Runway 01 already shipped with gap 360. The formula lands on a
+//  value that was arrived at independently, which is the best evidence it is right.
+// ============================================================
+
+interface RefCarousel {
+  planeSize: number;
+  gap: number;
+  axis?: 'vertical' | 'horizontal';
+  reverse?: boolean;
+  /** Reference `centerScale`, applied only when its `scaleCenter` is on. */
+  centerScale?: number;
+  focus?: 'center' | 'start' | 'end';
+  tilt?: number;
+  fade?: number;
+  /** Seconds a card takes to advance, plus any hold — the reference's duration + delay. */
+  seconds: number;
+}
+
+function refCarousel(r: RefCarousel): Record<string, any> {
+  const vertical = (r.axis ?? 'vertical') === 'vertical';
+  return {
+    // Reference `up`/`left` are its two forward directions on each axis.
+    direction: vertical ? (r.reverse ? 'down' : 'up') : (r.reverse ? 'right' : 'left'),
+    cardSize: Math.round(0.75 * r.planeSize),
+    gap: Math.round(BASE * (1 + r.gap / r.planeSize)),
+    // `scaleCenter: off` in the reference keeps centerScale stored but inert, so
+    // an absent centerScale here means a flat strip — no featured card.
+    bigScale: Math.round((r.centerScale ?? 1) * 100),
+    scaleFocus: r.focus ?? 'center',
+    tiltStyle: r.tilt ? 'alternate' : 'off',
+    tiltAmount: Math.abs(r.tilt ?? 0),
+    fade: r.fade ?? 0,
+    cornerRadius: 0,
+    perspective: 0,
+    speed: Math.round((1 / r.seconds) * 100) / 100,
+  };
+}
+
+function refPreset(id: string, name: string, r: RefCarousel, easing: EasingSpec): Template {
+  const t = variant(carousel, id, name, refCarousel(r));
+  return { ...t, meta: { ...t.meta, defaultEasing: easing, cardAspect: 3 / 4 } };
+}
+
+const GLIDE: EasingSpec = { id: 'glide' };
+const LINEAR: EasingSpec = { id: 'linear' };
+const SMOOTH: EasingSpec = { id: 'smooth' };
+const FLOW: EasingSpec = { id: 'flow' };
+
+// This family's own presets. They lived inline in templates/index.ts, which made
+// Runway the only family whose presets were declared outside its own file — and
+// invisible to scripts/genExportSources.mjs, since that walks templates/*.ts and
+// skips index.ts. So "export scene as code" silently omitted Runway 02-05.
+export const carouselVariants: Template[] = [
+  { ...carousel, meta: { ...carousel.meta, name: 'Runway 01' } },
+  variant(carousel, 'carousel-02', 'Runway 02', {
+    gap: 140, bigScale: 145, perspective: 0, fade: 45, speed: 0.4,
+  }),
+  variant(carousel, 'carousel-03', 'Runway 03', {
+    tiltStyle: 'fan', tiltAmount: 10, gap: 300, bigScale: 130, speed: 0.5,
+  }),
+  variant(carousel, 'carousel-04', 'Runway 04', {
+    scaleFocus: 'start', bigScale: 160, gap: 260, fade: 30, direction: 'right',
+  }),
+  variant(carousel, 'carousel-05', 'Runway 05', {
+    tiltStyle: 'alternate', tiltAmount: 6, direction: 'up', gap: 420, cornerRadius: 24,
+  }),
+];
+
+export const carouselRefVariants: Template[] = [
+  // Flat strip, no featured card.
+  refPreset('carousel-r01', 'Runway 06', { planeSize: 600, gap: 40, seconds: 1.6 }, GLIDE),
+  refPreset('carousel-r02', 'Runway 07', { planeSize: 546, gap: 40, axis: 'horizontal', seconds: 1.6 }, GLIDE),
+
+  // Featured card grows at centre, neighbours fade back.
+  refPreset('carousel-r03', 'Runway 08', { planeSize: 568, gap: 235, centerScale: 1.45, fade: 40, seconds: 1.6 }, GLIDE),
+  refPreset('carousel-r04', 'Runway 09', { planeSize: 440, gap: 190, centerScale: 1.45, fade: 40, axis: 'horizontal', seconds: 1.6 }, GLIDE),
+
+  // Slow, evenly spaced, linear — a conveyor rather than a carousel.
+  refPreset('carousel-r05', 'Runway 10', { planeSize: 730, gap: 80, seconds: 2.3 }, LINEAR),
+  refPreset('carousel-r06', 'Runway 11', { planeSize: 540, gap: 80, axis: 'horizontal', seconds: 2.3 }, LINEAR),
+
+  // Wide gutters: one card at a time with air around it.
+  refPreset('carousel-r07', 'Runway 12', { planeSize: 850, gap: 500, seconds: 1.6 }, SMOOTH),
+  refPreset('carousel-r08', 'Runway 13', { planeSize: 642, gap: 500, axis: 'horizontal', seconds: 1.6 }, SMOOTH),
+
+  // Steps with a hold: the reference adds delay 0.5 on top of duration 1.5.
+  refPreset('carousel-r09', 'Runway 14', { planeSize: 600, gap: 332, centerScale: 1.4, seconds: 2.0 }, SMOOTH),
+  refPreset('carousel-r10', 'Runway 15', { planeSize: 454, gap: 332, centerScale: 1.4, axis: 'horizontal', seconds: 2.0 }, SMOOTH),
+
+  // Featured card pinned to the leading edge instead of the middle.
+  refPreset('carousel-r11', 'Runway 16', { planeSize: 568, gap: 235, centerScale: 1.65, focus: 'start', seconds: 1.6 }, GLIDE),
+  refPreset('carousel-r12', 'Runway 17', { planeSize: 466, gap: 140, centerScale: 1.75, focus: 'start', axis: 'horizontal', seconds: 1.6 }, GLIDE),
+
+  // Trailing edge, running backwards, with the biggest featured jump.
+  refPreset('carousel-r13', 'Runway 18', { planeSize: 850, gap: 500, centerScale: 2, focus: 'end', reverse: true, seconds: 1.6 }, SMOOTH),
+  refPreset('carousel-r14', 'Runway 19', { planeSize: 639, gap: 500, centerScale: 2, focus: 'end', axis: 'horizontal', reverse: true, seconds: 1.6 }, SMOOTH),
+
+  // Gapless deck: cards touch, so the featured one reads as lifting out of a stack.
+  refPreset('carousel-r15', 'Runway 20', { planeSize: 614, gap: 0, centerScale: 1.8, focus: 'start', seconds: 1.6 }, FLOW),
+  refPreset('carousel-r16', 'Runway 21', { planeSize: 473, gap: 0, centerScale: 1.8, focus: 'start', axis: 'horizontal', seconds: 1.6 }, FLOW),
+
+  // Alternating tilt — every other card leans the other way.
+  refPreset('carousel-r17', 'Runway 22', { planeSize: 748, gap: 273, tilt: -25, seconds: 1.6 }, FLOW),
+  refPreset('carousel-r18', 'Runway 23', { planeSize: 657, gap: 273, tilt: -25, axis: 'horizontal', seconds: 1.6 }, FLOW),
+];

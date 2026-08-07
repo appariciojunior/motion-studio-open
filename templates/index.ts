@@ -1,14 +1,13 @@
 import type { Template } from '@/lib/types';
 import { DEFAULT_EASING, type EasingSpec } from '@/lib/easing';
-import { carousel } from './carousel';
-import { variant } from './variant';
+import { carousel, carouselVariants, carouselRefVariants } from './carousel';
 import { wheelVariants } from './wheel';
 import { orbitVariants } from './orbit';
 import { orbit3dVariants } from './orbit3d';
 import { spinVariants } from './spin';
 import { stackVariants } from './stack';
 import { storiesVariants } from './stories';
-import { flickerVariants } from './flicker';
+import { flickerVariants, flickerRefVariants } from './flicker';
 import { fieldVariants } from './field';
 import { wipeVariants } from './wipe';
 import { globeVariants } from './globe';
@@ -38,29 +37,31 @@ import { premium3dTemplates } from './premium3d';
 import { showcaseVariants } from './showcase';
 import { helix3dVariants } from './helix3d';
 
-const carouselVariants: Template[] = [
-  { ...carousel, meta: { ...carousel.meta, name: 'Runway 01' } },
-  variant(carousel, 'carousel-02', 'Runway 02', {
-    gap: 140, bigScale: 145, perspective: 0, fade: 45, speed: 0.4,
-  }),
-  variant(carousel, 'carousel-03', 'Runway 03', {
-    tiltStyle: 'fan', tiltAmount: 10, gap: 300, bigScale: 130, speed: 0.5,
-  }),
-  variant(carousel, 'carousel-04', 'Runway 04', {
-    scaleFocus: 'start', bigScale: 160, gap: 260, fade: 30, direction: 'right',
-  }),
-  variant(carousel, 'carousel-05', 'Runway 05', {
-    tiltStyle: 'alternate', tiltAmount: 6, direction: 'up', gap: 420, cornerRadius: 24,
-  }),
+
+// The reference's complete "3D & Perspective" shelf, in the same order.
+// Each item still lives in the geometry file it shares with related presets;
+// this array is catalogue composition only.
+const perspective3dTemplates: Template[] = [
+  showcaseVariants[0],
+  surfaceVariants[0],
+  globeVariants[0],
+  globeVariants[1],
+  surfaceVariants[1],
+  surfaceVariants[2],
+  premium3dTemplates[2],
+  premium3dTemplates[0],
+  helix3dVariants[0],
+  premium3dTemplates[1],
 ];
 
 // Order follows the reference catalogue's sidebar.
 export const templateList: Template[] = [
+  ...perspective3dTemplates,
   ...carouselVariants,
+  ...carouselRefVariants,
   ...orbitVariants,
   ...orbit3dVariants,
-  ...premium3dTemplates,
-  ...showcaseVariants,
+  ...showcaseVariants.slice(1),
   ...spinVariants,
   ...stackVariants,
   ...wheelVariants,
@@ -69,10 +70,10 @@ export const templateList: Template[] = [
   ...storiesVariants,
   ...storiesFocusVariants,
   ...flickerVariants,
-  ...globeVariants,
-  ...surfaceVariants,
+  ...flickerRefVariants,
+  ...globeVariants.slice(2),
   ...spiralVariants,
-  ...helix3dVariants,
+  ...helix3dVariants.slice(1),
   ...tourVariants,
   ...gravityVariants,
   ...parallaxVariants,
@@ -110,7 +111,9 @@ export const templateGroups: { group: string; items: Template[] }[] = (() => {
   // may use WebGL for perspective and Ticker Tilt may use it for a rigid plane,
   // but neither belongs to the same family as Box, Globe or Surface.
   for (const t of catalogTemplateList) {
-    const group = t.meta.catalog3d ? `${t.meta.group} 3D` : t.meta.group;
+    const group = t.meta.group === '3D & Perspective'
+      ? t.meta.group
+      : t.meta.catalog3d ? `${t.meta.group} 3D` : t.meta.group;
     if (!map.has(group)) { map.set(group, []); order.push(group); }
     map.get(group)!.push(t);
   }

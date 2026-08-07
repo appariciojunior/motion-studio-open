@@ -1,0 +1,200 @@
+#!/usr/bin/env node
+// ============================================================
+//  verify-catalogue — invariants that must hold for EVERY template,
+//  in every canvas aspect and every card shape
+//
+//  scripts/verify-tilt.cjs proves geometry is well-formed: coplanar, finite,
+//  seam-closed. It runs each template once, in one 3:4 canvas, at the declared
+//  card shape. That left a whole class of defect unmeasured, because the scene
+//  has two dimensions the template does not control:
+//
+//    · the canvas aspect (6 of them), which decides which edge is the long one
+//    · the card shape (7, counting 'auto'), which OVERRIDES a template's own
+//      declared cardAspect — see lib/crop cardAspectFor
+//
+//  Real bugs this sweep caught, none of which verify-tilt could see:
+//    · Bloom and Takeover scaled by canvas HEIGHT, so they only covered a
+//      portrait canvas — 16:9 left a 472px band of bare background
+//    · Frames and Grid computed lattice pitch from the DECLARED 3:4 card, so at
+//      the 4:5 card shape a nominal 60px gutter came out 60 down and 25 across
+//
+//  Usage: node scripts/verify-catalogue.cjs
+// ============================================================
+
+const path = require('path');
+const Module = require('module');
+
+require('sucrase/register');
+const root = path.resolve(__dirname, '..');
+const originalResolve = Module._resolveFilename;
+Module._resolveFilename = function (request, parent, isMain, options) {
+  if (request.startsWith('@/')) request = path.join(root, request.slice(2));
+  return originalResolve.call(this, request, parent, isMain, options);
+};
+
+const { templateList, catalogTemplateList, templateGroups, defaultsFor, easingFor } = require('../templates');
+const { resolveEasing } = require('../lib/easing');
+const { ASPECTS, dimsFor } = require('../store/useSceneStore');
+const { CARD_SHAPES, cardAspectFor } = require('../lib/crop');
+
+// Matches the renderer: a sprite's LONG edge is normalized to this, so the other
+// dimension follows the card's resolved aspect (lib/renderer SPRITE_BASE).
+const SPRITE_BASE = 340;
+const FPS = 30;
+const DURATION = 8;
+const TOTAL = DURATION * FPS;
+const SHAPES = ['auto', ...Object.keys(CARD_SHAPES)];
+// Frame 0 and TOTAL are loop boundaries and get treated specially below.
+const FRAMES = [0, 48, 96, 144, 192, TOTAL];
+
+let assertions = 0;
+const failures = [];
+function check(ok, subject, message, where) {
+  assertions++;
+  if (ok) return;
+  const entry = failures.find((f) => f.subject === subject && f.message === message);
+  if (entry) { if (entry.where.length < 3) entry.where.push(where); return; }
+  failures.push({ subject, message, where: [where] });
+}
+
+// ---------- catalogue integrity ----------
+{
+  const ids = templateList.map((t) => t.meta.id);
+  check(new Set(ids).size === ids.length, 'catalogue', 'duplicate template id', 'registry');
+  const grouped = templateGroups.flatMap((g) => g.items);
+  check(grouped.length === catalogTemplateList.length, 'catalogue', 'grouping dropped or duplicated a template', 'registry');
+  for (const t of templateList) {
+    check(typeof t.meta.name === 'string' && t.meta.name.length > 0, t.meta.id, 'missing name', 'registry');
+    check(typeof t.transform === 'function', t.meta.id, 'missing transform', 'registry');
+  }
+}
+
+// ---------- the sweep ----------
+let combos = 0;
+for (const template of templateList) {
+  const values = defaultsFor(template.meta.id);
+  const ease = resolveEasing(easingFor(template.meta.id));
+  const easedPhase = (p) => Math.floor(p) + ease(p - Math.floor(p));
+  // Cap the layer count: a few families run to 140 cards and the sweep is
+  // already 42 canvases per template.
+  const count = Math.min(60, Math.max(1, Math.round(values.count ?? 6)));
+
+  for (const aspectKey of Object.keys(ASPECTS)) {
+    const { width, height } = dimsFor(aspectKey);
+
+    for (const shape of SHAPES) {
+      combos++;
+      const cardAspect = cardAspectFor(template.meta, width, height, shape === 'auto' ? undefined : shape);
+      const ctx = { fps: FPS, width, height, duration: DURATION, totalFrames: TOTAL, ease, easedPhase, cardAspect };
+      const where = `${aspectKey}/${shape}`;
+      const name = template.meta.name;
+
+      let everVisible = false;
+      let everCovers = false;
+
+      for (const frame of FRAMES) {
+        for (let i = 0; i < count; i++) {
+          let pose;
+          try {
+            pose = template.transform(frame, i, count, values, ctx);
+          } catch (error) {
+            check(false, name, `transform threw: ${error.message.slice(0, 50)}`, where);
+            continue;
+          }
+
+          check(
+            [pose.x, pose.y, pose.scale, pose.alpha, pose.rotation, pose.depth].every(Number.isFinite),
+            name, 'non-finite pose', where,
+          );
+          // A negative scale mirrors the sprite, which no template intends.
+          check(pose.scale >= 0, name, 'negative scale mirrors the sprite', where);
+          // Scale exactly 0 is legitimate at a loop boundary — that is what a
+          // build-in/out envelope does (Dock 06) and where a recede finishes
+          // (Bloom 02). Mid-clip, a visible card with no size is a bug.
+          const atBoundary = frame === 0 || frame === TOTAL;
+          check(!(pose.scale === 0 && pose.alpha > 0.02 && !atBoundary),
+            name, 'scale 0 mid-clip while still visible', where);
+
+          const long = SPRITE_BASE * pose.scale;
+          const cardW = cardAspect < 1 ? long * cardAspect : long;
+          const cardH = cardAspect < 1 ? long : long / cardAspect;
+          check(long <= Math.max(width, height) * 8, name, 'card is more than 8x the canvas', where);
+
+          if (pose.alpha > 0.02
+            && Math.abs(pose.x) - cardW / 2 < width / 2
+            && Math.abs(pose.y) - cardH / 2 < height / 2) everVisible = true;
+          if (pose.alpha > 0.99 && cardW >= width - 1 && cardH >= height - 1) everCovers = true;
+        }
+      }
+
+      check(everVisible, name, 'nothing is ever visible on the canvas', where);
+
+      // A full-bleed template owes coverage only when its own size control asks
+      // for the whole frame. Several reference presets deliberately sit at
+      // 63-73% of it, with background showing around the card.
+      const wantsWholeFrame = (values.frameSize ?? values.planeSize ?? 100) >= 100;
+      if (template.meta.cardAspect === 'canvas' && wantsWholeFrame) {
+        check(everCovers, name, 'full-bleed template leaves a gap', where);
+      }
+    }
+  }
+}
+
+// ---------- lattice gutters ----------
+// A family that lays out a grid derives its pitch from the card's size. If it
+// uses the DECLARED aspect instead of the resolved one, the two gutters come out
+// unequal the moment the scene's card shape differs from the declaration.
+for (const template of templateList.filter((t) => ['Frames', 'Grid'].includes(t.meta.group))) {
+  const values = defaultsFor(template.meta.id);
+  const ease = resolveEasing(easingFor(template.meta.id));
+  const easedPhase = (p) => Math.floor(p) + ease(p - Math.floor(p));
+  const count = values.count;
+
+  for (const [shapeName, cardAspect] of [['auto', 3 / 4], ...Object.entries(CARD_SHAPES)]) {
+    const ctx = { fps: FPS, width: 1080, height: 810, duration: DURATION, totalFrames: TOTAL, ease, easedPhase, cardAspect };
+    const long = values.cardSize;
+    const cardW = cardAspect < 1 ? long * cardAspect : long;
+    const cardH = cardAspect < 1 ? long : long / cardAspect;
+
+    const poses = [];
+    for (let i = 0; i < count; i++) poses.push(template.transform(0, i, count, values, ctx));
+
+    // Across: nearest neighbour that shares a row. Down: smallest positive dy
+    // over all pairs — brick rows never share an x, so a same-column search
+    // would jump two rows and read double the real pitch.
+    let pitchAcross = Infinity;
+    for (const a of poses) for (const b of poses) {
+      if (a === b || Math.abs(a.y - b.y) > 0.5) continue;
+      const d = Math.abs(a.x - b.x);
+      if (d > 0.5 && d < pitchAcross) pitchAcross = d;
+    }
+    let pitchDown = Infinity;
+    for (const a of poses) for (const b of poses) {
+      const d = Math.abs(a.y - b.y);
+      if (d > 0.5 && d < pitchDown) pitchDown = d;
+    }
+    if (!Number.isFinite(pitchAcross) || !Number.isFinite(pitchDown)) continue;
+
+    const gutterAcross = pitchAcross - cardW;
+    const gutterDown = pitchDown - cardH;
+    check(Math.abs(gutterAcross - gutterDown) < 1,
+      template.meta.name,
+      `gutters unequal: ${gutterAcross.toFixed(0)}px across vs ${gutterDown.toFixed(0)}px down`,
+      `card shape ${shapeName}`);
+  }
+}
+
+// ---------- report ----------
+if (failures.length) {
+  console.error(`\nCatalogue verification FAILED — ${failures.length} distinct problem(s):\n`);
+  for (const f of failures) {
+    console.error(`  ${f.subject}: ${f.message}`);
+    console.error(`      at ${f.where.join(', ')}${f.where.length >= 3 ? ' ...' : ''}`);
+  }
+  process.exit(1);
+}
+
+console.log(
+  `Catalogue verification passed (${assertions} assertions across ${templateList.length} templates`
+  + ` x ${Object.keys(ASPECTS).length} canvas aspects x ${SHAPES.length} card shapes = ${combos} combinations).`,
+);

@@ -53,14 +53,15 @@ const showcaseFov = (perspective: number) => lerp(17, 46, clamp(perspective, 0, 
 
 const showcase: Template = {
   meta: {
-    id: 'showcase-01', name: 'Showcase Stream', group: 'Showcase',
-    isNew: true, engine: 'webgl', repeatAssets: true, catalogHidden: true,
+    id: 'showcase-01', name: 'Showcase Stream', group: '3D & Perspective',
+    isNew: true, engine: 'webgl', catalog3d: true, repeatAssets: true, cardAspect: 1,
     defaultEasing: { id: 'linear' },
   },
 
   controls: [
     { key: 'direction',    label: 'Direction',     type: 'toggle', options: ['forward','reverse'], default: 'forward', section: 'Motion' },
-    { key: 'count',        label: 'Count',         type: 'slider', min: 6, max: 32, step: 1,      default: 12, section: 'Layout' },
+    { key: 'count',        label: 'Count',         type: 'slider', min: 6, max: 32, step: 1,      default: 12, section: 'Layout', advanced: true },
+    { key: 'padding',      label: 'Padding',       type: 'slider', min: 0, max: 20, step: 0.5,    default: 6, section: 'Layout', unit: '%', precision: 1 },
     { key: 'ringSize',     label: 'Ring Size',     type: 'slider', min: 50, max: 95, step: 1,     default: 80, section: 'Layout', unit: '%' },
     { key: 'cardSizePct',  label: 'Card Size',     type: 'slider', min: 12, max: 32, step: 1,     default: 21, section: 'Layout', unit: '%' },
     { key: 'ringTilt',     label: 'Ring Tilt',     type: 'slider', min: -60, max: 60, step: 1,    default: -28, section: 'Depth', unit: '°',
@@ -69,14 +70,14 @@ const showcase: Template = {
       description: 'Squashes the ellipse further than the tilt alone does. Low collapses the ring toward a line.' },
     { key: 'perspective',  label: 'Perspective',   type: 'slider', min: 0, max: 40, step: 2,      default: 18, section: 'Depth', unit: '%',
       description: 'Camera field of view. Kept deliberately long — past this the ring reads as a funnel.' },
-    { key: 'facing',       label: 'Card Facing',   type: 'pills',  options: ['surface','camera'], default: 'surface', section: 'Depth' },
+    { key: 'facing',       label: 'Card Facing',   type: 'pills',  options: ['surface','camera'], default: 'surface', section: 'Depth', advanced: true },
     { key: 'backFade',     label: 'Back Fade',     type: 'slider', min: 10, max: 95, step: 5,     default: 70, section: 'Finish', unit: '%' },
     { key: 'cornerRadius', label: 'Corner Radius', type: 'slider', min: 0, max: 12, step: 0.5,    default: 3, section: 'Finish', unit: '%', precision: 1 },
-    { key: 'thickness',    label: 'Thickness',     type: 'slider', min: 0, max: 24, step: 1,      default: 8, section: 'Finish', unit: 'px',
+    { key: 'thickness',    label: 'Thickness',     type: 'slider', min: 0, max: 24, step: 1,      default: 8, section: 'Finish', unit: 'px', advanced: true,
       description: 'Gives the cards a physical edge. Also what lets depth shading register at all.' },
-    { key: 'shadow',       label: 'Shadow',        type: 'toggle', options: ['on','off'],         default: 'on', section: 'Finish' },
-    { key: 'speed',        label: 'Speed',         type: 'slider', min: 0, max: 2, step: 0.1,     default: 0.35, section: 'Motion', unit: '×', precision: 1 },
-    { key: 'offset',       label: 'Offset',        type: 'xypad',                                 default: { x: 0, y: 0 }, section: 'Layout' },
+    { key: 'shadow',       label: 'Shadow',        type: 'toggle', options: ['on','off'],         default: 'off', section: 'Finish' },
+    { key: 'speed',        label: 'Speed',         type: 'slider', min: 0, max: 2, step: 0.1,     default: 0.35, section: 'Motion', unit: '×', precision: 1, advanced: true },
+    { key: 'offset',       label: 'Offset',        type: 'xypad',                                 default: { x: 0, y: 0 }, section: 'Layout', advanced: true },
   ],
 
   camera: (v) => ({ fov: showcaseFov(v.perspective) }),
@@ -96,8 +97,8 @@ const showcase: Template = {
     const phase = (frame / ctx.totalFrames) * loopCycles(v.speed, ctx.duration, count) * dir;
     const phi = (((index - phase) % count + count) % count) / count * TAU;
 
-    const stage = Math.min(ctx.width, ctx.height);
-    const radius = (stage * (v.ringSize / 100)) / 2;
+    const stage = Math.min(ctx.width, ctx.height) * (1 - clamp(v.padding, 0, 20) / 50);
+    const radius = (stage * (v.ringSize / 100)) / 2 * 1.08;
     const k = openingFactor(v.ringOpening);
 
     // The ring in its own plane, before the plane is tipped. phi = 0 sits at the
@@ -107,9 +108,21 @@ const showcase: Template = {
 
     const rig = { pitch: v.ringTilt };
     const p = tiltPointCanvas({ x: rx, y: ry, z: 0 }, rig);
-    // The plane's own normal, tipped the same way. One function for the point and
-    // the normal is what keeps card centres and card facings on the same plane.
-    const n = tiltNormalCanvas({ x: 0, y: 0, z: 1 }, rig);
+
+    // THIS card's own outward normal — not the ring plane's normal, which is
+    // the same for every card and barely varies with ringTilt. That was the
+    // bug: it made backfaceFade nearly inert (the plane stays broadly camera-
+    // facing at any reasonable tilt), so far-side cards never dimmed enough
+    // and showed their DoubleSide back — mirrored text — instead of fading out.
+    //
+    // The correct normal is perpendicular to the ellipse's own tangent, in the
+    // ring's local (untilted) plane, then tilted the same way as the position.
+    // For x = sin(phi)·r, y = cos(phi)·r·k, the tangent is
+    // (cos(phi), -sin(phi)·k) — same derivation as the tangent-roll below — and
+    // rotating that -90° and picking the sign with positive dot-product against
+    // the position vector gives the OUTWARD normal (sin(phi)·k, cos(phi)).
+    // tiltNormalCanvas normalizes it, so it does not need to be unit length here.
+    const n = tiltNormalCanvas({ x: Math.sin(phi) * k, y: Math.cos(phi), z: 0 }, rig);
 
     // Lay the card along the ring: it takes the plane's tilt plus the roll that
     // points it around the curve. Quaternion rather than Euler because the
@@ -141,7 +154,9 @@ const showcase: Template = {
       z: p.z,
       quaternion,
       scale: cardPx / BASE,
-      alpha: backfaceFade(n.z, v.backFade * (1 - nearness)),
+      // Keep the rear arc present but subdued. The reference reads as a closed
+      // ring; cutting back-facing cards entirely turns it into a front-only fan.
+      alpha: backfaceFade(n.z, v.backFade),
       thickness: v.thickness,
       shadowStrength: v.shadow === 'on' ? 1 : 0,
       materialExposure: lerp(0.62, 1.06, nearness),
@@ -157,8 +172,8 @@ const showcase: Template = {
     const phase = (frame / ctx.totalFrames) * loopCycles(v.speed, ctx.duration, count) * dir;
     const phi = (((index - phase) % count + count) % count) / count * TAU;
 
-    const stage = Math.min(ctx.width, ctx.height);
-    const radius = (stage * (v.ringSize / 100)) / 2;
+    const stage = Math.min(ctx.width, ctx.height) * (1 - clamp(v.padding, 0, 20) / 50);
+    const radius = (stage * (v.ringSize / 100)) / 2 * 1.08;
     const k = openingFactor(v.ringOpening);
     const rx = Math.sin(phi) * radius;
     const ry = Math.cos(phi) * radius * k;
@@ -193,4 +208,6 @@ export const showcaseVariants: Template[] = [
     ringTilt: -12, ringOpening: 78, ringSize: 72, cardSizePct: 18,
     perspective: 8, facing: 'camera', backFade: 45, thickness: 4, speed: 0.45, count: 16,
   }),
-];
+].map((template, index) => index === 0
+  ? template
+  : { ...template, meta: { ...template.meta, catalogHidden: true } });

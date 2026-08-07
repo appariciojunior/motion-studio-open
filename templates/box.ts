@@ -95,10 +95,10 @@ function carouselFace(index: number, travel: number, geo: { faces: number; image
 //  `Face Width` means the pixel width you actually get, and Faces/Girth change
 //  the depth of the box behind that face rather than its size on screen.
 //
-//  `cardAspect: 1` because that apothem depends on the face dimension
-//  perpendicular to the spin axis — width for a vertical axis, height for a
-//  horizontal one. With the 4:5 default those differ and one axis would always
-//  leave the prism open.
+//  The selected Card shape is part of that same calculation. `cardSize` is the
+//  long edge rendered by the shared card pipeline, so a portrait card has a
+//  shorter width and a landscape card has a shorter height. Recomputing the
+//  apothem from `ctx.cardAspect` keeps every shape closed on either spin axis.
 // ============================================================
 
 const box: Template = {
@@ -109,7 +109,8 @@ const box: Template = {
     // and never overshoots. That is an ease-OUT, not the symmetric ease-in-out
     // `smooth` was giving; cubicOut is the closest curve in the house set
     // (within ~0.04 of the spring's normalized response across the step).
-    cardAspect: BOX_ASPECT, engine: 'webgl', catalog3d: true, defaultEasing: { id: 'cubicOut' },
+    cardAspect: BOX_ASPECT,
+    engine: 'webgl', catalog3d: true, defaultEasing: { id: 'cubicOut' },
   },
 
   controls: [
@@ -120,7 +121,7 @@ const box: Template = {
     // the next image while it is turned away.
     { key: 'count',        label: 'Images',        type: 'slider', min: 4, max: 24, step: 1,     default: 7 },
     { key: 'faces',        label: 'Faces',         type: 'slider', min: 3, max: 12, step: 1,     default: 4 },
-    { key: 'cardSize',     label: 'Face Width',    type: 'slider', min: 80, max: 600, step: 1,   default: 350 },
+    { key: 'cardSize',     label: 'Card Size',     type: 'slider', min: 80, max: 600, step: 1,   default: 350 },
     { key: 'cornerRadius', label: 'Corner Radius', type: 'slider', min: 0, max: 100, step: 1,    default: 0 },
     { key: 'girth',        label: 'Girth',         type: 'slider', min: 0.5, max: 2, step: 0.05, default: 1 }, // ×apothem: <1 squeezes, >1 opens the prism
     // Not the house 0–200 lens control — this is the CSS `perspective` distance
@@ -171,7 +172,10 @@ const box: Template = {
     const travel = stepHold(rawSteps, v.hold / 100, ctx.ease) * dir;
     const face = carouselFace(index, travel, geo);
     const theta = face.theta;
-    const crossSize = vertical ? v.cardSize : v.cardSize / BOX_ASPECT;
+    const aspect = Math.max(0.05, ctx.cardAspect ?? BOX_ASPECT);
+    const cardWidth = v.cardSize * Math.min(1, aspect);
+    const cardHeight = v.cardSize * Math.min(1, 1 / aspect);
+    const crossSize = vertical ? cardWidth : cardHeight;
     const apothem = (crossSize / (2 * Math.tan(Math.PI / geo.faces))) * v.girth * CORNER_BLEED;
 
     // Face centre on the prism surface, plus the orientation that aims its
@@ -246,7 +250,10 @@ const box: Template = {
     const theta = face.theta;
 
     const cosT = Math.cos(theta);
-    const crossSize = vertical ? v.cardSize : v.cardSize / BOX_ASPECT;
+    const aspect = Math.max(0.05, ctx.cardAspect ?? BOX_ASPECT);
+    const cardWidth = v.cardSize * Math.min(1, aspect);
+    const cardHeight = v.cardSize * Math.min(1, 1 / aspect);
+    const crossSize = vertical ? cardWidth : cardHeight;
     const apothem = (crossSize / (2 * Math.tan(Math.PI / geo.faces))) * v.girth * CORNER_BLEED;
     const along = Math.sin(theta) * apothem;
 

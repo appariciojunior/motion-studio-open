@@ -6,6 +6,9 @@ import { isOn } from './asciiControls';
 import { fitAndCenter } from './frame';
 import { asset } from '@/lib/paths';
 import { makeCameraRig } from './cameraRig';
+import { use3DStore } from '../store/use3DStore';
+import { useSceneStore } from '../store/useSceneStore';
+import { apply3DAnimation } from './animations';
 
 // ── Cartoon (toon) 3D effect ────────────────────────────────────────────────
 // Renders the model with THREE.MeshToonMaterial straight to the (WebGL) canvas.
@@ -200,6 +203,8 @@ vec4 stochNormalW(sampler2D tex, vec2 uv){
 
   const MODEL_SIZE = 2.4;
   let modelHalf = MODEL_SIZE / 2;
+  const INIT_AZIMUTH = 0;
+  const INIT_ELEVATION = 0;
   function frameCamera() {
     const halfV = Math.tan((45 * Math.PI / 180) / 2);
     const halfH = halfV * camera.aspect;
@@ -548,6 +553,29 @@ vec4 stochNormal(sampler2D tex, vec2 uv){
       }
     }
 
+    const animState = use3DStore.getState();
+    const sceneState = useSceneStore.getState();
+    const duration = Math.max(0.1, sceneState.duration);
+    const fps = Math.max(1, sceneState.fps);
+    const progress = ((sceneState.frame / (duration * fps)) * (animState.mockupSpeed || 1)) % 1;
+    apply3DAnimation(
+      animState.mockupAnimation || 'static',
+      progress,
+      camera,
+      controls,
+      pivot,
+      INIT_CAM,
+      INIT_TARGET,
+      INIT_AZIMUTH,
+      INIT_ELEVATION,
+      modelHalf,
+      md?.rotX ?? 0,
+      md?.rotY ?? 0,
+      md?.offsetX ?? 0,
+      md?.offsetY ?? 0,
+      md?.scale ?? 1.0,
+    );
+
     // wall (background) uniforms — gradient + stroke amount
     const wsh = wallMat.userData.shader as any;
     const bf = opts.getBgFill?.();
@@ -578,13 +606,62 @@ vec4 stochNormal(sampler2D tex, vec2 uv){
     } else if (sun.map) { sun.map = null; }
 
     rig.update();       // gizmo snap tween — writes camera.position
-    controls.update();  // re-derives its spherical state from that position
+    if (controls.enabled) controls.update();  // re-derives its spherical state from that position
     renderer.render(scene, camera);
   }
+
+  const renderFrameAt = (frame: number) => {
+    if (disposed) return;
+    const sceneState = useSceneStore.getState();
+    sceneState.setFrame(frame);
+    const animState = use3DStore.getState();
+    const duration = Math.max(0.1, sceneState.duration);
+    const fps = Math.max(1, sceneState.fps);
+    const progress = ((frame / (duration * fps)) * (animState.mockupSpeed || 1)) % 1;
+    const md = opts.getModel?.() ?? { scale: 1, rotX: 0, rotY: 0, offsetX: 0, offsetY: 0, centerNonce: 0 };
+    apply3DAnimation(
+      animState.mockupAnimation || 'static',
+      progress,
+      camera,
+      controls,
+      pivot,
+      INIT_CAM,
+      INIT_TARGET,
+      INIT_AZIMUTH,
+      INIT_ELEVATION,
+      modelHalf,
+      md?.rotX ?? 0,
+      md?.rotY ?? 0,
+      md?.offsetX ?? 0,
+      md?.offsetY ?? 0,
+      md?.scale ?? 1.0,
+    );
+    rig.update();
+    if (controls.enabled) controls.update();
+    renderer.render(scene, camera);
+  };
+
+  const captureFrameAt = (frame: number): string => {
+    renderFrameAt(frame);
+    return renderer.domElement.toDataURL('image/jpeg', 0.92);
+  };
+
+  const setCaptureScale = (k: number): void => {
+    const st = useSceneStore.getState();
+    renderer.setSize(Math.round(st.width * k), Math.round(st.height * k), false);
+  };
+
+  opts.onRenderer?.({
+    renderFrame: renderFrameAt,
+    captureFrame: captureFrameAt,
+    setCaptureScale: setCaptureScale,
+  });
+
   loop();
 
   return function dispose() {
     disposed = true;
+    opts.onRenderer?.(null);
     opts.onCamera?.(null);
     cancelAnimationFrame(animId);
     ro.disconnect();
