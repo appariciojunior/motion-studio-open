@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { getThreeEffect, threeDefaults, threeEffects } from '@/three3d';
-import { use3DStore } from '@/store/use3DStore';
+import { use3DStore, defaultModelFor } from '@/store/use3DStore';
 import { useSceneStore } from '@/store/useSceneStore';
 import { isOn } from '@/three3d/asciiControls';
 import { findDevice } from '@/three3d/devices';
@@ -33,7 +33,9 @@ export default function ThreeStage3D({ effectId: forcedEffectId }: { effectId?: 
   const dflts = threeDefaults(effectId);
   const p = { ...dflts, ...overrides };   // schema defaults + user edits
   const has = (k: string) => k in dflts;  // which controls this effect declares
-  const modelUrl = use3DStore((s) => s.model.url);
+  // Keyed on the effect THIS stage renders, not on the store's active id, so a
+  // nav switch can never make the 3D tab load Mockup's device (or vice versa).
+  const modelUrl = use3DStore((s) => (s.models[effectId] ?? defaultModelFor(effectId)).url);
   const width = useSceneStore((s) => s.width);
   const height = useSceneStore((s) => s.height);
   // effects that expose a camera get the view gizmo; the rest render without it
@@ -47,7 +49,7 @@ export default function ThreeStage3D({ effectId: forcedEffectId }: { effectId?: 
       modelUrl: modelUrl ?? def.defaultModel,
       // read live from the store (schema defaults merged) — avoids re-init on drag
       getParams: () => ({ ...threeDefaults(effectId), ...(use3DStore.getState().params[effectId] ?? {}) }),
-      getModel: () => use3DStore.getState().model,
+      getModel: () => use3DStore.getState().models[effectId] ?? defaultModelFor(effectId),
       getPartFills: () => use3DStore.getState().partFills,
       getSelectedPart: () => use3DStore.getState().selectedPart,
       onParts: (keys) => use3DStore.getState().setParts(keys),
@@ -64,7 +66,7 @@ export default function ThreeStage3D({ effectId: forcedEffectId }: { effectId?: 
       onCamera: setRig,
       getScreenMedia: () => {
         const s = use3DStore.getState();
-        const slot = findDevice(s.model.url)?.slot;
+        const slot = findDevice((s.models[effectId] ?? defaultModelFor(effectId)).url)?.slot;
         return slot ? (s.screenMedia[slot] ?? null) : null;
       },
       getScreenTransform: () => {

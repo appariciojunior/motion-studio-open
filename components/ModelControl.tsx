@@ -1,8 +1,7 @@
 'use client';
 
 import { useRef } from 'react';
-import { use3DStore } from '@/store/use3DStore';
-import { findDevice } from '@/three3d/devices';
+import { use3DStore, defaultModelFor } from '@/store/use3DStore';
 import { ControlRow } from './Controls';
 import type { ControlDef } from '@/lib/types';
 
@@ -14,7 +13,7 @@ const offYDef: ControlDef = { key: 'offsetY', label: 'Offset Y', type: 'slider',
 // MODEL CONTROL — top block of the right sidebar in 3D mode. Transforms the 3D
 // object (center / scale / rotate) and uploads a .glb to run the effect on.
 export default function ModelControl() {
-  const model = use3DStore((s) => s.model);
+  const model = use3DStore((s) => s.models[s.effectId] ?? defaultModelFor(s.effectId));
   const setModelScale = use3DStore((s) => s.setModelScale);
   const nudgeRot = use3DStore((s) => s.nudgeRot);
   const setModelOffset = use3DStore((s) => s.setModelOffset);
@@ -22,9 +21,10 @@ export default function ModelControl() {
   const setModelUrl = use3DStore((s) => s.setModelUrl);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Device mockups are already bbox-centred by fitAndCenter — recentring
-  // should return to (0, 0), not the bundled model's hand-tuned offset.
-  const centerModel = () => (findDevice(model.url) ? storeCenterModel(0, 0) : storeCenterModel());
+  // No per-mode branch here any more: the store recentres to the ACTIVE
+  // effect's own default — (0, 0) for Mockup, whose device meshes arrive
+  // bbox-centred, and the daisy's tuned nudge for 3D.
+  const centerModel = () => storeCenterModel();
 
   const onFile = (f: File | undefined) => {
     if (!f) return;
