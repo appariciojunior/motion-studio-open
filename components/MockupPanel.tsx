@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { use3DStore } from '@/store/use3DStore';
+import { use3DStore, defaultModelFor } from '@/store/use3DStore';
 import { DEVICES, findDevice, selectDevice } from '@/three3d/devices';
 import { MOCKUP_ANIMATIONS } from '@/three3d/animations';
 import { DeviceThumb, MockupAnimThumb } from './MockupThumb';
@@ -16,7 +16,7 @@ const Chevron = () => (
 // selects it and expands its panel showing the real 3D thumb, finish swatches,
 // and animation preset cards. Same accordion pattern as TemplatesCard.
 export default function MockupPanel() {
-  const modelUrl = use3DStore((s) => s.model.url);
+  const modelUrl = use3DStore((s) => (s.models[s.effectId] ?? defaultModelFor(s.effectId)).url);
   const mockupAnimation = use3DStore((s) => s.mockupAnimation || 'static');
   const setMockupAnimation = use3DStore((s) => s.setMockupAnimation);
   const mockupSpeed = use3DStore((s) => s.mockupSpeed || 1);

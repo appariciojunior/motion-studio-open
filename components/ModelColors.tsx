@@ -1,6 +1,6 @@
 'use client';
 
-import { use3DStore } from '@/store/use3DStore';
+import { use3DStore, defaultModelFor } from '@/store/use3DStore';
 import { findDevice } from '@/three3d/devices';
 import FillRow from './FillRow';
 
@@ -14,7 +14,7 @@ const PART_LABELS: Record<string, string> = { Cube: 'Center', Cylinder: 'Stem', 
 //
 // For bundled devices, shows Finish colour swatches instead of per-part fills.
 export default function ModelColors() {
-  const modelUrl = use3DStore((s) => s.model.url);
+  const modelUrl = use3DStore((s) => (s.models[s.effectId] ?? defaultModelFor(s.effectId)).url);
   const parts = use3DStore((s) => s.parts);
   const partFills = use3DStore((s) => s.partFills);
   const selected = use3DStore((s) => s.selectedPart);

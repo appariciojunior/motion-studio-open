@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import AssetsPanel from '@/components/AssetsPanel';
 import BackgroundFill from '@/components/BackgroundFill';
@@ -24,6 +25,7 @@ import WebCodeModal from '@/components/WebCodeModal';
 import WebScenePanel from '@/components/WebScenePanel';
 import WebSelectionPanel from '@/components/WebSelectionPanel';
 import WebSourceBar from '@/components/WebSourceBar';
+import { use3DStore } from '@/store/use3DStore';
 import { useUIStore } from '@/store/useUIStore';
 import { useWebStore } from '@/store/useWebStore';
 
@@ -45,6 +47,16 @@ export default function DesktopEditor() {
   const isWeb = nav === 'web';
   const isBoard = nav === 'board';
   const isProjects = nav === 'projects';
+
+  // The model transform is stored per effect, so the side panels only show the
+  // right one if the store's active effect tracks the nav tab. Without this,
+  // opening Mockup would leave the store on 'cartoon' and Model Control would
+  // pose the flower while the stage showed a phone.
+  useEffect(() => {
+    const s = use3DStore.getState();
+    if (isMockup && s.effectId !== 'mockup') s.setEffect('mockup');
+    else if (is3D && s.effectId === 'mockup') s.setEffect('cartoon');
+  }, [isMockup, is3D]);
 
   return (
     <div className={`app ${isWeb || isBoard ? 'app-web' : ''} ${tplCollapsed ? 'app-tpl-collapsed' : ''} ${leftCollapsed ? 'left-collapsed' : ''} ${rightCollapsed ? 'right-collapsed' : ''}`}>

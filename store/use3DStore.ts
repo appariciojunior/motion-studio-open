@@ -17,7 +17,8 @@ export interface ModelState {
 export interface ThreeDState {
   effectId: string;
   params: Record<string, Record<string, any>>;
-  model: ModelState;
+  // Per effect id, so 3D and Mockup never share a model, a pose or a scale.
+  models: Record<string, ModelState>;
   // per-part colouring — generic across any GLB
   parts: string[];                        // detected colourable group keys
   partFills: Record<string, FillSpec>;    // key → fill (absent = original)
@@ -95,13 +96,39 @@ const DEFAULT_FILLS: Record<string, FillSpec> = {
 const DEF_OFFSET = { x: -0.8, y: 0.7 };
 const MODEL_DEFAULT: ModelState = { scale: 0.7, rotX: 0, rotY: 0, offsetX: DEF_OFFSET.x, offsetY: DEF_OFFSET.y, url: null, name: null, centerNonce: 0 };
 
+// Mockup starts from a different baseline: device meshes are already
+// bbox-centred, so they want (0, 0) and scale 1 rather than the daisy's
+// hand-tuned nudge, and no bundled model at all until a device is picked.
+const MOCKUP_MODEL_DEFAULT: ModelState = { scale: 1, rotX: 0, rotY: 0, offsetX: 0, offsetY: 0, url: null, name: null, centerNonce: 0 };
+
+// The model transform is held PER EFFECT, not globally. It used to be one
+// shared object, so picking a device in Mockup overwrote `url` — and the 3D
+// tab, which reads the same field to decide what to load, lost the flower and
+// rendered the phone instead. Posing one mode also dragged the other's model
+// with it. Keyed by effect id, the two keep their own model, pose and scale.
+export function defaultModelFor(effectId: string): ModelState {
+  return effectId === 'mockup' ? { ...MOCKUP_MODEL_DEFAULT } : { ...MODEL_DEFAULT };
+}
+
+// The active effect's model, seeded on first touch so a newly registered
+// effect never reads undefined.
+function modelOf(s: { effectId: string; models: Record<string, ModelState> }): ModelState {
+  return s.models[s.effectId] ?? defaultModelFor(s.effectId);
+}
+function patchModel(
+  s: { effectId: string; models: Record<string, ModelState> },
+  patch: Partial<ModelState>,
+) {
+  return { models: { ...s.models, [s.effectId]: { ...modelOf(s), ...patch } } };
+}
+
 export const use3DStore = create<ThreeDState>((set) => ({
   effectId: 'cartoon',
   // Only user overrides live here; schema defaults are merged at read time
   // (Effect3DControls / ThreeStage3D / the effect init). Keeps loads always
   // matching the current schema defaults — no stale one-time seed.
   params: {},
-  model: { ...MODEL_DEFAULT },
+  models: { cartoon: { ...MODEL_DEFAULT }, mockup: { ...MOCKUP_MODEL_DEFAULT } },
   parts: [],
   partFills: {},
   selectedPart: null,
@@ -126,11 +153,24 @@ export const use3DStore = create<ThreeDState>((set) => ({
     set((s) => ({
       params: { ...s.params, [effectId]: { ...(s.params[effectId] ?? {}), [key]: value } },
     })),
-  setModelScale: (v) => set((s) => ({ model: { ...s.model, scale: v } })),
-  nudgeRot: (dx, dy) => set((s) => ({ model: { ...s.model, rotX: s.model.rotX + dx, rotY: s.model.rotY + dy } })),
-  setModelOffset: (x, y) => set((s) => ({ model: { ...s.model, offsetX: x, offsetY: y } })),
-  centerModel: (x = DEF_OFFSET.x, y = DEF_OFFSET.y) => set((s) => ({ model: { ...s.model, rotX: 0, rotY: 0, offsetX: x, offsetY: y, centerNonce: s.model.centerNonce + 1 } })),
-  setModelUrl: (url, name) => set((s) => ({ model: { ...s.model, url, name } })),
+  setModelScale: (v) => set((s) => patchModel(s, { scale: v })),
+  nudgeRot: (dx, dy) => set((s) => {
+    const m = modelOf(s);
+    return patchModel(s, { rotX: m.rotX + dx, rotY: m.rotY + dy });
+  }),
+  setModelOffset: (x, y) => set((s) => patchModel(s, { offsetX: x, offsetY: y })),
+  centerModel: (x, y) => set((s) => {
+    const m = modelOf(s);
+    // Falls back to the ACTIVE effect's own default, so recentring in Mockup
+    // goes to (0, 0) and recentring in 3D goes to the daisy's tuned nudge.
+    const d = defaultModelFor(s.effectId);
+    return patchModel(s, {
+      rotX: 0, rotY: 0,
+      offsetX: x ?? d.offsetX, offsetY: y ?? d.offsetY,
+      centerNonce: m.centerNonce + 1,
+    });
+  }),
+  setModelUrl: (url, name) => set((s) => patchModel(s, { url, name })),
   setMockupAnimation: (key) => set({ mockupAnimation: key }),
   setMockupSpeed: (v) => set({ mockupSpeed: v }),
   setScreenMedia: (slot, media) => set((s) => ({ screenMedia: { ...s.screenMedia, [slot]: media } })),
