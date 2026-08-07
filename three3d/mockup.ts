@@ -59,12 +59,56 @@ export function initMockup(
   // scene's full export resolution, which oversamples the on-screen box on its
   // own. Multiplying by DPR on top would square that cost for no visible gain.
   renderer.setPixelRatio(1);
-  renderer.setClearColor(0x000000, 0);   // transparent → stage bg-gradient shows
+  renderer.setClearColor(0x000000, 0);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.35;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+  // ── Stage background, baked into the scene ──────────────────────────────
+  // The backdrop used to live only in CSS on the stage div, with the canvas
+  // left transparent on top. That reads fine on screen and exports black: a
+  // capture reads the CANVAS, the CSS behind it isn't part of it, and JPEG has
+  // no alpha channel to preserve — every transparent pixel flattens to black.
+  // Painting it as scene.background fixes both export paths at once (the JPEG
+  // frames and the WebCodecs path, which copies the live canvas), and keeps
+  // preview and export showing the same pixels.
+  //
+  // Mirrors the CSS in ThreeStage3D exactly: `linear-gradient(to top, c1, c2)`
+  // puts c1 at the BOTTOM, and the radial ends at 130% of the box.
+  const BG_RES = 256;
+  const bgCanvas = document.createElement('canvas');
+  bgCanvas.width = bgCanvas.height = BG_RES;
+  const bgCtx = bgCanvas.getContext('2d')!;
+  const bgTex = new THREE.CanvasTexture(bgCanvas);
+  bgTex.colorSpace = THREE.SRGBColorSpace;
+  scene.background = bgTex;
+  let bgKey = '';
+  function paintBackground(spec: { type: string; c1: string; c2: string }) {
+    const key = `${spec.type}|${spec.c1}|${spec.c2}`;
+    if (key === bgKey) return;
+    bgKey = key;
+    const S = BG_RES;
+    if (spec.type === 'linear') {
+      // CanvasTexture keeps flipY, so canvas row 0 lands at the top of frame —
+      // c2 goes at y=0 and c1 at the bottom, matching `to top`.
+      const g = bgCtx.createLinearGradient(0, 0, 0, S);
+      g.addColorStop(0, spec.c2);
+      g.addColorStop(1, spec.c1);
+      bgCtx.fillStyle = g;
+    } else if (spec.type === 'radial') {
+      const g = bgCtx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S * 0.65);
+      g.addColorStop(0, spec.c1);
+      g.addColorStop(1, spec.c2);
+      bgCtx.fillStyle = g;
+    } else {
+      bgCtx.fillStyle = spec.c1;
+    }
+    bgCtx.fillRect(0, 0, S, S);
+    bgTex.needsUpdate = true;
+  }
+  paintBackground(opts.getBgFill?.() ?? { type: 'linear', c1: '#fbfbfc', c2: '#e6e8eb' });
 
   // Room-environment map → soft, believable reflections without a real HDRI.
   const pmrem = new THREE.PMREMGenerator(renderer);
@@ -756,6 +800,11 @@ export function initMockup(
       (scene as any).environmentRotation.y = THREE.MathUtils.degToRad(lightState.envRotation);
     }
 
+    // Repaints only when the Background panel actually changes (keyed on the
+    // fill spec), so this is a string compare per frame, not a canvas redraw.
+    const bgSpec = opts.getBgFill?.();
+    if (bgSpec) paintBackground(bgSpec);
+
     const shadowMat = ground.material as THREE.ShadowMaterial;
     shadowMat.opacity = Math.max(0, Math.min(1, Number(p.shadowOpacity ?? 35) / 100));
 
@@ -857,6 +906,7 @@ export function initMockup(
     controls.dispose();
     pmrem.dispose();
     envRT.texture.dispose();
+    bgTex.dispose();
     ground.geometry.dispose();
     (ground.material as THREE.Material).dispose();
     if (screenVideoEl) { screenVideoEl.pause(); screenVideoEl.removeAttribute('src'); screenVideoEl.load(); }
