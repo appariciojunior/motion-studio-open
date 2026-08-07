@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef } from 'react';
-import { use3DStore } from '@/store/use3DStore';
+import { use3DStore, defaultModelFor } from '@/store/use3DStore';
 import { findDevice, SLOT_LABELS } from '@/three3d/devices';
 import { ControlRow } from './Controls';
 import type { ControlDef } from '@/lib/types';
@@ -25,7 +25,7 @@ const FITS: { id: 'cover' | 'width' | 'contain'; label: string }[] = [
 // serves every phone and swapping device keeps the artwork. The panel states
 // the panel's real native pixel size so a screenshot can be prepared to fit.
 export default function ScreenContent() {
-  const modelUrl = use3DStore((s) => s.model.url);
+  const modelUrl = use3DStore((s) => (s.models[s.effectId] ?? defaultModelFor(s.effectId)).url);
   const screenMediaBySlot = use3DStore((s) => s.screenMedia);
   const setScreenMedia = use3DStore((s) => s.setScreenMedia);
   const screenFit = use3DStore((s) => s.screenFit);
