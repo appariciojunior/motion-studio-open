@@ -204,6 +204,11 @@ export class SceneRenderer3D implements IRenderer {
     this.resolution = resolution;
     this.renderer.setPixelRatio(resolution);
     this.renderer.setSize(width, height, false);
+    // R3F is only the Box scene-graph reconciler. It must never own the CSS
+    // size of this canvas, otherwise a later Aspect change updates pixels but
+    // leaves the visible frame pinned to the initial dimensions.
+    this.renderer.domElement.style.removeProperty('width');
+    this.renderer.domElement.style.removeProperty('height');
     const rw = Math.max(1, Math.round(width * resolution));
     const rh = Math.max(1, Math.round(height * resolution));
     this.composeA?.setSize(rw, rh);
@@ -348,6 +353,15 @@ export class SceneRenderer3D implements IRenderer {
         if (!img || !this.ready) return null;
         const tex = new THREE.Texture(img);
         tex.colorSpace = THREE.SRGBColorSpace;
+        // Every card can end up viewed near edge-on — a Card Tunnel wall close to
+        // the vanishing point, a Surface curve's far edge, any face turned away
+        // in Box or Orbit. Mipmapping alone still aliases badly at a grazing
+        // angle because it picks ONE isotropic mip level for a footprint that is
+        // actually long and thin; anisotropic filtering samples along that
+        // footprint instead, which is what removes the fine horizontal banding
+        // those views showed. Applied once here because cropped views (below)
+        // are `.clone()`d from this texture and inherit it.
+        tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
         tex.needsUpdate = true;
         this.textureCache.set(url, tex);
         return tex;
@@ -500,6 +514,10 @@ export class SceneRenderer3D implements IRenderer {
       slot.body.material.dispose();
     }
 
+    const placeholderLongEdge = 600;
+    const placeholderW = placeholderLongEdge * Math.min(1, aspect);
+    const placeholderH = placeholderLongEdge * Math.min(1, 1 / aspect);
+
     rt.slots.forEach((slot, i) => {
       let asset = pool[assetIndexForSlot(i, pool.length, repeat)];
       if (!asset && pool.length > 0) asset = pool[i % pool.length];
@@ -517,8 +535,11 @@ export class SceneRenderer3D implements IRenderer {
         slot.front.material.map = ph;
         slot.front.material.emissiveMap = ph;
         slot.front.material.needsUpdate = true;
-        slot.texW = 480;
-        slot.texH = 600;
+        // Keep the temporary plane at the newly selected shape. Using the old
+        // fixed 4:5 dimensions here produced one visibly open/deformed Box
+        // frame while the cropped texture was being rebuilt.
+        slot.texW = placeholderW;
+        slot.texH = placeholderH;
         slot.cornerR = -1;
       }
       if (!asset || !asset.visible) {
@@ -527,7 +548,7 @@ export class SceneRenderer3D implements IRenderer {
         slot.front.material.map = ph;
         slot.front.material.emissiveMap = ph;
         slot.front.material.needsUpdate = true;
-        slot.texW = 480; slot.texH = 600;
+        slot.texW = placeholderW; slot.texH = placeholderH;
       } else if (isVideoSource(asset.url, asset.kind)) {
         const { url, crop } = asset;
         const frozen = this.exportVideoFrames.get(url);
@@ -898,6 +919,10 @@ export class SceneRenderer3D implements IRenderer {
       duration: time.localTotal / Math.max(1, s.fps),
       totalFrames: time.localTotal,
       ease, easedPhase,
+      // The Box and other geometry-aware templates need the exact dimensions
+      // that the renderer gives each cropped card. Without this, changing Card
+      // shape updates the mesh but leaves the path geometry at its default.
+      cardAspect: cardAspectFor(template.meta, s.width, s.height, s.cardShape),
     };
     this.updateTrackCamera(rt.camera, Number(track.values.perspective ?? 100), template.camera?.(track.values, ctx));
     rt.group.position.set(track.transform.x, -track.transform.y, 0);

@@ -1,7 +1,6 @@
 import type { Template } from '@/lib/types';
 import { DEFAULT_EASING, type EasingSpec } from '@/lib/easing';
-import { carousel, carouselRefVariants } from './carousel';
-import { variant } from './variant';
+import { carousel, carouselVariants, carouselRefVariants } from './carousel';
 import { wheelVariants } from './wheel';
 import { orbitVariants } from './orbit';
 import { orbit3dVariants } from './orbit3d';
@@ -38,21 +37,6 @@ import { premium3dTemplates } from './premium3d';
 import { showcaseVariants } from './showcase';
 import { helix3dVariants } from './helix3d';
 
-const carouselVariants: Template[] = [
-  { ...carousel, meta: { ...carousel.meta, name: 'Runway 01' } },
-  variant(carousel, 'carousel-02', 'Runway 02', {
-    gap: 140, bigScale: 145, perspective: 0, fade: 45, speed: 0.4,
-  }),
-  variant(carousel, 'carousel-03', 'Runway 03', {
-    tiltStyle: 'fan', tiltAmount: 10, gap: 300, bigScale: 130, speed: 0.5,
-  }),
-  variant(carousel, 'carousel-04', 'Runway 04', {
-    scaleFocus: 'start', bigScale: 160, gap: 260, fade: 30, direction: 'right',
-  }),
-  variant(carousel, 'carousel-05', 'Runway 05', {
-    tiltStyle: 'alternate', tiltAmount: 6, direction: 'up', gap: 420, cornerRadius: 24,
-  }),
-];
 
 // The reference's complete "3D & Perspective" shelf, in the same order.
 // Each item still lives in the geometry file it shares with related presets;

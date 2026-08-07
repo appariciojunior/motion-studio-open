@@ -2,7 +2,7 @@
 
 import { useUIStore } from '@/store/useUIStore';
 import { useProjectStore } from '@/store/useProjectStore';
-import { AddIcon, BoardIcon, LibraryIcon, MoonIcon, ProjectsIcon, SunIcon, ThreeDIcon, WebIcon } from './EditorIcons';
+import { AddIcon, BoardIcon, LibraryIcon, MockupIcon, MoonIcon, ProjectsIcon, SunIcon, ThreeDIcon, WebIcon } from './EditorIcons';
 
 const NAV = [
   { id: 'projects', label: 'Projects', icon: (
@@ -13,6 +13,9 @@ const NAV = [
   ) },
   { id: '3d', label: '3D', icon: (
     <ThreeDIcon />
+  ) },
+  { id: 'mockup', label: 'Mockup', icon: (
+    <MockupIcon />
   ) },
   { id: 'web', label: 'Web', icon: (
     <WebIcon />

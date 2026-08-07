@@ -2,6 +2,7 @@
 
 import { useRef } from 'react';
 import { use3DStore } from '@/store/use3DStore';
+import { findDevice } from '@/three3d/devices';
 import { ControlRow } from './Controls';
 import type { ControlDef } from '@/lib/types';
 
@@ -17,9 +18,13 @@ export default function ModelControl() {
   const setModelScale = use3DStore((s) => s.setModelScale);
   const nudgeRot = use3DStore((s) => s.nudgeRot);
   const setModelOffset = use3DStore((s) => s.setModelOffset);
-  const centerModel = use3DStore((s) => s.centerModel);
+  const storeCenterModel = use3DStore((s) => s.centerModel);
   const setModelUrl = use3DStore((s) => s.setModelUrl);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Device mockups are already bbox-centred by fitAndCenter — recentring
+  // should return to (0, 0), not the bundled model's hand-tuned offset.
+  const centerModel = () => (findDevice(model.url) ? storeCenterModel(0, 0) : storeCenterModel());
 
   const onFile = (f: File | undefined) => {
     if (!f) return;
@@ -31,7 +36,7 @@ export default function ModelControl() {
     <>
       <div className="section-head"><span className="eyebrow">Model Control</span></div>
       <div className="section-body mc-body">
-        <button className="btn full" onClick={centerModel}>Center model</button>
+        <button className="btn full" onClick={() => centerModel()}>Center model</button>
 
         <ControlRow def={scaleDef} value={model.scale} onChange={(v) => setModelScale(v)} />
         <ControlRow def={offXDef} value={model.offsetX} onChange={(v) => setModelOffset(v, model.offsetY)} />
@@ -41,7 +46,7 @@ export default function ModelControl() {
         <div className="mc-rotate">
           <button className="mc-arrow up" title="Tilt up" onClick={() => nudgeRot(-STEP, 0)}>▲</button>
           <button className="mc-arrow left" title="Rotate left" onClick={() => nudgeRot(0, -STEP)}>◀</button>
-          <button className="mc-arrow center" title="Reset rotation" onClick={centerModel}>■</button>
+          <button className="mc-arrow center" title="Reset rotation" onClick={() => centerModel()}>■</button>
           <button className="mc-arrow right" title="Rotate right" onClick={() => nudgeRot(0, STEP)}>▶</button>
           <button className="mc-arrow down" title="Tilt down" onClick={() => nudgeRot(STEP, 0)}>▼</button>
         </div>

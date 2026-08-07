@@ -5,9 +5,14 @@
 //   node scripts/genExportSources.mjs
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { execSync } from 'node:child_process';
 
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+// `new URL(import.meta.url).pathname` yields "/C:/Users/..." on Windows — the
+// leading slash makes path.resolve prepend the cwd's drive, so ROOT came out as
+// "C:\C:\Users\..." and every read failed. fileURLToPath handles both platforms,
+// which is why this script had never actually run on Windows.
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
 
 // Trim the shared types to what the scene needs: drop the pixi-only Effect
@@ -41,7 +46,9 @@ execSync(
   `--alias:@=${ROOT} --outfile=${path.join(tmpDir, 'bundle.mjs')} --log-level=error`,
   { cwd: ROOT, stdio: 'inherit' },
 );
-const mod = await import(path.join(tmpDir, 'bundle.mjs'));
+// A bare Windows path ("C:\...") is not a legal ESM specifier — dynamic import
+// needs a file:// URL. Same portability gap as ROOT above.
+const mod = await import(pathToFileURL(path.join(tmpDir, 'bundle.mjs')).href);
 
 const manifest = {}; // file.ts -> { exports: string[], ids: string[] }
 for (const f of tmplFiles) {

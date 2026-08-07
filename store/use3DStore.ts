@@ -31,13 +31,38 @@ export interface ThreeDState {
   sunMaskScale: number;                     // window gobo size (0..100)
   sunMaskOffsetX: number;                   // window gobo offset (-100..100)
   sunMaskOffsetY: number;
+  // Mockup mode — device animation preset/speed, and the image/video composited
+  // onto the active device's "Screen" mesh (three3d/mockup.ts + ScreenContent).
+  mockupAnimation: string;
+  mockupSpeed: number;
+  // Keyed by screen SLOT ('phone' | 'laptop' | 'tablet' | 'display'), not by
+  // device: one phone screenshot then serves every phone, and switching device
+  // keeps the right artwork on screen instead of clearing it.
+  screenMedia: Record<string, { url: string; kind: 'image' | 'video' } | null>;
+  // How that media is laid into the device's screen. `width` is the one a site
+  // screenshot needs — fit the full width and let the tall page overflow, then
+  // scroll it with screenOffsetY — which a plain centre-crop `cover` can't do.
+  screenFit: 'cover' | 'width' | 'contain';
+  screenZoom: number;      // multiplier over the fitted size
+  screenOffsetX: number;   // 0 = left/top edge, 50 = centred, 100 = right/bottom
+  screenOffsetY: number;
   setEffect: (id: string) => void;
   setParam: (effectId: string, key: string, value: any) => void;
   setModelScale: (v: number) => void;
   nudgeRot: (dx: number, dy: number) => void;
   setModelOffset: (x: number, y: number) => void;
-  centerModel: () => void;
+  // Optional (x, y) lets Mockup mode re-centre a device at the origin — its
+  // meshes are already bbox-centred, unlike DEF_OFFSET which is tuned for the
+  // bundled dayse model.
+  centerModel: (x?: number, y?: number) => void;
   setModelUrl: (url: string | null, name: string | null) => void;
+  setMockupAnimation: (key: string) => void;
+  setMockupSpeed: (v: number) => void;
+  setScreenMedia: (slot: string, media: { url: string; kind: 'image' | 'video' } | null) => void;
+  clearScreenMedia: () => void;
+  setScreenFit: (fit: 'cover' | 'width' | 'contain') => void;
+  setScreenZoom: (v: number) => void;
+  setScreenOffset: (x: number, y: number) => void;
   setParts: (keys: string[]) => void;             // reported by the effect on load
   setPartFill: (key: string, patch: Partial<FillSpec>) => void;
   clearPartFill: (key: string) => void;
@@ -80,7 +105,7 @@ export const use3DStore = create<ThreeDState>((set) => ({
   parts: [],
   partFills: {},
   selectedPart: null,
-  bgFill: { type: 'linear', c1: '#c4cdd8', c2: '#3a3f47' },   // light bluish grey → dark grey
+  bgFill: { type: 'linear', c1: '#fbfbfc', c2: '#e6e8eb' },   // near-white → soft light grey
   bgTexAmount: 32,
   bgTexScale: 4.1,
   sunIntensity: 85,
@@ -89,6 +114,13 @@ export const use3DStore = create<ThreeDState>((set) => ({
   sunMaskScale: 46,
   sunMaskOffsetX: 0,
   sunMaskOffsetY: -2,
+  mockupAnimation: 'static',
+  mockupSpeed: 1,
+  screenMedia: {},
+  screenFit: 'cover',
+  screenZoom: 1,
+  screenOffsetX: 50,
+  screenOffsetY: 50,
   setEffect: (effectId) => set({ effectId }),
   setParam: (effectId, key, value) =>
     set((s) => ({
@@ -97,8 +129,18 @@ export const use3DStore = create<ThreeDState>((set) => ({
   setModelScale: (v) => set((s) => ({ model: { ...s.model, scale: v } })),
   nudgeRot: (dx, dy) => set((s) => ({ model: { ...s.model, rotX: s.model.rotX + dx, rotY: s.model.rotY + dy } })),
   setModelOffset: (x, y) => set((s) => ({ model: { ...s.model, offsetX: x, offsetY: y } })),
-  centerModel: () => set((s) => ({ model: { ...s.model, rotX: 0, rotY: 0, offsetX: DEF_OFFSET.x, offsetY: DEF_OFFSET.y, centerNonce: s.model.centerNonce + 1 } })),
+  centerModel: (x = DEF_OFFSET.x, y = DEF_OFFSET.y) => set((s) => ({ model: { ...s.model, rotX: 0, rotY: 0, offsetX: x, offsetY: y, centerNonce: s.model.centerNonce + 1 } })),
   setModelUrl: (url, name) => set((s) => ({ model: { ...s.model, url, name } })),
+  setMockupAnimation: (key) => set({ mockupAnimation: key }),
+  setMockupSpeed: (v) => set({ mockupSpeed: v }),
+  setScreenMedia: (slot, media) => set((s) => ({ screenMedia: { ...s.screenMedia, [slot]: media } })),
+  clearScreenMedia: () => set({ screenMedia: {} }),
+  // Switching to `width` also jumps to the top of the page: fitting a tall site
+  // screenshot by width and then leaving it centred hides the header, which is
+  // the one part that shot is usually chosen for.
+  setScreenFit: (fit) => set((s) => ({ screenFit: fit, screenOffsetY: fit === 'width' ? 0 : s.screenOffsetY })),
+  setScreenZoom: (v) => set({ screenZoom: v }),
+  setScreenOffset: (x, y) => set({ screenOffsetX: x, screenOffsetY: y }),
   setParts: (keys) => set((s) => {
     const same = keys.length === s.parts.length && keys.every((k, i) => k === s.parts[i]);
     if (same) return {};                 // same model re-init → keep fills
