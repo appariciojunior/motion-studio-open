@@ -12,6 +12,7 @@ import { fieldVariants } from './field';
 import { wipeVariants } from './wipe';
 import { globeVariants } from './globe';
 import { spiralVariants } from './spiral';
+import { spiralImagesVariants } from './spiralImages';
 import { tourVariants } from './tour';
 import { gravityVariants } from './gravity';
 import { parallaxVariants } from './parallax';
@@ -73,6 +74,7 @@ export const templateList: Template[] = [
   ...flickerRefVariants,
   ...globeVariants.slice(2),
   ...spiralVariants,
+  ...spiralImagesVariants,
   ...helix3dVariants.slice(1),
   ...tourVariants,
   ...gravityVariants,
