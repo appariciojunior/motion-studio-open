@@ -399,6 +399,12 @@ export function initMockup(
     // areas so the layout stays balanced on every phone texture resolution.
     const y = H * 0.036;
     ctx.save();
+    const scaleX = DEV?.statusBarScaleX ?? 1;
+    if (scaleX !== 1) {
+      ctx.translate(W * 0.5, 0);
+      ctx.scale(scaleX, 1);
+      ctx.translate(W * -0.5, 0);
+    }
     ctx.fillStyle = color;
     ctx.strokeStyle = color;
     ctx.lineCap = 'round';

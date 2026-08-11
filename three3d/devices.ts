@@ -28,6 +28,7 @@ export interface DeviceDef {
   screenAspect: number;    // the "Screen" mesh's own w/h — used to cover-fit uploaded media
   screenCornerFrac: number; // corner radius as a fraction of the screen's short side
   screenTextureFlipY?: boolean; // bundled meshes do not all share the same UV vertical direction
+  statusBarScaleX?: number; // compensates authored screen-UV stretching for the system overlay only
   slot: ScreenSlot;
   // The panel's real native pixels, shown in the UI so a screenshot can be
   // prepared at the right size. Verified against Apple's own tech specs.
@@ -47,7 +48,7 @@ export const DEVICES: DeviceDef[] = [
   },
   {
     key: 'iphoneair', label: 'iPhone Air', modelUrl: '/3d/devices/iphoneair.glb', fitHeight: 2.077,
-    screenAspect: 0.46, screenCornerFrac: 0.124, screenTextureFlipY: false, slot: 'phone', screenPx: [1260, 2736],
+    screenAspect: 0.46, screenCornerFrac: 0.124, screenTextureFlipY: false, statusBarScaleX: 0.9, slot: 'phone', screenPx: [1260, 2736],
     finishes: [{ key: 'skyblue', label: 'Sky Blue', hex: '#a9c3d6' }],
   },
   {
