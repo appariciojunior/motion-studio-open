@@ -665,10 +665,9 @@ export function apply3DAnimation(
   const finalScale = Math.max(0.05, userScale * pose.scale);
   pivot.scale.setScalar(finalScale);
 
-  // 5. Hardware Articulation — articulate upper laptop lid meshes if present
-  if (Math.abs(pose.lidAngle - DEFAULT_MOCKUP_POSE.lidAngle) > 0.5) {
-    articulateLaptopLid(pivot, pose.lidAngle);
-  }
+  // 5. Hardware Articulation — always apply it so returning to the authored
+  // open angle also restores the lid after a closing frame.
+  articulateLaptopLid(pivot, pose.lidAngle);
 
   // 6. Return Dynamic Studio Lighting choreography
   return {
@@ -686,18 +685,26 @@ export function apply3DAnimation(
  * and articulates the hinge smoothly according to `lidAngle` in degrees.
  */
 function articulateLaptopLid(pivot: THREE.Group, lidAngleDeg: number): void {
-  const angleRad = THREE.MathUtils.degToRad(lidAngleDeg);
+  // The MacBook GLB is authored already open at roughly 112°. `lidAngle` is a
+  // physical opening angle, not an absolute node rotation: closing therefore
+  // rotates the authored Lid forward by (112 - requested). Keep a tiny 3°
+  // mechanical gap so the screen glass never becomes coplanar with, or passes
+  // through, the keyboard/body at the closed end of the animation.
+  const requested = THREE.MathUtils.clamp(lidAngleDeg, 3, 115);
+  const delta = THREE.MathUtils.degToRad(DEFAULT_MOCKUP_POSE.lidAngle - requested);
   pivot.traverse((child) => {
     const nm = child.name.toLowerCase();
     if (
-      nm.includes('lid') ||
-      nm.includes('screen_group') ||
-      nm.includes('upper') ||
-      nm.includes('top_case') ||
+      nm === 'lid' ||
+      nm === 'screen_group' ||
+      nm === 'upper' ||
+      nm === 'top_case' ||
       nm === 'lid_hinge'
     ) {
-      // Articulate around X-axis hinge
-      child.rotation.x = angleRad;
+      if (child.userData.mockupLidBaseRotationX === undefined) {
+        child.userData.mockupLidBaseRotationX = child.rotation.x;
+      }
+      child.rotation.x = child.userData.mockupLidBaseRotationX + delta;
     }
   });
 }
