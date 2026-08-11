@@ -380,6 +380,16 @@ export function initMockup(
     if (screenCanvasTex) screenCanvasTex.needsUpdate = true;
   }
 
+  function drawEmptyScreenFrame() {
+    if (!screenCanvas || !screenCtx) return;
+    const W = screenCanvas.width, H = screenCanvas.height;
+    screenCtx.clearRect(0, 0, W, H);
+    screenCtx.fillStyle = '#ffffff';
+    screenCtx.fillRect(0, 0, W, H);
+    drawIPhoneStatusBar(screenCtx, W, H);
+    if (screenCanvasTex) screenCanvasTex.needsUpdate = true;
+  }
+
   function drawIPhoneStatusBar(ctx: CanvasRenderingContext2D, W: number, H: number) {
     const status = opts.getScreenStatus?.();
     if (!status || status.mode === 'off') return;
@@ -764,13 +774,14 @@ export function initMockup(
 
     // screen content — only re-touch when the media identity actually changes
     const media = opts.getScreenMedia?.() ?? null;
-    const mkey2 = media ? `${media.kind}|${media.url}` : '';
+    const screenStatus = opts.getScreenStatus?.();
+    const hasEmptyStatusScreen = DEV?.slot === 'phone' && screenStatus?.mode !== 'off';
+    const mkey2 = media ? `${media.kind}|${media.url}` : hasEmptyStatusScreen ? 'empty-status-screen' : '';
     if (screenMesh && mkey2 !== screenKey) {
       screenKey = mkey2;
       if (screenVideoEl) { screenVideoEl.pause(); screenVideoEl.removeAttribute('src'); screenVideoEl.load(); screenVideoEl = null; }
-      if (media) {
+      if (media || hasEmptyStatusScreen) {
         const aspect = DEV?.screenAspect ?? 16 / 9;
-        const cornerFrac = DEV?.screenCornerFrac ?? 0;
         ensureScreenCanvas(aspect);
         if (!screenCanvasTex) {
           screenCanvasTex = new THREE.CanvasTexture(screenCanvas!);
@@ -784,7 +795,11 @@ export function initMockup(
           screenCanvasTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
         }
         setScreenMaterial(makeScreenMaterial(screenCanvasTex));
-        if (media.kind === 'video') {
+        if (!media) {
+          screenImageEl = null;
+          screenXformKey = '';
+          drawEmptyScreenFrame();
+        } else if (media.kind === 'video') {
           const vid = document.createElement('video');
           vid.src = media.url; vid.crossOrigin = 'anonymous'; vid.loop = true; vid.muted = true; vid.playsInline = true;
           vid.play().catch(() => {});
@@ -815,6 +830,12 @@ export function initMockup(
       if (xkey !== screenXformKey) {
         screenXformKey = xkey;
         drawScreenFrame(screenImageEl, DEV?.screenAspect ?? 16 / 9, DEV?.screenCornerFrac ?? 0);
+      }
+    } else if (hasEmptyStatusScreen) {
+      const xkey = `empty|${screenStatus?.mode}|${screenStatus?.time}|${screenStatus?.battery}|${screenStatus?.signal}`;
+      if (xkey !== screenXformKey) {
+        screenXformKey = xkey;
+        drawEmptyScreenFrame();
       }
     }
     // Screen Brightness — the display is unlit (MeshBasicMaterial), so no light
