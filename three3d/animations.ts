@@ -578,19 +578,26 @@ export function apply3DAnimation(
   userScale: number = 1.0,
   easingMode: 'preset' | 'smooth' | 'linear' = 'preset',
   motionStrength: number = 1,
+  userRotZ: number = 0,
+  userOffsetZ: number = 0,
+  userFov: number = DEFAULT_MOCKUP_POSE.fov,
+  userLidAngle: number = DEFAULT_MOCKUP_POSE.lidAngle,
 ): MockupLightingState {
   const preset = MOCKUP_ANIMATIONS.find((a) => a.key === animKey);
 
   // If preset is 'static' or not found, let user orbit freely with mouse
   if (!preset || animKey === 'static') {
     controls.enabled = true;
+    camera.fov = Math.max(15, Math.min(90, userFov));
+    camera.updateProjectionMatrix();
+    articulateLaptopLid(pivot, userLidAngle);
     return {
       keyLightIntensity: 1.0,
       keyLightAzimuth: 45,
       keyLightElevation: 45,
       fillLightIntensity: 1.0,
       envRotation: 0,
-      lidAngle: DEFAULT_MOCKUP_POSE.lidAngle,
+      lidAngle: userLidAngle,
     };
   }
 
@@ -606,11 +613,16 @@ export function apply3DAnimation(
   // A single intensity control scales every authored channel coherently. This
   // keeps camera, product and lighting choreography in phase instead of making
   // users tune twenty individual tracks just to make a preset subtler.
-  const pose = interpolatePose(
+  const interpolatedPose = interpolatePose(
     DEFAULT_MOCKUP_POSE,
     animatedPose,
     Math.max(0, Math.min(1.5, motionStrength)),
   );
+  const pose = {
+    ...interpolatedPose,
+    fov: Math.max(15, Math.min(90, userFov)),
+    lidAngle: animKey === 'laptop_lid_open' ? interpolatedPose.lidAngle : userLidAngle,
+  };
 
   // 1. Update Camera FOV and Projection Matrix if changed
   if (Math.abs(camera.fov - pose.fov) > 0.1) {
@@ -653,13 +665,13 @@ export function apply3DAnimation(
   pivot.rotation.set(
     userRotX + THREE.MathUtils.degToRad(pose.tiltX),
     userRotY + THREE.MathUtils.degToRad(pose.tiltY),
-    THREE.MathUtils.degToRad(pose.tiltZ)
+    userRotZ + THREE.MathUtils.degToRad(pose.tiltZ)
   );
 
   pivot.position.set(
     (userOffsetX || 0) + pose.posX,
     (userOffsetY || 0) + pose.posY,
-    pose.posZ
+    (userOffsetZ || 0) + pose.posZ
   );
 
   const finalScale = Math.max(0.05, userScale * pose.scale);

@@ -2,7 +2,6 @@
 
 import { getThreeEffect, threeEffects } from '@/three3d';
 import { use3DStore } from '@/store/use3DStore';
-import { MOCKUP_ANIMATIONS } from '@/three3d/animations';
 import { ControlRow } from './Controls';
 
 // Right column in 3D mode — renders the active 3D effect's control groups
@@ -16,7 +15,6 @@ export default function Effect3DControls({ effectId: forcedEffectId }: { effectI
   const setParam = use3DStore((s) => s.setParam);
   const resetEffectSettings = use3DStore((s) => s.resetEffectSettings);
   const mockupAnimation = use3DStore((s) => s.mockupAnimation || 'static');
-  const setMockupAnimation = use3DStore((s) => s.setMockupAnimation);
   const mockupSpeed = use3DStore((s) => s.mockupSpeed || 1);
   const setMockupSpeed = use3DStore((s) => s.setMockupSpeed);
   const mockupEasing = use3DStore((s) => s.mockupEasing);
@@ -33,21 +31,6 @@ export default function Effect3DControls({ effectId: forcedEffectId }: { effectI
       <div className="section-body e3d-controls">
         <div className="e3d-group">
           <div className="e3d-group-title">Camera Motion</div>
-          <div className="ctl-row">
-            <label className="ctl-label">Preset</label>
-            <div className="pills" style={{ flexWrap: 'wrap', gap: 4 }}>
-              {MOCKUP_ANIMATIONS.map((a) => (
-                <button
-                  key={a.key}
-                  className={`pill ${mockupAnimation === a.key ? 'active' : ''}`}
-                  onClick={() => setMockupAnimation(a.key)}
-                  style={{ fontSize: 11 }}
-                >
-                  {a.label}
-                </button>
-              ))}
-            </div>
-          </div>
           <div className="ctl-row">
             <label className="ctl-label">Speed</label>
             <div className="pills">
