@@ -411,34 +411,42 @@ export function initMockup(
     const signal = Math.max(0, Math.min(4, Math.round(status.signal)));
     const barW = W * 0.008;
     const gap = W * 0.004;
-    const sx = W * 0.748;
+    const sx = W * 0.744;
+    const signalBottom = y + W * 0.012;
+    const signalHeights = [0.009, 0.014, 0.019, 0.024].map((v) => W * v);
     for (let i = 0; i < 4; i++) {
-      const h = H * (0.0038 + i * 0.0022);
+      const h = signalHeights[i];
       ctx.globalAlpha = i < signal ? 1 : 0.25;
-      ctx.fillRect(sx + i * (barW + gap), y + H * 0.006 - h, barW, h);
+      ctx.beginPath();
+      ctx.roundRect(sx + i * (barW + gap), signalBottom - h, barW, h, barW * 0.42);
+      ctx.fill();
     }
     ctx.globalAlpha = 1;
 
-    const wx = W * 0.825;
-    ctx.lineWidth = Math.max(2, W * 0.0055);
-    ctx.beginPath(); ctx.arc(wx, y + H * 0.002, W * 0.026, Math.PI * 1.18, Math.PI * 1.82); ctx.stroke();
-    ctx.beginPath(); ctx.arc(wx, y + H * 0.004, W * 0.015, Math.PI * 1.2, Math.PI * 1.8); ctx.stroke();
-    ctx.beginPath(); ctx.arc(wx, y + H * 0.008, W * 0.004, 0, Math.PI * 2); ctx.fill();
+    const wx = W * 0.829;
+    const wy = y + W * 0.008;
+    ctx.lineWidth = Math.max(2, W * 0.005);
+    ctx.beginPath(); ctx.arc(wx, wy, W * 0.027, Math.PI * 1.18, Math.PI * 1.82); ctx.stroke();
+    ctx.beginPath(); ctx.arc(wx, wy + W * 0.006, W * 0.0155, Math.PI * 1.2, Math.PI * 1.8); ctx.stroke();
+    ctx.beginPath(); ctx.arc(wx, wy + W * 0.014, W * 0.004, 0, Math.PI * 2); ctx.fill();
 
-    const bx = W * 0.868;
-    const by = y - H * 0.008;
-    const bw = W * 0.057;
-    const bh = H * 0.016;
-    const radius = Math.max(2, W * 0.006);
-    ctx.lineWidth = Math.max(2, W * 0.004);
+    const bx = W * 0.877;
+    const bw = W * 0.058;
+    const bh = W * 0.026;
+    const by = y - bh * 0.5;
+    const radius = Math.max(2, W * 0.0065);
+    ctx.lineWidth = Math.max(2, W * 0.0035);
     ctx.globalAlpha = 0.9;
     ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, radius); ctx.stroke();
-    ctx.fillRect(bx + bw + W * 0.004, by + bh * 0.31, W * 0.005, bh * 0.38);
+    ctx.beginPath();
+    ctx.roundRect(bx + bw + W * 0.004, by + bh * 0.29, W * 0.005, bh * 0.42, W * 0.002);
+    ctx.fill();
     ctx.globalAlpha = 1;
     const level = Math.max(0, Math.min(100, status.battery)) / 100;
     if (level > 0) {
       ctx.beginPath();
-      ctx.roundRect(bx + W * 0.005, by + H * 0.003, Math.max(1, (bw - W * 0.01) * level), bh - H * 0.006, radius * 0.55);
+      const inset = W * 0.005;
+      ctx.roundRect(bx + inset, by + inset, Math.max(1, (bw - inset * 2) * level), bh - inset * 2, radius * 0.55);
       ctx.fill();
     }
     ctx.restore();
