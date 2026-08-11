@@ -113,6 +113,7 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
   display: grid; place-items: center;
 }
 .rail-item {
+  position: relative;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
   height: 52px; border-radius: var(--r-nav); color: var(--fg-faint);
   transition: color var(--t-fast), background var(--t-fast);
@@ -131,6 +132,39 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
 .rail-item.rail-action:hover { color: var(--fg); background: var(--card-inset); }
 .rail-ico { width: 20px; height: 20px; display: grid; place-items: center; }
 .rail-label { font-size: 8px; line-height: 10px; font-weight: 600; }
+.rail-exp-chevron {
+  position: absolute; right: 4px; top: 16px; width: 10px; height: 10px;
+  display: grid; place-items: center; transition: transform var(--t-fast);
+}
+.rail-exp-chevron.open { transform: rotate(180deg); }
+.rail-experimental-items {
+  width: 100%; max-height: 0; margin: 0; overflow: hidden;
+  pointer-events: none;
+  transition: max-height 340ms cubic-bezier(.22, 1, .36, 1), margin 340ms cubic-bezier(.22, 1, .36, 1);
+}
+.rail-experimental-items.open {
+  max-height: 162px; margin-bottom: 4px; pointer-events: auto;
+}
+.rail-experimental-inner {
+  opacity: 0; transform: translateY(-34px);
+  transition: opacity 180ms ease, transform 340ms cubic-bezier(.22, 1, .36, 1);
+}
+.rail-experimental-items.open .rail-experimental-inner {
+  opacity: 1; transform: translateY(0);
+  animation: rail-experiments-open 340ms cubic-bezier(.22, 1, .36, 1) both;
+}
+.rail-experimental-items.closed .rail-experimental-inner {
+  animation: rail-experiments-close 340ms cubic-bezier(.55, 0, 1, .45) both;
+}
+@keyframes rail-experiments-open {
+  from { opacity: 0; transform: translateY(-24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes rail-experiments-close {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-24px); }
+}
+.rail-item.rail-subitem { width: 100%; height: 52px; margin-bottom: 2px; }
 .rail-bottom { padding: 8px; border-top: 1px solid var(--line); }
 .rail-theme { width: 100%; margin: 0; }
 

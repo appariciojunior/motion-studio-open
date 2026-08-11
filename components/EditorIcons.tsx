@@ -36,6 +36,10 @@ export function BoardIcon(props: EditorIconProps) {
   return <svg {...iconProps(props)}><rect x="2.5" y="4.5" width="4.5" height="11" rx="1.2" stroke="currentColor" strokeWidth="1.5"/><rect x="8" y="4.5" width="4" height="11" rx="1.2" stroke="currentColor" strokeWidth="1.5" opacity="0.65"/><rect x="13" y="4.5" width="4.5" height="11" rx="1.2" stroke="currentColor" strokeWidth="1.5" opacity="0.4"/></svg>;
 }
 
+export function ExperimentalsIcon(props: EditorIconProps) {
+  return <svg {...iconProps(props)}><path d="M7.5 2.75h5M8.5 2.75v4.5l-4.25 7.1A1.9 1.9 0 005.9 17.25h8.2a1.9 1.9 0 001.65-2.9l-4.25-7.1v-4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M6.5 13h7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" opacity=".55"/></svg>;
+}
+
 export function MockupIcon(props: EditorIconProps) {
   return <svg {...iconProps(props)}><rect x="6" y="2" width="8" height="16" rx="1.8" stroke="currentColor" strokeWidth="1.5"/><path d="M8.5 15.5h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>;
 }

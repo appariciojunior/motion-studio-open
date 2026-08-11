@@ -12,6 +12,7 @@ import { fieldVariants } from './field';
 import { wipeVariants } from './wipe';
 import { globeVariants } from './globe';
 import { spiralVariants } from './spiral';
+import { spiralImagesVariants } from './spiralImages';
 import { tourVariants } from './tour';
 import { gravityVariants } from './gravity';
 import { parallaxVariants } from './parallax';
@@ -36,6 +37,7 @@ import { surfaceVariants } from './surface';
 import { premium3dTemplates } from './premium3d';
 import { showcaseVariants } from './showcase';
 import { helix3dVariants } from './helix3d';
+import { interactiveCardsVariants } from './interactiveCards';
 
 
 // The reference's complete "3D & Perspective" shelf, in the same order.
@@ -57,6 +59,7 @@ const perspective3dTemplates: Template[] = [
 // Order follows the reference catalogue's sidebar.
 export const templateList: Template[] = [
   ...perspective3dTemplates,
+  ...interactiveCardsVariants,
   ...carouselVariants,
   ...carouselRefVariants,
   ...orbitVariants,
@@ -73,6 +76,7 @@ export const templateList: Template[] = [
   ...flickerRefVariants,
   ...globeVariants.slice(2),
   ...spiralVariants,
+  ...spiralImagesVariants,
   ...helix3dVariants.slice(1),
   ...tourVariants,
   ...gravityVariants,
