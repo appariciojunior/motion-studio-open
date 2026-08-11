@@ -615,6 +615,92 @@ export function initMockup(
     }
   }
 
+  function markIPhoneAirRearPanelAsEnclosure() {
+    if (DEV?.key !== 'iphoneair') return;
+    for (let i = 0; i < meshList.length; i++) {
+      const mesh = meshList[i];
+      if (!mesh.visible) continue;
+      const geo = mesh.geometry;
+      if (!geo.boundingBox) geo.computeBoundingBox();
+      if (!geo.boundingBox) continue;
+      const size = geo.boundingBox.getSize(new THREE.Vector3());
+      const isStableRearPanel = size.x >= 0.065
+        && size.y >= 0.14
+        && geo.boundingBox.max.z <= 0.001;
+      if (isStableRearPanel) (materials[i] as any).userData.isEnclosure = true;
+    }
+  }
+
+  function isIPhoneAirSurfaceLayer(mesh: THREE.Mesh): boolean {
+    if (DEV?.key !== 'iphoneair') return false;
+    const geo = mesh.geometry;
+    if (!geo.boundingBox) geo.computeBoundingBox();
+    if (!geo.boundingBox) return false;
+    const size = geo.boundingBox.getSize(new THREE.Vector3());
+    const dims = [size.x, size.y, size.z].sort((a, b) => a - b);
+    // The Air GLB contains several display/decal shells with a zero-to-0.5 mm
+    // local thickness and a phone-sized face. Letting those layers cast onto
+    // and receive from each other produces unstable shadow stripes in motion.
+    return dims[0] <= 0.0006 && dims[1] >= 0.005 && dims[2] >= 0.02;
+  }
+
+  function isIPhoneAirRedundantRearGlass(mesh: THREE.Mesh, mat: THREE.Material & { userData: Record<string, any> }): boolean {
+    if (DEV?.key !== 'iphoneair') return false;
+    const geo = mesh.geometry;
+    if (!geo.boundingBox) geo.computeBoundingBox();
+    if (!geo.boundingBox) return false;
+    const size = geo.boundingBox.getSize(new THREE.Vector3());
+    const fullRearPanel = size.x >= 0.065 && size.y >= 0.14 && geo.boundingBox.max.z <= 0.001;
+    const metallicOverlay = 'metalness' in mat && Number((mat as THREE.MeshStandardMaterial).metalness) > 0.05;
+    // The Air ships one stable opaque backing plus two full-size overlays: a
+    // metallic shell and a transparent BLEND shell. Both overlays expose their
+    // triangulation over the backing. Smaller transparent/metallic meshes are
+    // camera and sensor parts and therefore do not match `fullRearPanel`.
+    // Keep one authored transparent coat above the metallic enclosure so the
+    // Air retains its glass depth and highlights. Its depth writes are disabled
+    // below, so it cannot fight the enclosure surface. Only the redundant
+    // opaque, non-metallic backing is removed.
+    return fullRearPanel && !mat.userData.origTransparent && !metallicOverlay;
+  }
+
+  function isIPhoneAirRedundantLogoOverlay(mesh: THREE.Mesh, mat: THREE.Material & { userData: Record<string, any> }): boolean {
+    if (DEV?.key !== 'iphoneair' || mat.userData.origTransparent) return false;
+    const geo = mesh.geometry;
+    const positions = geo.getAttribute('position');
+    // The Air GLB contains two identical Apple-logo silhouettes. Keep the
+    // upper BLEND copy (now rendered without depth writes) and remove the lower
+    // opaque duplicate that sits beneath the recolourable rear panel.
+    return positions?.count === 169 && geo.index?.count === 498;
+  }
+
+  function stabilizeIPhoneAirLogo(mesh: THREE.Mesh, mat: THREE.MeshStandardMaterial & { userData: Record<string, any> }) {
+    if (DEV?.key !== 'iphoneair') return;
+    const geo = mesh.geometry;
+    const positions = geo.getAttribute('position');
+    const isAppleLogo = positions?.count === 169 && geo.index?.count === 498;
+    if (!isAppleLogo || !mat.userData.origTransparent) return;
+
+    // Reuse the Air's correctly positioned logo geometry, but give it the
+    // stable dark metallic treatment used by the 17-style finish. Copying the
+    // 17 mesh itself would also copy incompatible model-space transforms.
+    mat.color.set('#202328');
+    mat.metalness = 0.58;
+    mat.roughness = 0.34;
+    mat.transparent = true;
+    mat.opacity = 0.96;
+    mat.depthWrite = false;
+    mat.depthTest = true;
+    mat.polygonOffset = true;
+    mat.polygonOffsetFactor = -2;
+    mat.polygonOffsetUnits = -2;
+    mat.userData.origColor = mat.color.clone();
+    mat.userData.origOpacity = 0.96;
+    mat.userData.origTransparent = true;
+    mat.userData.origDepthWrite = false;
+    mat.userData.isEnclosure = false;
+    mesh.renderOrder = 50;
+  }
+
   const pivot = new THREE.Group();
   scene.add(pivot);
   let model: THREE.Object3D | null = null;
@@ -639,6 +725,9 @@ export function initMockup(
         // smooth, so the noise is mixed toward a floor instead.
         mat.userData.origRoughness = typeof mat.roughness === 'number' ? mat.roughness : 1;
         mat.userData.srcRoughnessMap = mat.roughnessMap ?? null;
+        mat.userData.origOpacity = typeof mat.opacity === 'number' ? mat.opacity : 1;
+        mat.userData.origTransparent = !!mat.transparent;
+        mat.userData.origDepthWrite = mat.depthWrite;
         // Deliberately NOT raising these textures' anisotropy. Doing so was
         // tried and reverted: the device's own baked maps (the Apple logo most
         // visibly) are small, and sharpening them against the supersampled
@@ -649,11 +738,22 @@ export function initMockup(
         mesh.material = mat;
         mesh.castShadow = true;
         mesh.receiveShadow = true;
+        // Resolve the authored duplicate before tuning the retained logo so
+        // the selection always uses the GLB's original transparency metadata.
+        const hideLogoDuplicate = isIPhoneAirRedundantLogoOverlay(mesh, mat);
+        stabilizeIPhoneAirLogo(mesh, mat);
+        if (isIPhoneAirRedundantRearGlass(mesh, mat)) mesh.visible = false;
+        if (hideLogoDuplicate) mesh.visible = false;
+        if (isIPhoneAirSurfaceLayer(mesh)) {
+          mesh.castShadow = false;
+          mesh.receiveShadow = false;
+        }
         materials.push(mat);
         meshList.push(mesh);
         if (!keys.includes(key)) keys.push(key);
       });
       markEnclosureMaterials();
+      markIPhoneAirRearPanelAsEnclosure();
       modelHalf = fitAndCenter(model, MODEL_SIZE);
       const box = new THREE.Box3().setFromObject(model);
       modelBottom = box.min.y;
@@ -734,6 +834,12 @@ export function initMockup(
       const mkey = m.userData.partKey as string;
       if (mkey === 'Screen') continue;   // user content — own material, not device-tinted
       const partFill = partFills[mkey];
+      // A phone's global colour represents its enclosure finish, not every
+      // component in the GLB. Camera lenses, microphones, sensors, buttons and
+      // glass must retain their authored material even when Model Materials is
+      // disabled. Explicit per-part fills remain available as an intentional
+      // override.
+      const preservePhoneDetail = DEV?.slot === 'phone' && !m.userData.isEnclosure && !partFill;
 
       if (partFill) {
         const hash = `${partFill.type}|${partFill.c1}|${partFill.c2}`;
@@ -756,6 +862,7 @@ export function initMockup(
             Math.min(1, Math.max(0, m.userData.origL * lScale)),
           );
         }
+        else if (preservePhoneDetail) m.color.copy(m.userData.origColor);
         else if (useTex) m.color.copy(m.userData.hasMap ? WHITE : m.userData.origColor);
         else m.color.copy(tmpColor);
       }
@@ -764,7 +871,9 @@ export function initMockup(
       // shipped finish's own colour, so keeping it would tint the new finish
       // towards the old one instead of replacing it.
       const repainted = isFinished && m.userData.isEnclosure && !partFill;
-      const desiredMap = (partFill || repainted) ? null : (useTex && m.userData.hasMap ? m.userData.srcMap : null);
+      const desiredMap = (partFill || repainted)
+        ? null
+        : ((useTex || preservePhoneDetail) && m.userData.hasMap ? m.userData.srcMap : null);
       if (m.map !== desiredMap) { m.map = desiredMap; m.needsUpdate = true; }
 
       if (selected && mkey === selected) { m.emissive.setRGB(0.12, 0.35, 0.6); m.emissiveIntensity = 1; }
@@ -784,8 +893,16 @@ export function initMockup(
       }
 
       m.wireframe = wire;
-      m.opacity = op;
-      m.transparent = op < 1;
+      // Preserve authored alpha materials (most visibly the iPhone Air rear
+      // glass). Replacing GLB `BLEND` with an opaque, depth-writing material on
+      // every frame made its stacked rear shells fight in the depth buffer.
+      const authoredOpacity = Number(m.userData.origOpacity ?? 1);
+      const authoredTransparent = !!m.userData.origTransparent;
+      m.opacity = authoredOpacity * op;
+      m.transparent = authoredTransparent || m.opacity < 0.999;
+      m.depthWrite = authoredTransparent
+        ? false
+        : (m.userData.origDepthWrite !== false && m.opacity >= 0.999);
       if (m.flatShading !== flat) { m.flatShading = flat; m.needsUpdate = true; }
     }
 
