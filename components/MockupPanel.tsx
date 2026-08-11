@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { use3DStore, defaultModelFor } from '@/store/use3DStore';
 import { DEVICES, findDevice, selectDevice } from '@/three3d/devices';
 import { MOCKUP_ANIMATIONS } from '@/three3d/animations';
-import { DeviceThumb, MockupAnimThumb } from './MockupThumb';
+import { MockupAnimThumb } from './MockupThumb';
 
 const Chevron = () => (
   <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
@@ -19,12 +19,6 @@ export default function MockupPanel() {
   const modelUrl = use3DStore((s) => (s.models[s.effectId] ?? defaultModelFor(s.effectId)).url);
   const mockupAnimation = use3DStore((s) => s.mockupAnimation || 'static');
   const setMockupAnimation = use3DStore((s) => s.setMockupAnimation);
-  const mockupSpeed = use3DStore((s) => s.mockupSpeed || 1);
-  const setMockupSpeed = use3DStore((s) => s.setMockupSpeed);
-  const mockupEasing = use3DStore((s) => s.mockupEasing);
-  const setMockupEasing = use3DStore((s) => s.setMockupEasing);
-  const motionStrength = use3DStore((s) => s.mockupMotionStrength);
-  const setMotionStrength = use3DStore((s) => s.setMockupMotionStrength);
 
   const activeDevice = findDevice(modelUrl);
   const [openDevice, setOpenDevice] = useState<string | null>(activeDevice?.key ?? null);
@@ -81,44 +75,6 @@ export default function MockupPanel() {
                         <span className="tpl-card-label">{anim.label}</span>
                       </button>
                     ))}
-                  </div>
-
-                  {/* ── Speed pills ── */}
-                  <div style={{ padding: '8px 4px 4px' }}>
-                    <div className="ctl-row">
-                      <label className="ctl-label">Speed</label>
-                      <div className="pills">
-                        {[0.5, 1, 1.5, 2].map((sp) => (
-                          <button
-                            key={sp}
-                            className={`pill ${mockupSpeed === sp ? 'active' : ''}`}
-                            onClick={(e) => { e.stopPropagation(); setMockupSpeed(sp); }}
-                          >
-                            {sp}x
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="ctl-row" style={{ marginTop: 8 }}>
-                      <label className="ctl-label">Motion</label>
-                      <div className="pills">
-                        {[0.5, 0.75, 1, 1.25].map((amount) => (
-                          <button key={amount} className={`pill ${motionStrength === amount ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); setMotionStrength(amount); }}>
-                            {Math.round(amount * 100)}%
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="ctl-row" style={{ marginTop: 8 }}>
-                      <label className="ctl-label">Curve</label>
-                      <div className="pills">
-                        {([['preset', 'Natural'], ['smooth', 'Smooth'], ['linear', 'Linear']] as const).map(([value, label]) => (
-                          <button key={value} className={`pill ${mockupEasing === value ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); setMockupEasing(value); }}>
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
                   </div>
                 </div>
               )}
