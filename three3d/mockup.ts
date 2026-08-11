@@ -374,8 +374,67 @@ export function initMockup(
     const dy = (H - dh) * (t.offsetY / 100);
     ctx.drawImage(source, dx, dy, dw, dh);
 
+    if (DEV?.slot === 'phone') drawIPhoneStatusBar(ctx, W, H);
+
     ctx.restore();
     if (screenCanvasTex) screenCanvasTex.needsUpdate = true;
+  }
+
+  function drawIPhoneStatusBar(ctx: CanvasRenderingContext2D, W: number, H: number) {
+    const status = opts.getScreenStatus?.();
+    if (!status || status.mode === 'off') return;
+    const color = status.mode === 'light' ? '#ffffff' : '#050505';
+    const y = H * 0.035;
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.strokeStyle = color;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    // San Francisco is not guaranteed on every platform; the system stack is
+    // deliberately used so the exported frame remains deterministic offline.
+    ctx.font = `600 ${Math.round(H * 0.018)}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(status.time.trim() || '9:41', W * 0.075, y);
+
+    // Cellular signal: four ascending rounded bars.
+    const signal = Math.max(0, Math.min(4, Math.round(status.signal)));
+    const barW = W * 0.009;
+    const gap = W * 0.005;
+    const sx = W * 0.778;
+    for (let i = 0; i < 4; i++) {
+      const h = H * (0.004 + i * 0.0024);
+      ctx.globalAlpha = i < signal ? 1 : 0.25;
+      ctx.fillRect(sx + i * (barW + gap), y + H * 0.006 - h, barW, h);
+    }
+    ctx.globalAlpha = 1;
+
+    // Wi-Fi glyph drawn as two arcs plus the centre dot.
+    const wx = W * 0.862;
+    ctx.lineWidth = Math.max(2, W * 0.006);
+    ctx.beginPath(); ctx.arc(wx, y + H * 0.002, W * 0.029, Math.PI * 1.18, Math.PI * 1.82); ctx.stroke();
+    ctx.beginPath(); ctx.arc(wx, y + H * 0.004, W * 0.017, Math.PI * 1.2, Math.PI * 1.8); ctx.stroke();
+    ctx.beginPath(); ctx.arc(wx, y + H * 0.008, W * 0.004, 0, Math.PI * 2); ctx.fill();
+
+    // Battery outline, terminal and a level-aware fill.
+    const bx = W * 0.902;
+    const by = y - H * 0.009;
+    const bw = W * 0.061;
+    const bh = H * 0.018;
+    const radius = Math.max(2, W * 0.006);
+    ctx.lineWidth = Math.max(2, W * 0.004);
+    ctx.globalAlpha = 0.9;
+    ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, radius); ctx.stroke();
+    ctx.fillRect(bx + bw + W * 0.004, by + bh * 0.31, W * 0.005, bh * 0.38);
+    ctx.globalAlpha = 1;
+    const level = Math.max(0, Math.min(100, status.battery)) / 100;
+    if (level > 0) {
+      ctx.beginPath();
+      ctx.roundRect(bx + W * 0.005, by + H * 0.003, Math.max(1, (bw - W * 0.01) * level), bh - H * 0.006, radius * 0.55);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   // ── The cover glass over the display ────────────────────────────────────
@@ -728,7 +787,8 @@ export function initMockup(
       drawScreenFrame(screenVideoEl, DEV?.screenAspect ?? 16 / 9, DEV?.screenCornerFrac ?? 0);
     } else if (screenImageEl) {
       const t = opts.getScreenTransform?.() ?? { fit: 'cover', zoom: 1, offsetX: 50, offsetY: 50 };
-      const xkey = `${t.fit}|${t.zoom}|${t.offsetX}|${t.offsetY}`;
+      const status = opts.getScreenStatus?.();
+      const xkey = `${t.fit}|${t.zoom}|${t.offsetX}|${t.offsetY}|${status?.mode}|${status?.time}|${status?.battery}|${status?.signal}`;
       if (xkey !== screenXformKey) {
         screenXformKey = xkey;
         drawScreenFrame(screenImageEl, DEV?.screenAspect ?? 16 / 9, DEV?.screenCornerFrac ?? 0);
@@ -744,8 +804,8 @@ export function initMockup(
     const md = opts.getModel?.();
     if (md) {
       pivot.scale.setScalar(Math.max(0.05, md.scale));
-      pivot.rotation.set(md.rotX, md.rotY, 0);
-      pivot.position.set(md.offsetX ?? 0, md.offsetY ?? 0, 0);
+      pivot.rotation.set(md.rotX, md.rotY, md.rotZ ?? 0);
+      pivot.position.set(md.offsetX ?? 0, md.offsetY ?? 0, md.offsetZ ?? 0);
       sun.target.position.set(md.offsetX ?? 0, md.offsetY ?? 0, 0);
       sun.target.updateMatrixWorld();
       if (md.centerNonce !== lastCenterNonce) {
@@ -776,6 +836,10 @@ export function initMockup(
       md?.offsetX ?? 0,
       md?.offsetY ?? 0,
       md?.scale ?? 1.0,
+      md?.rotZ ?? 0,
+      md?.offsetZ ?? 0,
+      Number(p.fieldOfView ?? 42),
+      Number(p.lidAngle ?? 112),
     );
 
     // Dynamic studio lighting choreography synced with camera animation
@@ -835,7 +899,7 @@ export function initMockup(
     const duration = Math.max(0.1, sceneState.duration);
     const fps = Math.max(1, sceneState.fps);
     const progress = ((frame / (duration * fps)) * (animState.mockupSpeed || 1)) % 1;
-    const md = opts.getModel?.() ?? { scale: 1, rotX: 0, rotY: 0, offsetX: 0, offsetY: 0, centerNonce: 0 };
+    const md = opts.getModel?.() ?? { scale: 1, rotX: 0, rotY: 0, rotZ: 0, offsetX: 0, offsetY: 0, offsetZ: 0, centerNonce: 0 };
     const lightState = apply3DAnimation(
       animState.mockupAnimation || 'static',
       progress,
@@ -852,6 +916,10 @@ export function initMockup(
       md?.offsetX ?? 0,
       md?.offsetY ?? 0,
       md?.scale ?? 1.0,
+      md?.rotZ ?? 0,
+      md?.offsetZ ?? 0,
+      Number(p.fieldOfView ?? 42),
+      Number(p.lidAngle ?? 112),
     );
     // The animation preset's own light choreography, PLUS the user's Light
     // Direction — added as an offset rather than replacing it, so dragging the

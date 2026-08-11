@@ -6,6 +6,13 @@ import type { ControlGroup } from './asciiControls';
 // and reflection strength. No paint/toon-specific fields (see cartoonControls).
 export const mockupGroups: ControlGroup[] = [
   {
+    title: 'Camera & Hardware',
+    controls: [
+      { key: 'fieldOfView', label: 'Field of View', type: 'slider', min: 15, max: 90, step: 1, default: 42, unit: '°' },
+      { key: 'lidAngle', label: 'Laptop Lid', type: 'slider', min: 3, max: 115, step: 1, default: 112, unit: '°' },
+    ],
+  },
+  {
     title: 'Material',
     controls: [
       { key: 'useModelColor', label: 'Use Model Materials', type: 'toggle', options: ['On', 'Off'], default: 'On' },

@@ -9,6 +9,9 @@ import type { ControlDef } from '@/lib/types';
 const zoomDef: ControlDef = { key: 'zoom', label: 'Zoom', type: 'slider', min: 0.2, max: 3, step: 0.01, default: 1 };
 const posXDef: ControlDef = { key: 'px', label: 'Position X', type: 'slider', min: 0, max: 100, step: 1, default: 50 };
 const posYDef: ControlDef = { key: 'py', label: 'Position Y', type: 'slider', min: 0, max: 100, step: 1, default: 50 };
+const timeDef: ControlDef = { key: 'statusTime', label: 'Time', type: 'text', default: '9:41' };
+const batteryDef: ControlDef = { key: 'statusBattery', label: 'Battery', type: 'slider', min: 0, max: 100, step: 1, default: 100, unit: '%' };
+const signalDef: ControlDef = { key: 'statusSignal', label: 'Signal', type: 'slider', min: 0, max: 4, step: 1, default: 4 };
 
 const FITS: { id: 'cover' | 'width' | 'contain'; label: string }[] = [
   { id: 'cover', label: 'Cover' },
@@ -35,6 +38,14 @@ export default function ScreenContent() {
   const screenOffsetX = use3DStore((s) => s.screenOffsetX);
   const screenOffsetY = use3DStore((s) => s.screenOffsetY);
   const setScreenOffset = use3DStore((s) => s.setScreenOffset);
+  const statusBarMode = use3DStore((s) => s.statusBarMode);
+  const setStatusBarMode = use3DStore((s) => s.setStatusBarMode);
+  const statusBarTime = use3DStore((s) => s.statusBarTime);
+  const setStatusBarTime = use3DStore((s) => s.setStatusBarTime);
+  const statusBarBattery = use3DStore((s) => s.statusBarBattery);
+  const setStatusBarBattery = use3DStore((s) => s.setStatusBarBattery);
+  const statusBarSignal = use3DStore((s) => s.statusBarSignal);
+  const setStatusBarSignal = use3DStore((s) => s.setStatusBarSignal);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const device = findDevice(modelUrl);
@@ -99,6 +110,28 @@ export default function ScreenContent() {
             <ControlRow def={zoomDef} value={screenZoom} onChange={(v) => setScreenZoom(Number(v))} />
             <ControlRow def={posXDef} value={screenOffsetX} onChange={(v) => setScreenOffset(Number(v), screenOffsetY)} />
             <ControlRow def={posYDef} value={screenOffsetY} onChange={(v) => setScreenOffset(screenOffsetX, Number(v))} />
+            {slot === 'phone' && (
+              <div className="e3d-group" style={{ marginTop: 12 }}>
+                <div className="e3d-group-title">iPhone Status Bar</div>
+                <div className="ctl-row">
+                  <label className="ctl-label">Style</label>
+                  <div className="pills">
+                    {(['off', 'light', 'dark'] as const).map((mode) => (
+                      <button key={mode} className={`pill ${statusBarMode === mode ? 'active' : ''}`} onClick={() => setStatusBarMode(mode)}>
+                        {mode[0].toUpperCase() + mode.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {statusBarMode !== 'off' && (
+                  <>
+                    <ControlRow def={timeDef} value={statusBarTime} onChange={(v) => setStatusBarTime(String(v))} />
+                    <ControlRow def={batteryDef} value={statusBarBattery} onChange={(v) => setStatusBarBattery(Number(v))} />
+                    <ControlRow def={signalDef} value={statusBarSignal} onChange={(v) => setStatusBarSignal(Number(v))} />
+                  </>
+                )}
+              </div>
+            )}
           </>
         )}
       </div>

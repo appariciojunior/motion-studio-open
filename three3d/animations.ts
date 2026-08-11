@@ -574,20 +574,27 @@ export function apply3DAnimation(
   userRotY: number = 0,
   userOffsetX: number = 0,
   userOffsetY: number = 0,
-  userScale: number = 1.0
+  userScale: number = 1.0,
+  userRotZ: number = 0,
+  userOffsetZ: number = 0,
+  userFov: number = DEFAULT_MOCKUP_POSE.fov,
+  userLidAngle: number = DEFAULT_MOCKUP_POSE.lidAngle,
 ): MockupLightingState {
   const preset = MOCKUP_ANIMATIONS.find((a) => a.key === animKey);
 
   // If preset is 'static' or not found, let user orbit freely with mouse
   if (!preset || animKey === 'static') {
     controls.enabled = true;
+    camera.fov = THREE.MathUtils.clamp(userFov, 15, 90);
+    camera.updateProjectionMatrix();
+    articulateLaptopLid(pivot, userLidAngle);
     return {
       keyLightIntensity: 1.0,
       keyLightAzimuth: 45,
       keyLightElevation: 45,
       fillLightIntensity: 1.0,
       envRotation: 0,
-      lidAngle: DEFAULT_MOCKUP_POSE.lidAngle,
+      lidAngle: userLidAngle,
     };
   }
 
@@ -596,7 +603,14 @@ export function apply3DAnimation(
   controls.enabled = false;
 
   // Evaluate the interpolated pose across the multi-keyframe timeline
-  const pose = evaluateTimeline(preset.keyframes, progress, DEFAULT_MOCKUP_POSE);
+  const evaluatedPose = evaluateTimeline(preset.keyframes, progress, DEFAULT_MOCKUP_POSE);
+  const pose: MockupPose = {
+    ...evaluatedPose,
+    fov: THREE.MathUtils.clamp(userFov, 15, 90),
+    // The dedicated lid preset owns this channel; every other camera preset
+    // respects the product panel's manually selected hinge angle.
+    lidAngle: animKey === 'laptop_lid_open' ? evaluatedPose.lidAngle : userLidAngle,
+  };
 
   // 1. Update Camera FOV and Projection Matrix if changed
   if (Math.abs(camera.fov - pose.fov) > 0.1) {
@@ -639,22 +653,20 @@ export function apply3DAnimation(
   pivot.rotation.set(
     userRotX + THREE.MathUtils.degToRad(pose.tiltX),
     userRotY + THREE.MathUtils.degToRad(pose.tiltY),
-    THREE.MathUtils.degToRad(pose.tiltZ)
+    userRotZ + THREE.MathUtils.degToRad(pose.tiltZ)
   );
 
   pivot.position.set(
     (userOffsetX || 0) + pose.posX,
     (userOffsetY || 0) + pose.posY,
-    pose.posZ
+    userOffsetZ + pose.posZ
   );
 
   const finalScale = Math.max(0.05, userScale * pose.scale);
   pivot.scale.setScalar(finalScale);
 
   // 5. Hardware Articulation — articulate upper laptop lid meshes if present
-  if (Math.abs(pose.lidAngle - DEFAULT_MOCKUP_POSE.lidAngle) > 0.5) {
-    articulateLaptopLid(pivot, pose.lidAngle);
-  }
+  articulateLaptopLid(pivot, pose.lidAngle);
 
   // 6. Return Dynamic Studio Lighting choreography
   return {
@@ -672,18 +684,21 @@ export function apply3DAnimation(
  * and articulates the hinge smoothly according to `lidAngle` in degrees.
  */
 function articulateLaptopLid(pivot: THREE.Group, lidAngleDeg: number): void {
-  const angleRad = THREE.MathUtils.degToRad(lidAngleDeg);
+  const requested = THREE.MathUtils.clamp(lidAngleDeg, 3, 115);
+  const delta = THREE.MathUtils.degToRad(DEFAULT_MOCKUP_POSE.lidAngle - requested);
   pivot.traverse((child) => {
     const nm = child.name.toLowerCase();
     if (
-      nm.includes('lid') ||
-      nm.includes('screen_group') ||
-      nm.includes('upper') ||
-      nm.includes('top_case') ||
+      nm === 'lid' ||
+      nm === 'screen_group' ||
+      nm === 'upper' ||
+      nm === 'top_case' ||
       nm === 'lid_hinge'
     ) {
-      // Articulate around X-axis hinge
-      child.rotation.x = angleRad;
+      if (child.userData.mockupLidBaseRotationX === undefined) {
+        child.userData.mockupLidBaseRotationX = child.rotation.x;
+      }
+      child.rotation.x = child.userData.mockupLidBaseRotationX + delta;
     }
   });
 }

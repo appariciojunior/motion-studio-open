@@ -6,8 +6,10 @@ export interface ModelState {
   scale: number;        // user multiplier over the auto-fit scale
   rotX: number;         // extra rotation (radians)
   rotY: number;
+  rotZ: number;
   offsetX: number;      // manual world-space nudge (align the model by hand)
   offsetY: number;
+  offsetZ: number;
   url: string | null;   // custom .glb object-URL (null = bundled default)
   name: string | null;  // uploaded file name (for the UI)
   centerNonce: number;  // bump → effect recentres the camera
@@ -47,11 +49,17 @@ export interface ThreeDState {
   screenZoom: number;      // multiplier over the fitted size
   screenOffsetX: number;   // 0 = left/top edge, 50 = centred, 100 = right/bottom
   screenOffsetY: number;
+  statusBarMode: 'off' | 'light' | 'dark';
+  statusBarTime: string;
+  statusBarBattery: number;
+  statusBarSignal: number;
   setEffect: (id: string) => void;
   setParam: (effectId: string, key: string, value: any) => void;
   setModelScale: (v: number) => void;
   nudgeRot: (dx: number, dy: number) => void;
   setModelOffset: (x: number, y: number) => void;
+  setModelDepth: (z: number) => void;
+  setModelRotation: (x: number, y: number, z: number) => void;
   // Optional (x, y) lets Mockup mode re-centre a device at the origin — its
   // meshes are already bbox-centred, unlike DEF_OFFSET which is tuned for the
   // bundled dayse model.
@@ -64,6 +72,10 @@ export interface ThreeDState {
   setScreenFit: (fit: 'cover' | 'width' | 'contain') => void;
   setScreenZoom: (v: number) => void;
   setScreenOffset: (x: number, y: number) => void;
+  setStatusBarMode: (v: 'off' | 'light' | 'dark') => void;
+  setStatusBarTime: (v: string) => void;
+  setStatusBarBattery: (v: number) => void;
+  setStatusBarSignal: (v: number) => void;
   setParts: (keys: string[]) => void;             // reported by the effect on load
   setPartFill: (key: string, patch: Partial<FillSpec>) => void;
   clearPartFill: (key: string) => void;
@@ -94,12 +106,12 @@ const DEFAULT_FILLS: Record<string, FillSpec> = {
 
 // Default nudge that centres the bundled dayse model in the stage.
 const DEF_OFFSET = { x: -0.8, y: 0.7 };
-const MODEL_DEFAULT: ModelState = { scale: 0.7, rotX: 0, rotY: 0, offsetX: DEF_OFFSET.x, offsetY: DEF_OFFSET.y, url: null, name: null, centerNonce: 0 };
+const MODEL_DEFAULT: ModelState = { scale: 0.7, rotX: 0, rotY: 0, rotZ: 0, offsetX: DEF_OFFSET.x, offsetY: DEF_OFFSET.y, offsetZ: 0, url: null, name: null, centerNonce: 0 };
 
 // Mockup starts from a different baseline: device meshes are already
 // bbox-centred, so they want (0, 0) and scale 1 rather than the daisy's
 // hand-tuned nudge, and no bundled model at all until a device is picked.
-const MOCKUP_MODEL_DEFAULT: ModelState = { scale: 1, rotX: 0, rotY: 0, offsetX: 0, offsetY: 0, url: null, name: null, centerNonce: 0 };
+const MOCKUP_MODEL_DEFAULT: ModelState = { scale: 1, rotX: 0, rotY: 0, rotZ: 0, offsetX: 0, offsetY: 0, offsetZ: 0, url: null, name: null, centerNonce: 0 };
 
 // The model transform is held PER EFFECT, not globally. It used to be one
 // shared object, so picking a device in Mockup overwrote `url` — and the 3D
@@ -148,6 +160,10 @@ export const use3DStore = create<ThreeDState>((set) => ({
   screenZoom: 1,
   screenOffsetX: 50,
   screenOffsetY: 50,
+  statusBarMode: 'off',
+  statusBarTime: '9:41',
+  statusBarBattery: 100,
+  statusBarSignal: 4,
   setEffect: (effectId) => set({ effectId }),
   setParam: (effectId, key, value) =>
     set((s) => ({
@@ -159,14 +175,16 @@ export const use3DStore = create<ThreeDState>((set) => ({
     return patchModel(s, { rotX: m.rotX + dx, rotY: m.rotY + dy });
   }),
   setModelOffset: (x, y) => set((s) => patchModel(s, { offsetX: x, offsetY: y })),
+  setModelDepth: (z) => set((s) => patchModel(s, { offsetZ: z })),
+  setModelRotation: (x, y, z) => set((s) => patchModel(s, { rotX: x, rotY: y, rotZ: z })),
   centerModel: (x, y) => set((s) => {
     const m = modelOf(s);
     // Falls back to the ACTIVE effect's own default, so recentring in Mockup
     // goes to (0, 0) and recentring in 3D goes to the daisy's tuned nudge.
     const d = defaultModelFor(s.effectId);
     return patchModel(s, {
-      rotX: 0, rotY: 0,
-      offsetX: x ?? d.offsetX, offsetY: y ?? d.offsetY,
+      rotX: 0, rotY: 0, rotZ: 0,
+      offsetX: x ?? d.offsetX, offsetY: y ?? d.offsetY, offsetZ: d.offsetZ,
       centerNonce: m.centerNonce + 1,
     });
   }),
@@ -181,6 +199,10 @@ export const use3DStore = create<ThreeDState>((set) => ({
   setScreenFit: (fit) => set((s) => ({ screenFit: fit, screenOffsetY: fit === 'width' ? 0 : s.screenOffsetY })),
   setScreenZoom: (v) => set({ screenZoom: v }),
   setScreenOffset: (x, y) => set({ screenOffsetX: x, screenOffsetY: y }),
+  setStatusBarMode: (v) => set({ statusBarMode: v }),
+  setStatusBarTime: (v) => set({ statusBarTime: v.slice(0, 8) }),
+  setStatusBarBattery: (v) => set({ statusBarBattery: Math.max(0, Math.min(100, v)) }),
+  setStatusBarSignal: (v) => set({ statusBarSignal: Math.max(0, Math.min(4, Math.round(v))) }),
   setParts: (keys) => set((s) => {
     const same = keys.length === s.parts.length && keys.every((k, i) => k === s.parts[i]);
     if (same) return {};                 // same model re-init → keep fills
