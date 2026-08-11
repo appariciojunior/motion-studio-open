@@ -14,6 +14,7 @@ export default function Effect3DControls({ effectId: forcedEffectId }: { effectI
   const effectId = def.id;
   const params = use3DStore((s) => s.params[effectId]) ?? {};
   const setParam = use3DStore((s) => s.setParam);
+  const resetEffectSettings = use3DStore((s) => s.resetEffectSettings);
   const mockupAnimation = use3DStore((s) => s.mockupAnimation || 'static');
   const setMockupAnimation = use3DStore((s) => s.setMockupAnimation);
   const mockupSpeed = use3DStore((s) => s.mockupSpeed || 1);
@@ -92,6 +93,13 @@ export default function Effect3DControls({ effectId: forcedEffectId }: { effectI
             ))}
           </div>
         ))}
+        <button
+          className="web-auto-btn"
+          onClick={() => resetEffectSettings(effectId)}
+          style={{ width: '100%', marginTop: 8 }}
+        >
+          Reset all values
+        </button>
       </div>
     </>
   );

@@ -51,6 +51,7 @@ export interface ThreeDState {
   screenOffsetY: number;
   setEffect: (id: string) => void;
   setParam: (effectId: string, key: string, value: any) => void;
+  resetEffectSettings: (effectId: string) => void;
   setModelScale: (v: number) => void;
   nudgeRot: (dx: number, dy: number) => void;
   setModelOffset: (x: number, y: number) => void;
@@ -159,6 +160,39 @@ export const use3DStore = create<ThreeDState>((set) => ({
     set((s) => ({
       params: { ...s.params, [effectId]: { ...(s.params[effectId] ?? {}), [key]: value } },
     })),
+  resetEffectSettings: (effectId) => set((s) => {
+    const params = { ...s.params };
+    delete params[effectId];
+    const current = s.models[effectId] ?? defaultModelFor(effectId);
+    const baseline = defaultModelFor(effectId);
+    const common = {
+      params,
+      models: {
+        ...s.models,
+        [effectId]: {
+          ...baseline,
+          // Reset the pose without discarding the device/custom GLB selected
+          // by the user. Bumping this nonce also restores the fitted camera.
+          url: current.url,
+          name: current.name,
+          centerNonce: current.centerNonce + 1,
+        },
+      },
+      partFills: {},
+      selectedPart: null,
+    };
+    return effectId === 'mockup' ? {
+      ...common,
+      mockupAnimation: 'static',
+      mockupSpeed: 1,
+      mockupEasing: 'preset' as const,
+      mockupMotionStrength: 1,
+      screenFit: 'cover' as const,
+      screenZoom: 1,
+      screenOffsetX: 50,
+      screenOffsetY: 50,
+    } : common;
+  }),
   setModelScale: (v) => set((s) => patchModel(s, { scale: v })),
   nudgeRot: (dx, dy) => set((s) => {
     const m = modelOf(s);
