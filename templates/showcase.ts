@@ -1,7 +1,7 @@
 import type { Template } from '@/lib/types';
 import { TAU, clamp, lerp, loopCycles } from '@/lib/motion';
 import {
-  DEG, backfaceFade, quaternionFromEuler, tiltNormalCanvas, tiltPointCanvas,
+  DEG, backfaceFade, multiplyQuaternion, quaternionFromEuler,
 } from '@/lib/tilt3d';
 import { variant } from './variant';
 
@@ -51,8 +51,75 @@ const openingFactor = (opening: number) => lerp(0.18, 1, clamp(opening, 0, 100) 
 // ring reads as a ring rather than a funnel.
 const showcaseFov = (perspective: number) => lerp(17, 46, clamp(perspective, 0, 40) / 40);
 
+// ---- The drum ----------------------------------------------------------------
+// This family used to lay every card FLAT on one tipped disc. Measured, all
+// twelve cards then pointed the same way — 0.0° between any pair of facings —
+// and a set of coplanar cards is a 2D arrangement that happens to be rotated:
+// a perspective camera has nothing to reveal, so it read as fake however
+// correct the maths was. It also contradicts the reference, where the far cards
+// come out visibly trapezoidal; coplanar cards all take the SAME keystone, so
+// per-card keystone is only possible if each card has its own orientation.
+//
+// The cards now stand UPRIGHT on the ring and face outward — the same drum
+// Orbit 3D builds, which is the look this family is meant to share. Two
+// rotations, and the order is the whole trick:
+//
+//   Rx(tilt) · Ry(phi)
+//
+//   Ry(phi)   turns the card to face out along its own radius. This is the step
+//             that gives every card a different facing, and therefore its own
+//             keystone — the thing the flat disc could never produce.
+//   Rx(tilt)  tips the finished ring as one rigid body.
+//
+// Reversing them leans every card in a single world direction instead of
+// radially, which collapses straight back to the flat-disc bug. An earlier
+// pass here also added a third rotation, Rx(lean), to tip the card tops
+// outward; that is a crown or a bowl, not this family — it is left out on
+// purpose.
+function drumRadius(stage: number, ringSize: number, opening: number) {
+  // Same donut construction Orbit 3D uses, so the two families read as
+  // siblings: Ring Opening sets the inner diameter as a fraction of the outer,
+  // and the cards ride the midline between them.
+  const outer = stage * clamp(ringSize, 50, 95) / 100;
+  const inner = outer * clamp(opening, 15, 85) / 100;
+  return (outer + inner) / 4;
+}
+
+function drumPose(phi: number, radius: number, tiltDeg: number, surface: boolean) {
+  const tilt = tiltDeg * DEG;
+  const sp = Math.sin(phi), cp = Math.cos(phi);
+  const st = Math.sin(tilt), ct = Math.cos(tilt);
+
+  // Ring point (R·sin phi, 0, R·cos phi) tipped about world X.
+  const x = radius * sp;
+  const wy = -radius * cp * st;
+  const z = radius * cp * ct;
+
+  // The card's own normal after the same rotations, for backfaceFade.
+  // Ry(phi)·(0,0,1) = (sin phi, 0, cos phi), then Rx(tilt) — only z is used.
+  const nz = surface ? cp * ct : 1;
+
+  const quaternion = surface
+    ? multiplyQuaternion(quaternionFromEuler(tilt, 0, 0), quaternionFromEuler(0, phi, 0))
+    // 'camera' facing keeps every card square to the frame — the ring then
+    // reads purely as position, which is the old flat look on purpose.
+    : quaternionFromEuler(0, 0, 0);
+
+  return { x, wy, z, nz, quaternion };
+}
+
 const showcase: Template = {
   meta: {
+    // WITHHELD from the catalogue while the ring geometry is reworked.
+    //
+    // Photographing the reference (scripts/_shoot_ref.cjs) showed this family is
+    // a closed drum whose FAR cards stay visible as dark card backs — a solid
+    // object seen obliquely — while this implementation fades them out instead,
+    // so it reads as a shallow front-only arc. Getting there is a geometry
+    // change, not a parameter tweak, so the preset stays out of every picker
+    // until it matches. Saved scenes that already reference it still load:
+    // catalogHidden only affects catalogTemplateList (templates/index.ts).
+    catalogHidden: true,
     id: 'showcase-01', name: 'Showcase Stream', group: '3D & Perspective',
     isNew: true, engine: 'webgl', catalog3d: true, repeatAssets: true, cardAspect: 1,
     defaultEasing: { id: 'linear' },
@@ -70,6 +137,8 @@ const showcase: Template = {
       description: 'Squashes the ellipse further than the tilt alone does. Low collapses the ring toward a line.' },
     { key: 'perspective',  label: 'Perspective',   type: 'slider', min: 0, max: 40, step: 2,      default: 18, section: 'Depth', unit: '%',
       description: 'Camera field of view. Kept deliberately long — past this the ring reads as a funnel.' },
+    { key: 'camDistance',  label: 'Camera Distance', type: 'slider', min: 0.5, max: 2.5, step: 0.05, default: 1, section: 'Depth', unit: '×', precision: 2,
+      description: 'Moves the camera itself closer or further, at the same Perspective.' },
     { key: 'facing',       label: 'Card Facing',   type: 'pills',  options: ['surface','camera'], default: 'surface', section: 'Depth', advanced: true },
     { key: 'backFade',     label: 'Back Fade',     type: 'slider', min: 10, max: 95, step: 5,     default: 70, section: 'Finish', unit: '%' },
     { key: 'cornerRadius', label: 'Corner Radius', type: 'slider', min: 0, max: 12, step: 0.5,    default: 3, section: 'Finish', unit: '%', precision: 1 },
@@ -80,7 +149,7 @@ const showcase: Template = {
     { key: 'offset',       label: 'Offset',        type: 'xypad',                                 default: { x: 0, y: 0 }, section: 'Layout', advanced: true },
   ],
 
-  camera: (v) => ({ fov: showcaseFov(v.perspective) }),
+  camera: (v) => ({ fov: showcaseFov(v.perspective), distance: v.camDistance }),
 
   transform3d: (frame, index, count, v, ctx) => {
     const dir = v.direction === 'reverse' ? -1 : 1;
@@ -98,65 +167,25 @@ const showcase: Template = {
     const phi = (((index - phase) % count + count) % count) / count * TAU;
 
     const stage = Math.min(ctx.width, ctx.height) * (1 - clamp(v.padding, 0, 20) / 50);
-    const radius = (stage * (v.ringSize / 100)) / 2 * 1.08;
-    const k = openingFactor(v.ringOpening);
+    const radius = drumRadius(stage, v.ringSize, v.ringOpening);
 
-    // The ring in its own plane, before the plane is tipped. phi = 0 sits at the
-    // front (canvas y is down, so +y is the near side once tilted).
-    const rx = Math.sin(phi) * radius;
-    const ry = Math.cos(phi) * radius * k;
-
-    const rig = { pitch: v.ringTilt };
-    const p = tiltPointCanvas({ x: rx, y: ry, z: 0 }, rig);
-
-    // THIS card's own outward normal — not the ring plane's normal, which is
-    // the same for every card and barely varies with ringTilt. That was the
-    // bug: it made backfaceFade nearly inert (the plane stays broadly camera-
-    // facing at any reasonable tilt), so far-side cards never dimmed enough
-    // and showed their DoubleSide back — mirrored text — instead of fading out.
-    //
-    // The correct normal is perpendicular to the ellipse's own tangent, in the
-    // ring's local (untilted) plane, then tilted the same way as the position.
-    // For x = sin(phi)·r, y = cos(phi)·r·k, the tangent is
-    // (cos(phi), -sin(phi)·k) — same derivation as the tangent-roll below — and
-    // rotating that -90° and picking the sign with positive dot-product against
-    // the position vector gives the OUTWARD normal (sin(phi)·k, cos(phi)).
-    // tiltNormalCanvas normalizes it, so it does not need to be unit length here.
-    const n = tiltNormalCanvas({ x: Math.sin(phi) * k, y: Math.cos(phi), z: 0 }, rig);
-
-    // Lay the card along the ring: it takes the plane's tilt plus the roll that
-    // points it around the curve. Quaternion rather than Euler because the
-    // renderer prefers it and because composing tilt with roll in Euler order
-    // introduces gimbal drift at steep tilts.
-    //
-    // The roll is the tangent of the ELLIPSE, not of a circle. `opening` squashes
-    // the ring inside its own plane before the plane is tipped, so the curve the
-    // cards sit on is already an ellipse — and an ellipse's tangent is not the
-    // circle's. Using -phi looked right only at opening 100; at the default 55
-    // (k ≈ 0.63) it left every card visibly off its own path. Reduces to -phi
-    // exactly when k = 1.
-    const surface = v.facing === 'surface';
-    const roll = surface ? Math.atan2(-Math.sin(phi) * k, Math.cos(phi)) : 0;
-    const quaternion = quaternionFromEuler(
-      surface ? v.ringTilt * DEG : 0,
-      0,
-      roll,
-    );
+    const g = drumPose(phi, radius, v.ringTilt, v.facing === 'surface');
 
     const cardPx = stage * (v.cardSizePct / 100);
     // Depth shading needs thickness to register: without it renderer3d makes the
     // material emissive and ignores materialExposure entirely.
-    const nearness = clamp((p.z / Math.max(1, radius) + 1) / 2, 0, 1);
+    const nearness = clamp((g.z / Math.max(1, radius) + 1) / 2, 0, 1);
 
     return {
-      x: p.x + v.offset.x,
-      y: p.y + v.offset.y,
-      z: p.z,
-      quaternion,
+      // World y is up, canvas y is down, and the renderer negates on the way in.
+      x: g.x + v.offset.x,
+      y: -g.wy + v.offset.y,
+      z: g.z,
+      quaternion: g.quaternion,
       scale: cardPx / BASE,
-      // Keep the rear arc present but subdued. The reference reads as a closed
-      // ring; cutting back-facing cards entirely turns it into a front-only fan.
-      alpha: backfaceFade(n.z, v.backFade),
+      // backfaceFade, not depthDim: now that every card carries its own facing,
+      // the far half genuinely IS reversed and would show its DoubleSide back.
+      alpha: backfaceFade(g.nz, v.backFade),
       thickness: v.thickness,
       shadowStrength: v.shadow === 'on' ? 1 : 0,
       materialExposure: lerp(0.62, 1.06, nearness),
@@ -173,21 +202,20 @@ const showcase: Template = {
     const phi = (((index - phase) % count + count) % count) / count * TAU;
 
     const stage = Math.min(ctx.width, ctx.height) * (1 - clamp(v.padding, 0, 20) / 50);
-    const radius = (stage * (v.ringSize / 100)) / 2 * 1.08;
-    const k = openingFactor(v.ringOpening);
-    const rx = Math.sin(phi) * radius;
-    const ry = Math.cos(phi) * radius * k;
-    const p = tiltPointCanvas({ x: rx, y: ry, z: 0 }, { pitch: v.ringTilt });
+    const radius = drumRadius(stage, v.ringSize, v.ringOpening);
 
-    const nearness = clamp((p.z / Math.max(1, radius) + 1) / 2, 0, 1);
+    // Same crown geometry as the 3D path, so the thumbnail agrees with the
+    // stage. What it cannot carry across is the per-card orientation: a sprite
+    // has no facing, so the size falloff below stands in for the whole of it.
+    const g = drumPose(phi, radius, v.ringTilt, v.facing === 'surface');
+    const nearness = clamp((g.z / Math.max(1, radius) + 1) / 2, 0, 1);
     const cardPx = stage * (v.cardSizePct / 100);
 
     return {
-      x: p.x + v.offset.x,
-      y: p.y + v.offset.y,
+      x: g.x + v.offset.x,
+      y: -g.wy + v.offset.y,
       scale: (cardPx / BASE) * lerp(0.72, 1.12, nearness),
-      // Same ellipse tangent as the 3D path, so the thumbnail agrees with the stage.
-      rotation: v.facing === 'surface' ? Math.atan2(-Math.sin(phi) * k, Math.cos(phi)) : 0,
+      rotation: 0,
       alpha: lerp(1 - clamp(v.backFade, 0, 95) / 100, 1, nearness),
       depth: nearness,
     };

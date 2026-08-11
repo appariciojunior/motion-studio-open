@@ -14,10 +14,15 @@ export default function Effect3DControls({ effectId: forcedEffectId }: { effectI
   const effectId = def.id;
   const params = use3DStore((s) => s.params[effectId]) ?? {};
   const setParam = use3DStore((s) => s.setParam);
+  const resetEffectSettings = use3DStore((s) => s.resetEffectSettings);
   const mockupAnimation = use3DStore((s) => s.mockupAnimation || 'static');
   const setMockupAnimation = use3DStore((s) => s.setMockupAnimation);
   const mockupSpeed = use3DStore((s) => s.mockupSpeed || 1);
   const setMockupSpeed = use3DStore((s) => s.setMockupSpeed);
+  const mockupEasing = use3DStore((s) => s.mockupEasing);
+  const setMockupEasing = use3DStore((s) => s.setMockupEasing);
+  const motionStrength = use3DStore((s) => s.mockupMotionStrength);
+  const setMotionStrength = use3DStore((s) => s.setMockupMotionStrength);
 
   return (
     <>
@@ -51,6 +56,24 @@ export default function Effect3DControls({ effectId: forcedEffectId }: { effectI
               ))}
             </div>
           </div>
+          <div className="ctl-row">
+            <label className="ctl-label">Motion</label>
+            <div className="pills">
+              {[0.5, 0.75, 1, 1.25].map((amount) => (
+                <button key={amount} className={`pill ${motionStrength === amount ? 'active' : ''}`} onClick={() => setMotionStrength(amount)}>
+                  {Math.round(amount * 100)}%
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="ctl-row">
+            <label className="ctl-label">Curve</label>
+            <div className="pills">
+              {([['preset', 'Natural'], ['smooth', 'Smooth'], ['linear', 'Linear']] as const).map(([value, label]) => (
+                <button key={value} className={`pill ${mockupEasing === value ? 'active' : ''}`} onClick={() => setMockupEasing(value)}>{label}</button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -70,6 +93,13 @@ export default function Effect3DControls({ effectId: forcedEffectId }: { effectI
             ))}
           </div>
         ))}
+        <button
+          className="web-auto-btn"
+          onClick={() => resetEffectSettings(effectId)}
+          style={{ width: '100%', marginTop: 8 }}
+        >
+          Reset all values
+        </button>
       </div>
     </>
   );

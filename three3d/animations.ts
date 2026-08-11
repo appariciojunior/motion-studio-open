@@ -235,7 +235,8 @@ function interpolatePose(poseA: MockupPose, poseB: MockupPose, t: number): Mocku
 export function evaluateTimeline(
   keyframes: MockupKeyframe[],
   progress: number,
-  basePose: MockupPose = DEFAULT_MOCKUP_POSE
+  basePose: MockupPose = DEFAULT_MOCKUP_POSE,
+  easingOverride?: EasingPreset,
 ): MockupPose {
   if (!keyframes || keyframes.length === 0) return basePose;
   if (keyframes.length === 1) {
@@ -263,7 +264,7 @@ export function evaluateTimeline(
 
   // Local progress inside the keyframe span [kfA.time .. kfB.time]
   const rawT = (p - kfA.time) / (kfB.time - kfA.time);
-  const easedT = evaluateEasing(rawT, kfB.easing ?? 'easeInOutCubic');
+  const easedT = evaluateEasing(rawT, easingOverride ?? kfB.easing ?? 'easeInOutCubic');
 
   const fullPoseA: MockupPose = { ...basePose, ...kfA.pose };
   const fullPoseB: MockupPose = { ...basePose, ...kfB.pose };
@@ -575,6 +576,8 @@ export function apply3DAnimation(
   userOffsetX: number = 0,
   userOffsetY: number = 0,
   userScale: number = 1.0,
+  easingMode: 'preset' | 'smooth' | 'linear' = 'preset',
+  motionStrength: number = 1,
   userRotZ: number = 0,
   userOffsetZ: number = 0,
   userFov: number = DEFAULT_MOCKUP_POSE.fov,
@@ -585,7 +588,7 @@ export function apply3DAnimation(
   // If preset is 'static' or not found, let user orbit freely with mouse
   if (!preset || animKey === 'static') {
     controls.enabled = true;
-    camera.fov = THREE.MathUtils.clamp(userFov, 15, 90);
+    camera.fov = Math.max(15, Math.min(90, userFov));
     camera.updateProjectionMatrix();
     articulateLaptopLid(pivot, userLidAngle);
     return {
@@ -603,13 +606,22 @@ export function apply3DAnimation(
   controls.enabled = false;
 
   // Evaluate the interpolated pose across the multi-keyframe timeline
-  const evaluatedPose = evaluateTimeline(preset.keyframes, progress, DEFAULT_MOCKUP_POSE);
-  const pose: MockupPose = {
-    ...evaluatedPose,
-    fov: THREE.MathUtils.clamp(userFov, 15, 90),
-    // The dedicated lid preset owns this channel; every other camera preset
-    // respects the product panel's manually selected hinge angle.
-    lidAngle: animKey === 'laptop_lid_open' ? evaluatedPose.lidAngle : userLidAngle,
+  const easingOverride = easingMode === 'smooth' ? 'smoothstep'
+    : easingMode === 'linear' ? 'linear'
+    : undefined;
+  const animatedPose = evaluateTimeline(preset.keyframes, progress, DEFAULT_MOCKUP_POSE, easingOverride);
+  // A single intensity control scales every authored channel coherently. This
+  // keeps camera, product and lighting choreography in phase instead of making
+  // users tune twenty individual tracks just to make a preset subtler.
+  const interpolatedPose = interpolatePose(
+    DEFAULT_MOCKUP_POSE,
+    animatedPose,
+    Math.max(0, Math.min(1.5, motionStrength)),
+  );
+  const pose = {
+    ...interpolatedPose,
+    fov: Math.max(15, Math.min(90, userFov)),
+    lidAngle: animKey === 'laptop_lid_open' ? interpolatedPose.lidAngle : userLidAngle,
   };
 
   // 1. Update Camera FOV and Projection Matrix if changed
@@ -659,13 +671,14 @@ export function apply3DAnimation(
   pivot.position.set(
     (userOffsetX || 0) + pose.posX,
     (userOffsetY || 0) + pose.posY,
-    userOffsetZ + pose.posZ
+    (userOffsetZ || 0) + pose.posZ
   );
 
   const finalScale = Math.max(0.05, userScale * pose.scale);
   pivot.scale.setScalar(finalScale);
 
-  // 5. Hardware Articulation — articulate upper laptop lid meshes if present
+  // 5. Hardware Articulation — always apply it so returning to the authored
+  // open angle also restores the lid after a closing frame.
   articulateLaptopLid(pivot, pose.lidAngle);
 
   // 6. Return Dynamic Studio Lighting choreography
@@ -684,6 +697,11 @@ export function apply3DAnimation(
  * and articulates the hinge smoothly according to `lidAngle` in degrees.
  */
 function articulateLaptopLid(pivot: THREE.Group, lidAngleDeg: number): void {
+  // The MacBook GLB is authored already open at roughly 112°. `lidAngle` is a
+  // physical opening angle, not an absolute node rotation: closing therefore
+  // rotates the authored Lid forward by (112 - requested). Keep a tiny 3°
+  // mechanical gap so the screen glass never becomes coplanar with, or passes
+  // through, the keyboard/body at the closed end of the animation.
   const requested = THREE.MathUtils.clamp(lidAngleDeg, 3, 115);
   const delta = THREE.MathUtils.degToRad(DEFAULT_MOCKUP_POSE.lidAngle - requested);
   pivot.traverse((child) => {

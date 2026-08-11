@@ -86,6 +86,16 @@ export interface TransformCtx {
 
 export interface CameraPose {
   fov?: number;
+  // Multiplier on the fov-derived "default fit distance" D — the z at which
+  // the z=0 plane renders at exact 1:1 preview-pixel scale for that fov
+  // (D = (height/2)/tan(fov/2), same quantity the three3d/ mockup rig calls
+  // camDistance, 1.0 = default). This is what a "move the camera closer"
+  // control should drive — it makes the subject fill more of the frame at
+  // the SAME fov, which is a different move than widening the lens: fov
+  // alone also changes how much keystone/perspective distortion appears,
+  // distance alone does not. Ignored if `position` is also set (position
+  // wins, matching Box's own explicit-position camera).
+  distance?: number;
   position?: { x: number; y: number; z: number };
   target?: { x: number; y: number; z: number };
   near?: number;
