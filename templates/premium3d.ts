@@ -28,12 +28,14 @@ export const cardTunnel: Template = {
     { key: 'gap', label: 'Gap', type: 'slider', min: 2, max: 20, step: 1, default: 10, section: 'Layout', unit: '%' },
     { key: 'depth', label: 'Tunnel Depth', type: 'slider', min: 500, max: 2400, step: 25, default: 1500, section: 'Depth', unit: 'px', advanced: true },
     { key: 'perspective', label: 'Perspective', type: 'slider', min: 0, max: 100, step: 1, default: 58, section: 'Depth', unit: '%', advanced: true },
+    { key: 'camDistance', label: 'Camera Distance', type: 'slider', min: 0.5, max: 2.5, step: 0.05, default: 1, section: 'Depth', unit: '×', precision: 2, advanced: true,
+      description: 'Moves the camera itself closer or further, at the same Perspective.' },
     { key: 'depthFade', label: 'Depth Fade', type: 'slider', min: 0, max: 100, step: 5, default: 45, section: 'Finish', unit: '%' },
     { key: 'speed', label: 'Speed', type: 'slider', min: 0, max: 2, step: 0.1, default: 0.35, section: 'Motion', unit: '×', precision: 1, advanced: true },
     { key: 'cornerRadius', label: 'Corner Radius', type: 'slider', min: 0, max: 12, step: 0.5, default: 1.5, section: 'Finish', unit: '%', precision: 1 },
     ...sharedFinish,
   ],
-  camera: (v) => ({ fov: 34 + clamp(v.perspective / 100, 0, 1) * 38, near: 1, far: 6000 }),
+  camera: (v) => ({ fov: 34 + clamp(v.perspective / 100, 0, 1) * 38, near: 1, far: 6000, distance: v.camDistance }),
   transform3d: (frame, index, count, v, ctx) => {
     const dir = v.direction === 'backward' ? -1 : 1;
     const laneCount = Math.max(1, Math.ceil(count / 4));
@@ -100,13 +102,15 @@ export const depthStackScroll: Template = {
       description: 'Adds a gentle per-card oscillation on top of the resting spread, out of phase card to card.' },
     { key: 'tilt', label: 'Resting Tilt', type: 'slider', min: -20, max: 20, step: 0.5, default: 0, section: 'Depth', unit: '°', precision: 1, advanced: true },
     { key: 'perspective', label: 'Perspective', type: 'slider', min: 0, max: 100, step: 1, default: 42, section: 'Depth', unit: '%', advanced: true },
+    { key: 'camDistance', label: 'Camera Distance', type: 'slider', min: 0.5, max: 2.5, step: 0.05, default: 1, section: 'Depth', unit: '×', precision: 2, advanced: true,
+      description: 'Moves the camera itself closer or further, at the same Perspective.' },
     { key: 'fade', label: 'Depth Fade', type: 'slider', min: 0, max: 100, step: 5, default: 45, section: 'Finish', unit: '%' },
     { key: 'depthBlur', label: 'Depth Blur', type: 'slider', min: 0, max: 8, step: 0.5, default: 2.5, section: 'Finish', unit: '%', precision: 1 },
     { key: 'speed', label: 'Speed', type: 'slider', min: 0, max: 2, step: 0.1, default: 0.3, section: 'Motion', unit: '×', precision: 1, advanced: true },
     { key: 'cornerRadius', label: 'Corner Radius', type: 'slider', min: 0, max: 12, step: 0.5, default: 3, section: 'Finish', unit: '%', precision: 1 },
     ...sharedFinish,
   ],
-  camera: (v) => ({ fov: 20 + clamp(v.perspective / 100, 0, 1) * 42 }),
+  camera: (v) => ({ fov: 20 + clamp(v.perspective / 100, 0, 1) * 42, distance: v.camDistance }),
   transform3d: (frame, index, count, v, ctx) => {
     const dir = v.direction === 'backward' ? -1 : 1;
     const phase = (frame / ctx.totalFrames) * loopCycles(v.speed, ctx.duration, count) * dir;
@@ -211,12 +215,14 @@ export const parallaxTotem: Template = {
       description: 'Columns nearer the camera scroll at a different rate than columns further back.' },
     { key: 'direction',     label: 'Direction',      type: 'toggle', options: ['up','down'],       default: 'up', section: 'Motion' },
     { key: 'perspective',   label: 'Perspective',    type: 'slider', min: 0, max: 100, step: 1,    default: 50, section: 'Depth', unit: '%', advanced: true },
+    { key: 'camDistance',   label: 'Camera Distance', type: 'slider', min: 0.5, max: 2.5, step: 0.05, default: 1, section: 'Depth', unit: '×', precision: 2, advanced: true,
+      description: 'Moves the camera itself closer or further, at the same Perspective.' },
     { key: 'edgeFade',      label: 'Edge Fade',      type: 'slider', min: 0, max: 100, step: 5,    default: 0, section: 'Finish', unit: '%' },
     { key: 'cornerRadius',  label: 'Corner Radius',  type: 'slider', min: 0, max: 12, step: 0.5,   default: 0.5, section: 'Finish', unit: '%', precision: 1 },
     { key: 'speed',         label: 'Speed',          type: 'slider', min: 0, max: 2, step: 0.1,    default: 0.35, section: 'Motion', unit: '×', precision: 1, advanced: true },
     ...sharedFinish,
   ],
-  camera: (v) => ({ fov: 24 + clamp(v.perspective / 100, 0, 1) * 38 }),
+  camera: (v) => ({ fov: 24 + clamp(v.perspective / 100, 0, 1) * 38, distance: v.camDistance }),
   transform3d: (frame, index, count, v, ctx) => {
     const columns = Math.max(2, Math.round(v.columns));
     const col = index % columns;

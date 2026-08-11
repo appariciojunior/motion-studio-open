@@ -15,10 +15,19 @@ function globePoint(frame: number, index: number, count: number, v: Record<strin
   const layout = v.layout === 'orbit' ? 'orbit' : 'grid';
   let lat: number;
   let lon: number;
+  // The lat/lon cell this card owns, in surface pixels. Card size is derived
+  // from it below rather than from a share of the stage.
+  let cellW = 0;
+  let cellH = 0;
 
   if (layout === 'grid') {
-    const rows = Math.max(3, Math.min(count, Math.round(v.rows ?? Math.sqrt(count * 0.9))));
+    // Fallback matches the control's own derivation: rows = sqrt(count·A/2) is
+    // what makes a lat/lon cell the same shape as the card that sits in it.
+    const aspectForRows = Math.max(0.2, ctx.cardAspect ?? 16 / 9);
+    const rows = Math.max(3, Math.min(count, Math.round(v.rows ?? Math.sqrt((count * aspectForRows) / 2))));
     const columns = Math.max(3, Math.ceil(count / rows));
+    cellW = (TAU * radius) / columns;
+    cellH = (Math.PI * radius) / rows;
     const row = index % rows;
     const col = Math.floor(index / rows);
     const dir = v.direction === 'right' ? -1 : v.direction === 'alternate' && row % 2 ? -1 : 1;
@@ -33,6 +42,11 @@ function globePoint(frame: number, index: number, count: number, v: Record<strin
     const gold = Math.PI * (3 - Math.sqrt(5));
     lat = Math.asin(-1 + 2 * (index + 0.5) / Math.max(1, count));
     lon = index * gold + turns * TAU;
+    // A Fibonacci cell has no rows or columns — every point owns an equal patch
+    // of the sphere, so its diameter comes from the area: 4πr²/count per cell.
+    const cell = radius * Math.sqrt((4 * Math.PI) / Math.max(6, count));
+    cellW = cell;
+    cellH = cell;
   }
 
   const normal = {
@@ -43,11 +57,23 @@ function globePoint(frame: number, index: number, count: number, v: Record<strin
   const n = tiltNormalCanvas(normal, { pitch: v.tilt });
   const p = tiltPointCanvas({ x: normal.x * radius, y: normal.y * radius, z: normal.z * radius }, { pitch: v.tilt });
   const gapScale = 1 - clamp(v.gap, 0.5, 8) / 100;
-  // The reference's percentage is a globe-relative design scale, not a raw
-  // percentage of the canvas. Dense latitude/longitude tiles need the smaller
-  // factor; Orbit Globe intentionally keeps its sparse cards large.
-  const layoutScale = layout === 'grid' ? 0.6 : 1;
-  const cardPx = stage * clamp(v.cardSizePct, 8, 30) / 100 * gapScale * layoutScale;
+  // Card size comes from the CELL, not from a share of the stage. Photographing
+  // the reference showed a sphere tiled edge to edge — cards nearly touching,
+  // which is what gives it volume. A stage-relative size cannot do that: the
+  // cell shrinks as rows/columns/globe size change and the card does not follow,
+  // so the tiling went sparse and the sphere read as a flat scatter of slats.
+  //
+  // The card's long edge has to fit the cell BOTH ways: `cellW` across, and
+  // `cellH * aspect` down (a 16:9 card `cellH` tall is `cellH * 16/9` wide).
+  // The smaller of the two is what actually fits.
+  const cardAspect = Math.max(0.2, ctx.cardAspect ?? 16 / 9);
+  const cellFit = Math.min(cellW, cellH * cardAspect);
+  // `Card Size` is then a FILL FACTOR on that cell, calibrated so the shipped
+  // default (20) lands at 1.0 — a full, touching tile. Below it the sphere goes
+  // airy; above it the tiles shingle over each other, which is a real look and
+  // not something to clamp away.
+  const fill = clamp(v.cardSizePct, 8, 30) / 20;
+  const cardPx = cellFit * gapScale * fill;
   return { p, n, radius, cardPx, depthN: (n.z + 1) / 2 };
 }
 
@@ -59,8 +85,22 @@ const cardGlobe: Template = {
   },
   controls: [
     { key: 'layout', label: 'Layout', type: 'pills', options: ['grid','orbit'], default: 'grid', section: 'Layout', advanced: true },
-    { key: 'count', label: 'Card Count', type: 'slider', min: 8, max: 96, step: 1, default: 72, section: 'Layout', advanced: true },
-    { key: 'rows', label: 'Latitude Rows', type: 'slider', min: 3, max: 12, step: 1, default: 8, section: 'Layout', advanced: true },
+    // Count is what sets the TILING DENSITY, and the reference is dense: about
+    // ten cards span its visible hemisphere, so the full sphere carries ~20
+    // columns. At the old default (72 over 8 rows = 9 columns) barely four
+    // oversized cards crossed the front and the ball read as a flat scatter —
+    // no amount of per-card sizing fixes a grid that coarse. 160 over 8 rows
+    // gives the 20 columns the reference shows. The reference has no count
+    // control at all; it repeats the media set to fill a fixed grid, which is
+    // what `repeatAssets` already does here.
+    { key: 'count', label: 'Card Count', type: 'slider', min: 8, max: 200, step: 1, default: 160, section: 'Layout', advanced: true },
+    // Rows decides the CELL SHAPE, and the cell has to match the card's shape or
+    // the tiling gaps on one axis. A lat/lon cell is (2πr/cols) x (πr/rows), so
+    // its aspect is 2·rows/cols; setting that equal to the card aspect A gives
+    // rows = sqrt(count·A/2) — 12 for 160 landscape cards, not 8. At 8 the cells
+    // came out PORTRAIT (147x184) while the cards are landscape, so each row
+    // left ~100px of empty band above it and the sphere read as floating stripes.
+    { key: 'rows', label: 'Latitude Rows', type: 'slider', min: 3, max: 16, step: 1, default: 12, section: 'Layout', advanced: true },
     { key: 'cornerRadius', label: 'Corner Radius', type: 'slider', min: 0, max: 12, step: 0.5, default: 1, section: 'Finish', unit: '%', precision: 1 },
     { key: 'globeSizePct', label: 'Globe Size', type: 'slider', min: 40, max: 95, step: 1, default: 70, section: 'Layout', unit: '%' },
     { key: 'cardSizePct', label: 'Card Size', type: 'slider', min: 8, max: 30, step: 1, default: 20, section: 'Layout', unit: '%' },
@@ -71,12 +111,14 @@ const cardGlobe: Template = {
     { key: 'direction', label: 'Direction', type: 'pills', options: ['left','right','alternate'], default: 'left', section: 'Motion' },
     { key: 'facing', label: 'Facing', type: 'pills', options: ['surface','camera'], default: 'surface', section: 'Depth', advanced: true },
     { key: 'perspective', label: 'Perspective', type: 'slider', min: 0, max: 100, step: 1, default: 35, section: 'Depth', unit: '%', advanced: true },
+    { key: 'camDistance', label: 'Camera Distance', type: 'slider', min: 0.5, max: 2.5, step: 0.05, default: 1, section: 'Depth', unit: '×', precision: 2, advanced: true,
+      description: 'Moves the camera itself closer or further, at the same Perspective.' },
     { key: 'thickness', label: 'Thickness', type: 'slider', min: 0, max: 20, step: 1, default: 2, section: 'Finish', unit: 'px', advanced: true },
     { key: 'shadow', label: 'Shadow', type: 'toggle', options: ['on','off'], default: 'off', section: 'Finish', advanced: true },
     { key: 'speed', label: 'Speed', type: 'slider', min: 0, max: 3, step: 0.1, default: 0.4, section: 'Motion', unit: '×', precision: 1, advanced: true },
     { key: 'offset', label: 'Offset', type: 'xypad', default: { x: 0, y: 0 }, section: 'Layout', advanced: true },
   ],
-  camera: (v) => ({ fov: 18 + clamp(v.perspective, 0, 100) * 0.2 }),
+  camera: (v) => ({ fov: 18 + clamp(v.perspective, 0, 100) * 0.2, distance: v.camDistance }),
   transform3d: (frame, index, count, v, ctx) => {
     const g = globePoint(frame, index, count, v, ctx);
     const offset = v.offset ?? { x: 0, y: 0 };

@@ -60,10 +60,38 @@ export function wrapEnvelope(phase01: number, edge: number): number {
   return smoother(Math.min(p / e, (1 - p) / e, 1));
 }
 
+// Dim a card as it turns away, WITHOUT ever hiding it. Use this when the value
+// being passed is a position-derived "which side am I on" proxy rather than the
+// card's true facing — a ring of cards lying flat ON a plane, for instance, all
+// share the plane's normal and none of them is ever genuinely reversed, so the
+// far arc must stay present or the ring reads as a front-only fan.
+export function depthDim(sideZ: number, amount: number): number {
+  const a = clamp(amount / 100, 0, 1);
+  const facing = smoother((sideZ + 0.15) / 1.15);
+  return 1 - a * (1 - facing);
+}
+
+// Dim AND hide. Use this when the argument is the card's real surface normal —
+// a sphere tile, a ring card turned outward — where turning past edge-on would
+// expose the DoubleSide back.
 export function backfaceFade(normalZ: number, amount: number): number {
   const a = clamp(amount / 100, 0, 1);
   const facing = smoother((normalZ + 0.15) / 1.15);
-  return 1 - a * (1 - facing);
+  // How much a turning-away card DIMS — this is what `amount` controls, and it
+  // deliberately never reaches zero on its own: at amount 55 a fully reversed
+  // card still returns 0.45.
+  const dim = 1 - a * (1 - facing);
+  // Whether it is visible AT ALL, which `amount` must not control. The card
+  // meshes are THREE.DoubleSide, so a plane turned past edge-on draws its back:
+  // the same texture, mirrored. Dimming that to 45% does not make reversed
+  // lettering read as anything but broken — it has to actually go to zero.
+  //
+  // The cut runs over normalZ 0→0.12, i.e. entirely within the last sliver
+  // before edge-on. A card that close to edge-on projects to almost no area
+  // anyway, so nothing visible is lost: by the angle at which the back would
+  // start to show, alpha is already 0. This is what a solid object does.
+  const front = smoother(clamp(normalZ / 0.12, 0, 1));
+  return dim * front;
 }
 
 export function perspectiveFov(value: number, max = 100): number {
