@@ -628,6 +628,21 @@ export function initMockup(
     return dims[0] <= 0.0006 && dims[1] >= 0.005 && dims[2] >= 0.02;
   }
 
+  function isIPhoneAirRedundantRearGlass(mesh: THREE.Mesh, mat: THREE.Material & { userData: Record<string, any> }): boolean {
+    if (DEV?.key !== 'iphoneair') return false;
+    const geo = mesh.geometry;
+    if (!geo.boundingBox) geo.computeBoundingBox();
+    if (!geo.boundingBox) return false;
+    const size = geo.boundingBox.getSize(new THREE.Vector3());
+    const fullRearPanel = size.x >= 0.065 && size.y >= 0.14 && geo.boundingBox.max.z <= 0.001;
+    const metallicOverlay = 'metalness' in mat && Number((mat as THREE.MeshStandardMaterial).metalness) > 0.05;
+    // The Air ships one stable opaque backing plus two full-size overlays: a
+    // metallic shell and a transparent BLEND shell. Both overlays expose their
+    // triangulation over the backing. Smaller transparent/metallic meshes are
+    // camera and sensor parts and therefore do not match `fullRearPanel`.
+    return fullRearPanel && (mat.userData.origTransparent || !metallicOverlay);
+  }
+
   const pivot = new THREE.Group();
   scene.add(pivot);
   let model: THREE.Object3D | null = null;
@@ -665,6 +680,7 @@ export function initMockup(
         mesh.material = mat;
         mesh.castShadow = true;
         mesh.receiveShadow = true;
+        if (isIPhoneAirRedundantRearGlass(mesh, mat)) mesh.visible = false;
         if (isIPhoneAirSurfaceLayer(mesh)) {
           mesh.castShadow = false;
           mesh.receiveShadow = false;
