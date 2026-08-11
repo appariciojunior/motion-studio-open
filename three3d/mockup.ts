@@ -734,6 +734,12 @@ export function initMockup(
       const mkey = m.userData.partKey as string;
       if (mkey === 'Screen') continue;   // user content — own material, not device-tinted
       const partFill = partFills[mkey];
+      // A phone's global colour represents its enclosure finish, not every
+      // component in the GLB. Camera lenses, microphones, sensors, buttons and
+      // glass must retain their authored material even when Model Materials is
+      // disabled. Explicit per-part fills remain available as an intentional
+      // override.
+      const preservePhoneDetail = DEV?.slot === 'phone' && !m.userData.isEnclosure && !partFill;
 
       if (partFill) {
         const hash = `${partFill.type}|${partFill.c1}|${partFill.c2}`;
@@ -756,6 +762,7 @@ export function initMockup(
             Math.min(1, Math.max(0, m.userData.origL * lScale)),
           );
         }
+        else if (preservePhoneDetail) m.color.copy(m.userData.origColor);
         else if (useTex) m.color.copy(m.userData.hasMap ? WHITE : m.userData.origColor);
         else m.color.copy(tmpColor);
       }
@@ -764,7 +771,9 @@ export function initMockup(
       // shipped finish's own colour, so keeping it would tint the new finish
       // towards the old one instead of replacing it.
       const repainted = isFinished && m.userData.isEnclosure && !partFill;
-      const desiredMap = (partFill || repainted) ? null : (useTex && m.userData.hasMap ? m.userData.srcMap : null);
+      const desiredMap = (partFill || repainted)
+        ? null
+        : ((useTex || preservePhoneDetail) && m.userData.hasMap ? m.userData.srcMap : null);
       if (m.map !== desiredMap) { m.map = desiredMap; m.needsUpdate = true; }
 
       if (selected && mkey === selected) { m.emissive.setRGB(0.12, 0.35, 0.6); m.emissiveIntensity = 1; }
