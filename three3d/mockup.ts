@@ -656,7 +656,11 @@ export function initMockup(
     // metallic shell and a transparent BLEND shell. Both overlays expose their
     // triangulation over the backing. Smaller transparent/metallic meshes are
     // camera and sensor parts and therefore do not match `fullRearPanel`.
-    return fullRearPanel && (mat.userData.origTransparent || !metallicOverlay);
+    // Keep one authored transparent coat above the metallic enclosure so the
+    // Air retains its glass depth and highlights. Its depth writes are disabled
+    // below, so it cannot fight the enclosure surface. Only the redundant
+    // opaque, non-metallic backing is removed.
+    return fullRearPanel && !mat.userData.origTransparent && !metallicOverlay;
   }
 
   function isIPhoneAirRedundantLogoOverlay(mesh: THREE.Mesh, mat: THREE.Material & { userData: Record<string, any> }): boolean {
@@ -667,6 +671,34 @@ export function initMockup(
     // upper BLEND copy (now rendered without depth writes) and remove the lower
     // opaque duplicate that sits beneath the recolourable rear panel.
     return positions?.count === 169 && geo.index?.count === 498;
+  }
+
+  function stabilizeIPhoneAirLogo(mesh: THREE.Mesh, mat: THREE.MeshStandardMaterial & { userData: Record<string, any> }) {
+    if (DEV?.key !== 'iphoneair') return;
+    const geo = mesh.geometry;
+    const positions = geo.getAttribute('position');
+    const isAppleLogo = positions?.count === 169 && geo.index?.count === 498;
+    if (!isAppleLogo || !mat.userData.origTransparent) return;
+
+    // Reuse the Air's correctly positioned logo geometry, but give it the
+    // stable dark metallic treatment used by the 17-style finish. Copying the
+    // 17 mesh itself would also copy incompatible model-space transforms.
+    mat.color.set('#202328');
+    mat.metalness = 0.58;
+    mat.roughness = 0.34;
+    mat.transparent = true;
+    mat.opacity = 0.96;
+    mat.depthWrite = false;
+    mat.depthTest = true;
+    mat.polygonOffset = true;
+    mat.polygonOffsetFactor = -2;
+    mat.polygonOffsetUnits = -2;
+    mat.userData.origColor = mat.color.clone();
+    mat.userData.origOpacity = 0.96;
+    mat.userData.origTransparent = true;
+    mat.userData.origDepthWrite = false;
+    mat.userData.isEnclosure = false;
+    mesh.renderOrder = 50;
   }
 
   const pivot = new THREE.Group();
@@ -706,8 +738,12 @@ export function initMockup(
         mesh.material = mat;
         mesh.castShadow = true;
         mesh.receiveShadow = true;
+        // Resolve the authored duplicate before tuning the retained logo so
+        // the selection always uses the GLB's original transparency metadata.
+        const hideLogoDuplicate = isIPhoneAirRedundantLogoOverlay(mesh, mat);
+        stabilizeIPhoneAirLogo(mesh, mat);
         if (isIPhoneAirRedundantRearGlass(mesh, mat)) mesh.visible = false;
-        if (isIPhoneAirRedundantLogoOverlay(mesh, mat)) mesh.visible = false;
+        if (hideLogoDuplicate) mesh.visible = false;
         if (isIPhoneAirSurfaceLayer(mesh)) {
           mesh.castShadow = false;
           mesh.receiveShadow = false;
