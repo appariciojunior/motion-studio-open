@@ -615,6 +615,22 @@ export function initMockup(
     }
   }
 
+  function markIPhoneAirRearPanelAsEnclosure() {
+    if (DEV?.key !== 'iphoneair') return;
+    for (let i = 0; i < meshList.length; i++) {
+      const mesh = meshList[i];
+      if (!mesh.visible) continue;
+      const geo = mesh.geometry;
+      if (!geo.boundingBox) geo.computeBoundingBox();
+      if (!geo.boundingBox) continue;
+      const size = geo.boundingBox.getSize(new THREE.Vector3());
+      const isStableRearPanel = size.x >= 0.065
+        && size.y >= 0.14
+        && geo.boundingBox.max.z <= 0.001;
+      if (isStableRearPanel) (materials[i] as any).userData.isEnclosure = true;
+    }
+  }
+
   function isIPhoneAirSurfaceLayer(mesh: THREE.Mesh): boolean {
     if (DEV?.key !== 'iphoneair') return false;
     const geo = mesh.geometry;
@@ -644,13 +660,12 @@ export function initMockup(
   }
 
   function isIPhoneAirRedundantLogoOverlay(mesh: THREE.Mesh, mat: THREE.Material & { userData: Record<string, any> }): boolean {
-    if (DEV?.key !== 'iphoneair' || !mat.userData.origTransparent) return false;
+    if (DEV?.key !== 'iphoneair' || mat.userData.origTransparent) return false;
     const geo = mesh.geometry;
     const positions = geo.getAttribute('position');
-    // The Air GLB contains two identical Apple-logo silhouettes. The BLEND
-    // copy sits 0.5 mm above the opaque copy and flickers against it in motion.
-    // Geometry counts uniquely identify that overlay without relying on the
-    // randomized mesh/material names shipped in the asset.
+    // The Air GLB contains two identical Apple-logo silhouettes. Keep the
+    // upper BLEND copy (now rendered without depth writes) and remove the lower
+    // opaque duplicate that sits beneath the recolourable rear panel.
     return positions?.count === 169 && geo.index?.count === 498;
   }
 
@@ -702,6 +717,7 @@ export function initMockup(
         if (!keys.includes(key)) keys.push(key);
       });
       markEnclosureMaterials();
+      markIPhoneAirRearPanelAsEnclosure();
       modelHalf = fitAndCenter(model, MODEL_SIZE);
       const box = new THREE.Box3().setFromObject(model);
       modelBottom = box.min.y;
