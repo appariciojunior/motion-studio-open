@@ -35,13 +35,12 @@ export default function Effect3DControls({ effectId: forcedEffectId }: { effectI
           <div className="e3d-group-title">Camera Motion</div>
           <div className="ctl-row">
             <label className="ctl-label">Preset</label>
-            <div className="pills" style={{ flexWrap: 'wrap', gap: 4 }}>
+            <div className="camera-preset-grid">
               {MOCKUP_ANIMATIONS.map((a) => (
                 <button
                   key={a.key}
                   className={`pill ${mockupAnimation === a.key ? 'active' : ''}`}
                   onClick={() => setMockupAnimation(a.key)}
-                  style={{ fontSize: 11 }}
                 >
                   {a.label}
                 </button>
