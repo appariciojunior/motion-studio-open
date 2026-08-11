@@ -574,12 +574,13 @@ export function apply3DAnimation(
   userRotY: number = 0,
   userOffsetX: number = 0,
   userOffsetY: number = 0,
-  userScale: number = 1.0
+  userScale: number = 1.0,
+  theatrePose?: MockupPose | null,
 ): MockupLightingState {
   const preset = MOCKUP_ANIMATIONS.find((a) => a.key === animKey);
 
   // If preset is 'static' or not found, let user orbit freely with mouse
-  if (!preset || animKey === 'static') {
+  if ((!preset || animKey === 'static') && !theatrePose) {
     controls.enabled = true;
     return {
       keyLightIntensity: 1.0,
@@ -596,7 +597,7 @@ export function apply3DAnimation(
   controls.enabled = false;
 
   // Evaluate the interpolated pose across the multi-keyframe timeline
-  const pose = evaluateTimeline(preset.keyframes, progress, DEFAULT_MOCKUP_POSE);
+  const pose = theatrePose ?? evaluateTimeline(preset!.keyframes, progress, DEFAULT_MOCKUP_POSE);
 
   // 1. Update Camera FOV and Projection Matrix if changed
   if (Math.abs(camera.fov - pose.fov) > 0.1) {

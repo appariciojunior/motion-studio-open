@@ -11,6 +11,7 @@ import { findDevice } from './devices';
 import { use3DStore } from '../store/use3DStore';
 import { useSceneStore } from '../store/useSceneStore';
 import { apply3DAnimation } from './animations';
+import { theatrePoseAt } from './theatreMockup';
 
 // ── Device Mockup 3D effect ─────────────────────────────────────────────────
 // Realistic PBR render — the GLB's own materials (colour, metalness, roughness,
@@ -760,6 +761,7 @@ export function initMockup(
     const duration = Math.max(0.1, sceneState.duration);
     const fps = Math.max(1, sceneState.fps);
     const progress = ((sceneState.frame / (duration * fps)) * (animState.mockupSpeed || 1)) % 1;
+    const theatrePose = animState.theatreEnabled ? theatrePoseAt(progress) : null;
     const lightState = apply3DAnimation(
       animState.mockupAnimation || 'static',
       progress,
@@ -776,6 +778,7 @@ export function initMockup(
       md?.offsetX ?? 0,
       md?.offsetY ?? 0,
       md?.scale ?? 1.0,
+      theatrePose,
     );
 
     // Dynamic studio lighting choreography synced with camera animation
@@ -835,6 +838,7 @@ export function initMockup(
     const duration = Math.max(0.1, sceneState.duration);
     const fps = Math.max(1, sceneState.fps);
     const progress = ((frame / (duration * fps)) * (animState.mockupSpeed || 1)) % 1;
+    const theatrePose = animState.theatreEnabled ? theatrePoseAt(progress) : null;
     const md = opts.getModel?.() ?? { scale: 1, rotX: 0, rotY: 0, offsetX: 0, offsetY: 0, centerNonce: 0 };
     const lightState = apply3DAnimation(
       animState.mockupAnimation || 'static',
@@ -852,6 +856,7 @@ export function initMockup(
       md?.offsetX ?? 0,
       md?.offsetY ?? 0,
       md?.scale ?? 1.0,
+      theatrePose,
     );
     // The animation preset's own light choreography, PLUS the user's Light
     // Direction — added as an offset rather than replacing it, so dragging the
