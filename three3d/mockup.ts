@@ -615,6 +615,19 @@ export function initMockup(
     }
   }
 
+  function isIPhoneAirSurfaceLayer(mesh: THREE.Mesh): boolean {
+    if (DEV?.key !== 'iphoneair') return false;
+    const geo = mesh.geometry;
+    if (!geo.boundingBox) geo.computeBoundingBox();
+    if (!geo.boundingBox) return false;
+    const size = geo.boundingBox.getSize(new THREE.Vector3());
+    const dims = [size.x, size.y, size.z].sort((a, b) => a - b);
+    // The Air GLB contains several display/decal shells with a zero-to-0.5 mm
+    // local thickness and a phone-sized face. Letting those layers cast onto
+    // and receive from each other produces unstable shadow stripes in motion.
+    return dims[0] <= 0.0006 && dims[1] >= 0.005 && dims[2] >= 0.02;
+  }
+
   const pivot = new THREE.Group();
   scene.add(pivot);
   let model: THREE.Object3D | null = null;
@@ -649,6 +662,10 @@ export function initMockup(
         mesh.material = mat;
         mesh.castShadow = true;
         mesh.receiveShadow = true;
+        if (isIPhoneAirSurfaceLayer(mesh)) {
+          mesh.castShadow = false;
+          mesh.receiveShadow = false;
+        }
         materials.push(mat);
         meshList.push(mesh);
         if (!keys.includes(key)) keys.push(key);
