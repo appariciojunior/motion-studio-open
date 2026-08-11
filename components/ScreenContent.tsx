@@ -110,29 +110,31 @@ export default function ScreenContent() {
             <ControlRow def={zoomDef} value={screenZoom} onChange={(v) => setScreenZoom(Number(v))} />
             <ControlRow def={posXDef} value={screenOffsetX} onChange={(v) => setScreenOffset(Number(v), screenOffsetY)} />
             <ControlRow def={posYDef} value={screenOffsetY} onChange={(v) => setScreenOffset(screenOffsetX, Number(v))} />
-            {slot === 'phone' && (
-              <div className="e3d-group" style={{ marginTop: 12 }}>
-                <div className="e3d-group-title">iPhone Status Bar</div>
-                <div className="ctl-row">
-                  <label className="ctl-label">Style</label>
-                  <div className="pills">
-                    {(['off', 'light', 'dark'] as const).map((mode) => (
-                      <button key={mode} className={`pill ${statusBarMode === mode ? 'active' : ''}`} onClick={() => setStatusBarMode(mode)}>
-                        {mode[0].toUpperCase() + mode.slice(1)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                {statusBarMode !== 'off' && (
-                  <>
-                    <ControlRow def={timeDef} value={statusBarTime} onChange={(v) => setStatusBarTime(String(v))} />
-                    <ControlRow def={batteryDef} value={statusBarBattery} onChange={(v) => setStatusBarBattery(Number(v))} />
-                    <ControlRow def={signalDef} value={statusBarSignal} onChange={(v) => setStatusBarSignal(Number(v))} />
-                  </>
-                )}
-              </div>
-            )}
           </>
+        )}
+
+        {slot === 'phone' && (
+          <div className="e3d-group" style={{ marginTop: 12 }}>
+            <div className="e3d-group-title">iPhone Status Bar</div>
+            <div className="ctl-hint">Show system information above the phone screen content.</div>
+            <div className="ctl-row">
+              <label className="ctl-label">Status Bar</label>
+              <div className="pills">
+                {(['off', 'light', 'dark'] as const).map((mode) => (
+                  <button key={mode} className={`pill ${statusBarMode === mode ? 'active' : ''}`} onClick={() => setStatusBarMode(mode)}>
+                    {mode[0].toUpperCase() + mode.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {statusBarMode !== 'off' && (
+              <>
+                <ControlRow def={timeDef} value={statusBarTime} onChange={(v) => setStatusBarTime(String(v))} />
+                <ControlRow def={batteryDef} value={statusBarBattery} onChange={(v) => setStatusBarBattery(Number(v))} />
+                <ControlRow def={signalDef} value={statusBarSignal} onChange={(v) => setStatusBarSignal(Number(v))} />
+              </>
+            )}
+          </div>
         )}
       </div>
     </>
