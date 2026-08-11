@@ -797,9 +797,10 @@ export function initMockup(
         if (!screenCanvasTex) {
           screenCanvasTex = new THREE.CanvasTexture(screenCanvas!);
           screenCanvasTex.colorSpace = THREE.SRGBColorSpace;
-          // Default (true) is correct against the UVs generated above, whose
-          // v runs bottom-up: the canvas' first row lands at the panel's top.
-          screenCanvasTex.flipY = true;
+          // Generated UVs use the default bottom-up direction. The iPhone Air
+          // ships with the opposite authored V axis, so its device definition
+          // opts out instead of flipping every other screen.
+          screenCanvasTex.flipY = DEV?.screenTextureFlipY ?? true;
           // Default filtering left this soft at the screen's steep viewing
           // angle — anisotropic filtering is what actually sharpens minified
           // detail at a grazing angle (mip bias alone doesn't fix it).
