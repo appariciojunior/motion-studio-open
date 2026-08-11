@@ -26,6 +26,7 @@ export const mockupGroups: ControlGroup[] = [
       // default: the room map bakes in rectangular panels, and a mirror-smooth
       // display returns one as a hard softbox — the CG tell the reference
       // tool's screens don't have. Raise it for a deliberate glossy look.
+      { key: 'screenGlare', label: 'Glare', type: 'slider', min: 0, max: 100, step: 1, default: 0 },
     ],
   },
   {

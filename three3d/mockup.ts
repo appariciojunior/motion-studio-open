@@ -610,6 +610,7 @@ export function initMockup(
     const selected = opts.getSelectedPart?.() ?? null;
     const emissiveHex = String(p.emissive ?? '#000000');
     const emissiveIntensity = Number(p.emissiveIntensity ?? 1);
+    const screenGlare = Math.max(0, Math.min(1, Number(p.screenGlare ?? 0) / 100));
     // Empty (or the shipped finish) means "leave the mesh's own materials be".
     const finishHex = String(p.finish ?? '');
     const isFinished = !!finishHex && finishHex.toLowerCase() !== String(DEV?.finishes?.[0]?.hex ?? '').toLowerCase();
@@ -660,25 +661,17 @@ export function initMockup(
       if (selected && mkey === selected) { m.emissive.setRGB(0.12, 0.35, 0.6); m.emissiveIntensity = 1; }
       else if (m.emissive) { m.emissive.set(emissiveHex); m.emissiveIntensity = emissiveIntensity; }
 
-      // The display glass is deliberately non-reflective. Only this geometry is
-      // neutralised: metal rails, camera rings and the enclosure keep the GLB's
-      // authored PBR response. Removing both environment and direct specular is
-      // important — envMapIntensity alone removes the softbox but a directional
-      // light can still leave a white highlight on mirror-smooth glass.
+      // The cover glass gets its own, much weaker environment reflection — at
+      // Screen Glare 0 it reflects nothing, so the display reads as a display
+      // instead of a mirror. Roughness is lifted along with it: dropping the
+      // reflection while leaving the surface mirror-smooth would still catch
+      // the key light as a hard specular blob in the same spot.
       if ('envMapIntensity' in m) {
-        m.envMapIntensity = m.userData.isScreenGlass ? 0 : envIntensity;
+        m.envMapIntensity = m.userData.isScreenGlass ? envIntensity * screenGlare : envIntensity;
       }
       if ('roughness' in m && m.userData.isScreenGlass) {
-        m.roughness = 1;
-      }
-      if ('metalness' in m && m.userData.isScreenGlass) {
-        m.metalness = 0;
-      }
-      if ('specularIntensity' in m && m.userData.isScreenGlass) {
-        m.specularIntensity = 0;
-      }
-      if ('clearcoat' in m && m.userData.isScreenGlass) {
-        m.clearcoat = 0;
+        const base = m.userData.origRoughness as number;
+        m.roughness = base + (0.6 - base) * (1 - screenGlare);
       }
 
       m.wireframe = wire;
