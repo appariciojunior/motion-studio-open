@@ -59,18 +59,20 @@ export default function ModelControl() {
           </>
         )}
 
-        <ControlRow
-          def={rotPadDef}
-          value={{
-            x: Math.round(THREE.MathUtils.radToDeg(model.rotY)),
-            y: Math.round(THREE.MathUtils.radToDeg(model.rotX)),
-          }}
-          onChange={(v) => setModelRotation(
-            THREE.MathUtils.degToRad(Number(v.y)),
-            THREE.MathUtils.degToRad(Number(v.x)),
-            model.rotZ,
-          )}
-        />
+        <div className="mc-rotation-pad">
+          <ControlRow
+            def={rotPadDef}
+            value={{
+              x: Math.round(THREE.MathUtils.radToDeg(model.rotY)),
+              y: Math.round(THREE.MathUtils.radToDeg(model.rotX)),
+            }}
+            onChange={(v) => setModelRotation(
+              THREE.MathUtils.degToRad(Number(v.y)),
+              THREE.MathUtils.degToRad(Number(v.x)),
+              model.rotZ,
+            )}
+          />
+        </div>
 
 
         <div className="mc-field-label">Model</div>
