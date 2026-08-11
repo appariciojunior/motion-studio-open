@@ -1698,20 +1698,6 @@ select.field { padding-right: 26px; }
 
 /* ---- 3D MODEL CONTROL block (right sidebar top, 3D mode) ---- */
 .mc-body { display: flex; flex-direction: column; gap: 12px; }
-.mc-field-label { font-size: var(--fs-label); line-height: var(--lh-label); color: var(--fg-label); margin-top: 2px; }
-.mc-rotate {
-  display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 34px); gap: 4px;
-  grid-template-areas: ". up ." "left center right" ". down .";
-}
-.mc-arrow {
-  display: grid; place-items: center; border-radius: var(--r-ctrl);
-  background: var(--card-inset); color: var(--fg-muted); font-size: 12px; cursor: pointer;
-  transition: color var(--t-fast), background var(--t-fast);
-}
-.mc-arrow:hover { background: var(--card-thumb); color: var(--fg); }
-.mc-arrow.up { grid-area: up; } .mc-arrow.down { grid-area: down; }
-.mc-arrow.left { grid-area: left; } .mc-arrow.right { grid-area: right; }
-.mc-arrow.center { grid-area: center; font-size: 9px; }
 .mc-reset-model { background: none; border: 0; color: var(--fg-muted); font-size: var(--fs-label); cursor: pointer; padding: 0; text-align: left; }
 .mc-reset-model:hover { color: var(--fg); }
 
