@@ -643,6 +643,17 @@ export function initMockup(
     return fullRearPanel && (mat.userData.origTransparent || !metallicOverlay);
   }
 
+  function isIPhoneAirRedundantLogoOverlay(mesh: THREE.Mesh, mat: THREE.Material & { userData: Record<string, any> }): boolean {
+    if (DEV?.key !== 'iphoneair' || !mat.userData.origTransparent) return false;
+    const geo = mesh.geometry;
+    const positions = geo.getAttribute('position');
+    // The Air GLB contains two identical Apple-logo silhouettes. The BLEND
+    // copy sits 0.5 mm above the opaque copy and flickers against it in motion.
+    // Geometry counts uniquely identify that overlay without relying on the
+    // randomized mesh/material names shipped in the asset.
+    return positions?.count === 169 && geo.index?.count === 498;
+  }
+
   const pivot = new THREE.Group();
   scene.add(pivot);
   let model: THREE.Object3D | null = null;
@@ -681,6 +692,7 @@ export function initMockup(
         mesh.castShadow = true;
         mesh.receiveShadow = true;
         if (isIPhoneAirRedundantRearGlass(mesh, mat)) mesh.visible = false;
+        if (isIPhoneAirRedundantLogoOverlay(mesh, mat)) mesh.visible = false;
         if (isIPhoneAirSurfaceLayer(mesh)) {
           mesh.castShadow = false;
           mesh.receiveShadow = false;
