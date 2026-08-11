@@ -34,6 +34,8 @@ function surfaceTemplate(id: string, name: string, mode: SurfaceMode, lanesDefau
   controls.push(
     { key: 'direction', label: 'Direction', type: 'pills', options: horizontal ? ['left','right','alternate'] : ['up','down','alternate'], default: horizontal ? 'left' : 'up', section: 'Motion' },
     { key: 'perspective', label: 'Perspective', type: 'slider', min: 0, max: 100, step: 1, default: 48, section: 'Depth', unit: '%', advanced: true },
+    { key: 'camDistance', label: 'Camera Distance', type: 'slider', min: 0.5, max: 2.5, step: 0.05, default: 1, section: 'Depth', unit: '×', precision: 2, advanced: true,
+      description: 'Moves the camera itself closer or further, at the same Perspective.' },
     { key: 'backFade', label: 'Back Fade', type: 'slider', min: 0, max: 100, step: 5, default: 55, section: 'Finish', unit: '%', advanced: true },
     { key: 'speed', label: 'Speed', type: 'slider', min: 0, max: 2, step: 0.1, default: 0.35, section: 'Motion', unit: '×', precision: 1, advanced: true },
     { key: 'offset', label: 'Offset', type: 'xypad', default: { x: 0, y: 0 }, section: 'Layout', advanced: true },
@@ -111,7 +113,7 @@ function surfaceTemplate(id: string, name: string, mode: SurfaceMode, lanesDefau
       repeatAssets: true, cardAspect: 16 / 9, defaultEasing: { id: 'linear' },
     },
     controls,
-    camera: (v) => ({ fov: 24 + clamp(v.perspective / 100, 0, 1) * 38 }),
+    camera: (v) => ({ fov: 24 + clamp(v.perspective / 100, 0, 1) * 38, distance: v.camDistance }),
     transform3d: (frame, index, count, v, ctx) => {
       const g = geometry(frame, index, count, v, ctx);
       return {

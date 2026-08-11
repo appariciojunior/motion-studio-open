@@ -105,7 +105,10 @@ export const templates: Record<string, Template> = Object.fromEntries(
 
 // Templates can remain addressable for persisted scenes while being withheld
 // from every picker until their visual quality is ready for the catalogue.
-export const catalogTemplateList = templateList.filter((t) => !t.meta.catalogHidden);
+const HIDDEN_CATALOG_GROUPS = new Set(['3D & Perspective', 'Flip']);
+export const catalogTemplateList = templateList.filter(
+  (t) => !t.meta.catalogHidden && !HIDDEN_CATALOG_GROUPS.has(t.meta.group)
+);
 
 // Group order follows the reference catalogue.
 export const templateGroups: { group: string; items: Template[] }[] = (() => {
