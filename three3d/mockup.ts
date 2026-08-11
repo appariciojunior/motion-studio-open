@@ -652,6 +652,9 @@ export function initMockup(
         // smooth, so the noise is mixed toward a floor instead.
         mat.userData.origRoughness = typeof mat.roughness === 'number' ? mat.roughness : 1;
         mat.userData.srcRoughnessMap = mat.roughnessMap ?? null;
+        mat.userData.origOpacity = typeof mat.opacity === 'number' ? mat.opacity : 1;
+        mat.userData.origTransparent = !!mat.transparent;
+        mat.userData.origDepthWrite = mat.depthWrite;
         // Deliberately NOT raising these textures' anisotropy. Doing so was
         // tried and reverted: the device's own baked maps (the Apple logo most
         // visibly) are small, and sharpening them against the supersampled
@@ -810,8 +813,16 @@ export function initMockup(
       }
 
       m.wireframe = wire;
-      m.opacity = op;
-      m.transparent = op < 1;
+      // Preserve authored alpha materials (most visibly the iPhone Air rear
+      // glass). Replacing GLB `BLEND` with an opaque, depth-writing material on
+      // every frame made its stacked rear shells fight in the depth buffer.
+      const authoredOpacity = Number(m.userData.origOpacity ?? 1);
+      const authoredTransparent = !!m.userData.origTransparent;
+      m.opacity = authoredOpacity * op;
+      m.transparent = authoredTransparent || m.opacity < 0.999;
+      m.depthWrite = authoredTransparent
+        ? false
+        : (m.userData.origDepthWrite !== false && m.opacity >= 0.999);
       if (m.flatShading !== flat) { m.flatShading = flat; m.needsUpdate = true; }
     }
 
