@@ -2,7 +2,6 @@
 
 import { getThreeEffect, threeEffects } from '@/three3d';
 import { use3DStore } from '@/store/use3DStore';
-import { MOCKUP_ANIMATIONS } from '@/three3d/animations';
 import { ControlRow } from './Controls';
 
 // Right column in 3D mode — renders the active 3D effect's control groups
@@ -14,10 +13,14 @@ export default function Effect3DControls({ effectId: forcedEffectId }: { effectI
   const effectId = def.id;
   const params = use3DStore((s) => s.params[effectId]) ?? {};
   const setParam = use3DStore((s) => s.setParam);
+  const resetEffectSettings = use3DStore((s) => s.resetEffectSettings);
   const mockupAnimation = use3DStore((s) => s.mockupAnimation || 'static');
-  const setMockupAnimation = use3DStore((s) => s.setMockupAnimation);
   const mockupSpeed = use3DStore((s) => s.mockupSpeed || 1);
   const setMockupSpeed = use3DStore((s) => s.setMockupSpeed);
+  const mockupEasing = use3DStore((s) => s.mockupEasing);
+  const setMockupEasing = use3DStore((s) => s.setMockupEasing);
+  const motionStrength = use3DStore((s) => s.mockupMotionStrength);
+  const setMotionStrength = use3DStore((s) => s.setMockupMotionStrength);
 
   return (
     <>
@@ -29,25 +32,28 @@ export default function Effect3DControls({ effectId: forcedEffectId }: { effectI
         <div className="e3d-group">
           <div className="e3d-group-title">Camera Motion</div>
           <div className="ctl-row">
-            <label className="ctl-label">Preset</label>
-            <div className="pills" style={{ flexWrap: 'wrap', gap: 4 }}>
-              {MOCKUP_ANIMATIONS.map((a) => (
-                <button
-                  key={a.key}
-                  className={`pill ${mockupAnimation === a.key ? 'active' : ''}`}
-                  onClick={() => setMockupAnimation(a.key)}
-                  style={{ fontSize: 11 }}
-                >
-                  {a.label}
+            <label className="ctl-label">Speed</label>
+            <div className="pills">
+              {[0.5, 1, 1.5, 2].map((sp) => (
+                <button key={sp} className={`pill ${mockupSpeed === sp ? 'active' : ''}`} onClick={() => setMockupSpeed(sp)}>{sp}x</button>
+              ))}
+            </div>
+          </div>
+          <div className="ctl-row">
+            <label className="ctl-label">Motion</label>
+            <div className="pills">
+              {[0.5, 0.75, 1, 1.25].map((amount) => (
+                <button key={amount} className={`pill ${motionStrength === amount ? 'active' : ''}`} onClick={() => setMotionStrength(amount)}>
+                  {Math.round(amount * 100)}%
                 </button>
               ))}
             </div>
           </div>
           <div className="ctl-row">
-            <label className="ctl-label">Speed</label>
+            <label className="ctl-label">Curve</label>
             <div className="pills">
-              {[0.5, 1, 1.5, 2].map((sp) => (
-                <button key={sp} className={`pill ${mockupSpeed === sp ? 'active' : ''}`} onClick={() => setMockupSpeed(sp)}>{sp}x</button>
+              {([['preset', 'Natural'], ['smooth', 'Smooth'], ['linear', 'Linear']] as const).map(([value, label]) => (
+                <button key={value} className={`pill ${mockupEasing === value ? 'active' : ''}`} onClick={() => setMockupEasing(value)}>{label}</button>
               ))}
             </div>
           </div>
@@ -70,6 +76,13 @@ export default function Effect3DControls({ effectId: forcedEffectId }: { effectI
             ))}
           </div>
         ))}
+        <button
+          className="web-auto-btn"
+          onClick={() => resetEffectSettings(effectId)}
+          style={{ width: '100%', marginTop: 8 }}
+        >
+          Reset all values
+        </button>
       </div>
     </>
   );

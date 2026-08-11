@@ -135,6 +135,8 @@ const helix3d: Template = {
     { key: 'ringTilt',     label: 'Ring Tilt',     type: 'slider', min: -45, max: 45, step: 1,    default: 0, section: 'Depth', unit: '°',
       description: 'Tips the whole helix axis. The cards stay attached to the curve.' },
     { key: 'perspective',  label: 'Perspective',   type: 'slider', min: 0, max: 40, step: 2,      default: 20, section: 'Depth', unit: '%' },
+    { key: 'camDistance',  label: 'Camera Distance', type: 'slider', min: 0.5, max: 2.5, step: 0.05, default: 1, section: 'Depth', unit: '×', precision: 2,
+      description: 'Moves the camera itself closer or further, at the same Perspective.' },
     { key: 'facing',       label: 'Card Style',    type: 'pills',  options: ['curved','upright'], default: 'curved', section: 'Depth' },
     { key: 'scalePulse',   label: 'Scale Pulse',   type: 'slider', min: 0, max: 60, step: 5,      default: 0, section: 'Motion', unit: '%',
       description: 'Breathes the card size once per lap. Period is exactly one lap, so the loop stays seamless.' },
@@ -147,7 +149,7 @@ const helix3d: Template = {
     { key: 'offset',       label: 'Offset',        type: 'xypad',                                 default: { x: 0, y: 0 }, section: 'Layout', advanced: true },
   ],
 
-  camera: (v) => ({ fov: helixFov(v.perspective) }),
+  camera: (v) => ({ fov: helixFov(v.perspective), distance: v.camDistance }),
 
   transform3d: (frame, index, count, v, ctx) => {
     const dir = v.direction === 'upward' ? -1 : 1;

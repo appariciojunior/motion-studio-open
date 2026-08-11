@@ -37,6 +37,7 @@ import { surfaceVariants } from './surface';
 import { premium3dTemplates } from './premium3d';
 import { showcaseVariants } from './showcase';
 import { helix3dVariants } from './helix3d';
+import { interactiveCardsVariants } from './interactiveCards';
 
 
 // The reference's complete "3D & Perspective" shelf, in the same order.
@@ -58,6 +59,7 @@ const perspective3dTemplates: Template[] = [
 // Order follows the reference catalogue's sidebar.
 export const templateList: Template[] = [
   ...perspective3dTemplates,
+  ...interactiveCardsVariants,
   ...carouselVariants,
   ...carouselRefVariants,
   ...orbitVariants,
@@ -103,7 +105,10 @@ export const templates: Record<string, Template> = Object.fromEntries(
 
 // Templates can remain addressable for persisted scenes while being withheld
 // from every picker until their visual quality is ready for the catalogue.
-export const catalogTemplateList = templateList.filter((t) => !t.meta.catalogHidden);
+const HIDDEN_CATALOG_GROUPS = new Set(['3D & Perspective', 'Flip']);
+export const catalogTemplateList = templateList.filter(
+  (t) => !t.meta.catalogHidden && !HIDDEN_CATALOG_GROUPS.has(t.meta.group)
+);
 
 // Group order follows the reference catalogue.
 export const templateGroups: { group: string; items: Template[] }[] = (() => {

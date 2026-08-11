@@ -14,7 +14,16 @@ import type { CameraRig } from './cameraRig';
 // (tint, scanlines, bloom, …) is applied in CSS by the 3D stage component.
 // Returns dispose().
 
-export interface ModelTransform { scale: number; rotX: number; rotY: number; offsetX: number; offsetY: number; centerNonce: number; }
+export interface ModelTransform {
+  scale: number;
+  rotX: number;
+  rotY: number;
+  rotZ?: number;
+  offsetX: number;
+  offsetY: number;
+  offsetZ?: number;
+  centerNonce: number;
+}
 
 export interface AsciiOptions {
   modelUrl?: string;
@@ -38,6 +47,12 @@ export interface AsciiOptions {
   getScreenMedia?: () => { kind: 'image' | 'video'; url: string } | null;
   // How that media is laid into the screen (fit mode, zoom, 0..100 anchor).
   getScreenTransform?: () => { fit: 'cover' | 'width' | 'contain'; zoom: number; offsetX: number; offsetY: number };
+  getScreenStatus?: () => {
+    mode: 'off' | 'light' | 'dark';
+    time: string;
+    battery: number;
+    signal: number;
+  };
   // Effect hands out a deterministic render handle (null on teardown) — lets a
   // caller seek to an exact frame and capture it, independent of the rAF loop.
   onRenderer?: (handle: {

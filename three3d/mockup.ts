@@ -374,8 +374,88 @@ export function initMockup(
     const dy = (H - dh) * (t.offsetY / 100);
     ctx.drawImage(source, dx, dy, dw, dh);
 
+    if (DEV?.slot === 'phone') drawIPhoneStatusBar(ctx, W, H);
+
     ctx.restore();
     if (screenCanvasTex) screenCanvasTex.needsUpdate = true;
+  }
+
+  function drawEmptyScreenFrame() {
+    if (!screenCanvas || !screenCtx) return;
+    const W = screenCanvas.width, H = screenCanvas.height;
+    screenCtx.clearRect(0, 0, W, H);
+    screenCtx.fillStyle = '#ffffff';
+    screenCtx.fillRect(0, 0, W, H);
+    drawIPhoneStatusBar(screenCtx, W, H);
+    if (screenCanvasTex) screenCanvasTex.needsUpdate = true;
+  }
+
+  function drawIPhoneStatusBar(ctx: CanvasRenderingContext2D, W: number, H: number) {
+    const status = opts.getScreenStatus?.();
+    if (!status || status.mode === 'off') return;
+    const color = status.mode === 'light' ? '#ffffff' : '#050505';
+    // iOS lays the two status clusters around the Dynamic Island, not against
+    // the display edges. Keep both clusters optically centred in their side
+    // areas so the layout stays balanced on every phone texture resolution.
+    const y = H * 0.036;
+    ctx.save();
+    const scaleX = DEV?.statusBarScaleX ?? 1;
+    if (scaleX !== 1) {
+      ctx.translate(W * 0.5, 0);
+      ctx.scale(scaleX, 1);
+      ctx.translate(W * -0.5, 0);
+    }
+    ctx.fillStyle = color;
+    ctx.strokeStyle = color;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.font = `600 ${Math.round(H * 0.0175)}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(status.time.trim() || '9:41', W * 0.165, y);
+
+    const signal = Math.max(0, Math.min(4, Math.round(status.signal)));
+    const barW = W * 0.008;
+    const gap = W * 0.004;
+    const sx = W * 0.744;
+    const signalBottom = y + W * 0.012;
+    const signalHeights = [0.009, 0.014, 0.019, 0.024].map((v) => W * v);
+    for (let i = 0; i < 4; i++) {
+      const h = signalHeights[i];
+      ctx.globalAlpha = i < signal ? 1 : 0.25;
+      ctx.beginPath();
+      ctx.roundRect(sx + i * (barW + gap), signalBottom - h, barW, h, barW * 0.42);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    const wx = W * 0.829;
+    const wy = y + W * 0.008;
+    ctx.lineWidth = Math.max(2, W * 0.005);
+    ctx.beginPath(); ctx.arc(wx, wy, W * 0.027, Math.PI * 1.18, Math.PI * 1.82); ctx.stroke();
+    ctx.beginPath(); ctx.arc(wx, wy + W * 0.006, W * 0.0155, Math.PI * 1.2, Math.PI * 1.8); ctx.stroke();
+    ctx.beginPath(); ctx.arc(wx, wy + W * 0.014, W * 0.004, 0, Math.PI * 2); ctx.fill();
+
+    const bx = W * 0.877;
+    const bw = W * 0.058;
+    const bh = W * 0.026;
+    const by = y - bh * 0.5;
+    const radius = Math.max(2, W * 0.0065);
+    ctx.lineWidth = Math.max(2, W * 0.0035);
+    ctx.globalAlpha = 0.9;
+    ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, radius); ctx.stroke();
+    ctx.beginPath();
+    ctx.roundRect(bx + bw + W * 0.004, by + bh * 0.29, W * 0.005, bh * 0.42, W * 0.002);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    const level = Math.max(0, Math.min(100, status.battery)) / 100;
+    if (level > 0) {
+      ctx.beginPath();
+      const inset = W * 0.005;
+      ctx.roundRect(bx + inset, by + inset, Math.max(1, (bw - inset * 2) * level), bh - inset * 2, radius * 0.55);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   // ── The cover glass over the display ────────────────────────────────────
@@ -447,13 +527,32 @@ export function initMockup(
   // never drawn into) show whatever sits behind the Screen mesh — the device's
   // own bezel — instead of solid black.
   function makeScreenMaterial(tex: THREE.Texture): THREE.MeshBasicMaterial {
-    return new THREE.MeshBasicMaterial({ map: tex, toneMapped: false, transparent: true });
+    return new THREE.MeshBasicMaterial({
+      map: tex,
+      toneMapped: false,
+      transparent: true,
+      alphaTest: 0.001,
+    });
+  }
+
+  // ArqÃ© composes the display as an unlit image layer above the product render,
+  // rather than letting a PBR glass layer relight it. Pulling only this surface
+  // forward in depth reproduces that composition without touching any light,
+  // exposure, finish material, roughness or environment parameter.
+  function configureScreenComposite(mat: THREE.MeshBasicMaterial) {
+    mat.polygonOffset = true;
+    mat.polygonOffsetFactor = -4;
+    mat.polygonOffsetUnits = -4;
+    mat.depthTest = true;
+    mat.depthWrite = true;
+    if (screenMesh) screenMesh.renderOrder = 1000;
   }
 
   function setScreenMaterial(mat: THREE.MeshBasicMaterial) {
     if (!screenMesh) { mat.dispose(); return; }
     const old = screenMesh.material as THREE.Material;
     if (old && old !== screenMesh.userData.origMaterial) old.dispose();
+    configureScreenComposite(mat);
     screenMesh.material = mat;
   }
 
@@ -461,7 +560,16 @@ export function initMockup(
     if (!screenMesh || !screenMesh.userData.origMaterial) return;
     const old = screenMesh.material as THREE.Material;
     if (old && old !== screenMesh.userData.origMaterial) old.dispose();
-    screenMesh.material = screenMesh.userData.origMaterial;
+    const source = screenMesh.userData.origMaterial as THREE.MeshStandardMaterial;
+    const fallback = new THREE.MeshBasicMaterial({
+      color: source.color?.clone() ?? new THREE.Color(0x000000),
+      map: source.map ?? null,
+      toneMapped: false,
+      transparent: true,
+      alphaTest: 0.001,
+    });
+    configureScreenComposite(fallback);
+    screenMesh.material = fallback;
   }
 
   // ── Which materials the Finish repaints ─────────────────────────────────
@@ -507,6 +615,92 @@ export function initMockup(
     }
   }
 
+  function markIPhoneAirRearPanelAsEnclosure() {
+    if (DEV?.key !== 'iphoneair') return;
+    for (let i = 0; i < meshList.length; i++) {
+      const mesh = meshList[i];
+      if (!mesh.visible) continue;
+      const geo = mesh.geometry;
+      if (!geo.boundingBox) geo.computeBoundingBox();
+      if (!geo.boundingBox) continue;
+      const size = geo.boundingBox.getSize(new THREE.Vector3());
+      const isStableRearPanel = size.x >= 0.065
+        && size.y >= 0.14
+        && geo.boundingBox.max.z <= 0.001;
+      if (isStableRearPanel) (materials[i] as any).userData.isEnclosure = true;
+    }
+  }
+
+  function isIPhoneAirSurfaceLayer(mesh: THREE.Mesh): boolean {
+    if (DEV?.key !== 'iphoneair') return false;
+    const geo = mesh.geometry;
+    if (!geo.boundingBox) geo.computeBoundingBox();
+    if (!geo.boundingBox) return false;
+    const size = geo.boundingBox.getSize(new THREE.Vector3());
+    const dims = [size.x, size.y, size.z].sort((a, b) => a - b);
+    // The Air GLB contains several display/decal shells with a zero-to-0.5 mm
+    // local thickness and a phone-sized face. Letting those layers cast onto
+    // and receive from each other produces unstable shadow stripes in motion.
+    return dims[0] <= 0.0006 && dims[1] >= 0.005 && dims[2] >= 0.02;
+  }
+
+  function isIPhoneAirRedundantRearGlass(mesh: THREE.Mesh, mat: THREE.Material & { userData: Record<string, any> }): boolean {
+    if (DEV?.key !== 'iphoneair') return false;
+    const geo = mesh.geometry;
+    if (!geo.boundingBox) geo.computeBoundingBox();
+    if (!geo.boundingBox) return false;
+    const size = geo.boundingBox.getSize(new THREE.Vector3());
+    const fullRearPanel = size.x >= 0.065 && size.y >= 0.14 && geo.boundingBox.max.z <= 0.001;
+    const metallicOverlay = 'metalness' in mat && Number((mat as THREE.MeshStandardMaterial).metalness) > 0.05;
+    // The Air ships one stable opaque backing plus two full-size overlays: a
+    // metallic shell and a transparent BLEND shell. Both overlays expose their
+    // triangulation over the backing. Smaller transparent/metallic meshes are
+    // camera and sensor parts and therefore do not match `fullRearPanel`.
+    // Keep one authored transparent coat above the metallic enclosure so the
+    // Air retains its glass depth and highlights. Its depth writes are disabled
+    // below, so it cannot fight the enclosure surface. Only the redundant
+    // opaque, non-metallic backing is removed.
+    return fullRearPanel && !mat.userData.origTransparent && !metallicOverlay;
+  }
+
+  function isIPhoneAirRedundantLogoOverlay(mesh: THREE.Mesh, mat: THREE.Material & { userData: Record<string, any> }): boolean {
+    if (DEV?.key !== 'iphoneair' || mat.userData.origTransparent) return false;
+    const geo = mesh.geometry;
+    const positions = geo.getAttribute('position');
+    // The Air GLB contains two identical Apple-logo silhouettes. Keep the
+    // upper BLEND copy (now rendered without depth writes) and remove the lower
+    // opaque duplicate that sits beneath the recolourable rear panel.
+    return positions?.count === 169 && geo.index?.count === 498;
+  }
+
+  function stabilizeIPhoneAirLogo(mesh: THREE.Mesh, mat: THREE.MeshStandardMaterial & { userData: Record<string, any> }) {
+    if (DEV?.key !== 'iphoneair') return;
+    const geo = mesh.geometry;
+    const positions = geo.getAttribute('position');
+    const isAppleLogo = positions?.count === 169 && geo.index?.count === 498;
+    if (!isAppleLogo || !mat.userData.origTransparent) return;
+
+    // Reuse the Air's correctly positioned logo geometry, but give it the
+    // stable dark metallic treatment used by the 17-style finish. Copying the
+    // 17 mesh itself would also copy incompatible model-space transforms.
+    mat.color.set('#202328');
+    mat.metalness = 0.58;
+    mat.roughness = 0.34;
+    mat.transparent = true;
+    mat.opacity = 0.96;
+    mat.depthWrite = false;
+    mat.depthTest = true;
+    mat.polygonOffset = true;
+    mat.polygonOffsetFactor = -2;
+    mat.polygonOffsetUnits = -2;
+    mat.userData.origColor = mat.color.clone();
+    mat.userData.origOpacity = 0.96;
+    mat.userData.origTransparent = true;
+    mat.userData.origDepthWrite = false;
+    mat.userData.isEnclosure = false;
+    mesh.renderOrder = 50;
+  }
+
   const pivot = new THREE.Group();
   scene.add(pivot);
   let model: THREE.Object3D | null = null;
@@ -531,6 +725,9 @@ export function initMockup(
         // smooth, so the noise is mixed toward a floor instead.
         mat.userData.origRoughness = typeof mat.roughness === 'number' ? mat.roughness : 1;
         mat.userData.srcRoughnessMap = mat.roughnessMap ?? null;
+        mat.userData.origOpacity = typeof mat.opacity === 'number' ? mat.opacity : 1;
+        mat.userData.origTransparent = !!mat.transparent;
+        mat.userData.origDepthWrite = mat.depthWrite;
         // Deliberately NOT raising these textures' anisotropy. Doing so was
         // tried and reverted: the device's own baked maps (the Apple logo most
         // visibly) are small, and sharpening them against the supersampled
@@ -541,11 +738,22 @@ export function initMockup(
         mesh.material = mat;
         mesh.castShadow = true;
         mesh.receiveShadow = true;
+        // Resolve the authored duplicate before tuning the retained logo so
+        // the selection always uses the GLB's original transparency metadata.
+        const hideLogoDuplicate = isIPhoneAirRedundantLogoOverlay(mesh, mat);
+        stabilizeIPhoneAirLogo(mesh, mat);
+        if (isIPhoneAirRedundantRearGlass(mesh, mat)) mesh.visible = false;
+        if (hideLogoDuplicate) mesh.visible = false;
+        if (isIPhoneAirSurfaceLayer(mesh)) {
+          mesh.castShadow = false;
+          mesh.receiveShadow = false;
+        }
         materials.push(mat);
         meshList.push(mesh);
         if (!keys.includes(key)) keys.push(key);
       });
       markEnclosureMaterials();
+      markIPhoneAirRearPanelAsEnclosure();
       modelHalf = fitAndCenter(model, MODEL_SIZE);
       const box = new THREE.Box3().setFromObject(model);
       modelBottom = box.min.y;
@@ -557,6 +765,7 @@ export function initMockup(
         screenMesh.userData.origMaterial = screenMesh.material;
         ensureScreenUVs(screenMesh);
         markScreenGlass(screenMesh);
+        restoreScreenMaterial();
       }
       opts.onParts?.(keys);
     },
@@ -625,6 +834,12 @@ export function initMockup(
       const mkey = m.userData.partKey as string;
       if (mkey === 'Screen') continue;   // user content — own material, not device-tinted
       const partFill = partFills[mkey];
+      // A phone's global colour represents its enclosure finish, not every
+      // component in the GLB. Camera lenses, microphones, sensors, buttons and
+      // glass must retain their authored material even when Model Materials is
+      // disabled. Explicit per-part fills remain available as an intentional
+      // override.
+      const preservePhoneDetail = DEV?.slot === 'phone' && !m.userData.isEnclosure && !partFill;
 
       if (partFill) {
         const hash = `${partFill.type}|${partFill.c1}|${partFill.c2}`;
@@ -647,6 +862,7 @@ export function initMockup(
             Math.min(1, Math.max(0, m.userData.origL * lScale)),
           );
         }
+        else if (preservePhoneDetail) m.color.copy(m.userData.origColor);
         else if (useTex) m.color.copy(m.userData.hasMap ? WHITE : m.userData.origColor);
         else m.color.copy(tmpColor);
       }
@@ -655,7 +871,9 @@ export function initMockup(
       // shipped finish's own colour, so keeping it would tint the new finish
       // towards the old one instead of replacing it.
       const repainted = isFinished && m.userData.isEnclosure && !partFill;
-      const desiredMap = (partFill || repainted) ? null : (useTex && m.userData.hasMap ? m.userData.srcMap : null);
+      const desiredMap = (partFill || repainted)
+        ? null
+        : ((useTex || preservePhoneDetail) && m.userData.hasMap ? m.userData.srcMap : null);
       if (m.map !== desiredMap) { m.map = desiredMap; m.needsUpdate = true; }
 
       if (selected && mkey === selected) { m.emissive.setRGB(0.12, 0.35, 0.6); m.emissiveIntensity = 1; }
@@ -675,34 +893,48 @@ export function initMockup(
       }
 
       m.wireframe = wire;
-      m.opacity = op;
-      m.transparent = op < 1;
+      // Preserve authored alpha materials (most visibly the iPhone Air rear
+      // glass). Replacing GLB `BLEND` with an opaque, depth-writing material on
+      // every frame made its stacked rear shells fight in the depth buffer.
+      const authoredOpacity = Number(m.userData.origOpacity ?? 1);
+      const authoredTransparent = !!m.userData.origTransparent;
+      m.opacity = authoredOpacity * op;
+      m.transparent = authoredTransparent || m.opacity < 0.999;
+      m.depthWrite = authoredTransparent
+        ? false
+        : (m.userData.origDepthWrite !== false && m.opacity >= 0.999);
       if (m.flatShading !== flat) { m.flatShading = flat; m.needsUpdate = true; }
     }
 
     // screen content — only re-touch when the media identity actually changes
     const media = opts.getScreenMedia?.() ?? null;
-    const mkey2 = media ? `${media.kind}|${media.url}` : '';
+    const screenStatus = opts.getScreenStatus?.();
+    const hasEmptyStatusScreen = DEV?.slot === 'phone' && screenStatus?.mode !== 'off';
+    const mkey2 = media ? `${media.kind}|${media.url}` : hasEmptyStatusScreen ? 'empty-status-screen' : '';
     if (screenMesh && mkey2 !== screenKey) {
       screenKey = mkey2;
       if (screenVideoEl) { screenVideoEl.pause(); screenVideoEl.removeAttribute('src'); screenVideoEl.load(); screenVideoEl = null; }
-      if (media) {
+      if (media || hasEmptyStatusScreen) {
         const aspect = DEV?.screenAspect ?? 16 / 9;
-        const cornerFrac = DEV?.screenCornerFrac ?? 0;
         ensureScreenCanvas(aspect);
         if (!screenCanvasTex) {
           screenCanvasTex = new THREE.CanvasTexture(screenCanvas!);
           screenCanvasTex.colorSpace = THREE.SRGBColorSpace;
-          // Default (true) is correct against the UVs generated above, whose
-          // v runs bottom-up: the canvas' first row lands at the panel's top.
-          screenCanvasTex.flipY = true;
+          // Generated UVs use the default bottom-up direction. The iPhone Air
+          // ships with the opposite authored V axis, so its device definition
+          // opts out instead of flipping every other screen.
+          screenCanvasTex.flipY = DEV?.screenTextureFlipY ?? true;
           // Default filtering left this soft at the screen's steep viewing
           // angle — anisotropic filtering is what actually sharpens minified
           // detail at a grazing angle (mip bias alone doesn't fix it).
           screenCanvasTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
         }
         setScreenMaterial(makeScreenMaterial(screenCanvasTex));
-        if (media.kind === 'video') {
+        if (!media) {
+          screenImageEl = null;
+          screenXformKey = '';
+          drawEmptyScreenFrame();
+        } else if (media.kind === 'video') {
           const vid = document.createElement('video');
           vid.src = media.url; vid.crossOrigin = 'anonymous'; vid.loop = true; vid.muted = true; vid.playsInline = true;
           vid.play().catch(() => {});
@@ -728,10 +960,17 @@ export function initMockup(
       drawScreenFrame(screenVideoEl, DEV?.screenAspect ?? 16 / 9, DEV?.screenCornerFrac ?? 0);
     } else if (screenImageEl) {
       const t = opts.getScreenTransform?.() ?? { fit: 'cover', zoom: 1, offsetX: 50, offsetY: 50 };
-      const xkey = `${t.fit}|${t.zoom}|${t.offsetX}|${t.offsetY}`;
+      const status = opts.getScreenStatus?.();
+      const xkey = `${t.fit}|${t.zoom}|${t.offsetX}|${t.offsetY}|${status?.mode}|${status?.time}|${status?.battery}|${status?.signal}`;
       if (xkey !== screenXformKey) {
         screenXformKey = xkey;
         drawScreenFrame(screenImageEl, DEV?.screenAspect ?? 16 / 9, DEV?.screenCornerFrac ?? 0);
+      }
+    } else if (hasEmptyStatusScreen) {
+      const xkey = `empty|${screenStatus?.mode}|${screenStatus?.time}|${screenStatus?.battery}|${screenStatus?.signal}`;
+      if (xkey !== screenXformKey) {
+        screenXformKey = xkey;
+        drawEmptyScreenFrame();
       }
     }
     // Screen Brightness — the display is unlit (MeshBasicMaterial), so no light
@@ -744,8 +983,8 @@ export function initMockup(
     const md = opts.getModel?.();
     if (md) {
       pivot.scale.setScalar(Math.max(0.05, md.scale));
-      pivot.rotation.set(md.rotX, md.rotY, 0);
-      pivot.position.set(md.offsetX ?? 0, md.offsetY ?? 0, 0);
+      pivot.rotation.set(md.rotX, md.rotY, md.rotZ ?? 0);
+      pivot.position.set(md.offsetX ?? 0, md.offsetY ?? 0, md.offsetZ ?? 0);
       sun.target.position.set(md.offsetX ?? 0, md.offsetY ?? 0, 0);
       sun.target.updateMatrixWorld();
       if (md.centerNonce !== lastCenterNonce) {
@@ -776,6 +1015,12 @@ export function initMockup(
       md?.offsetX ?? 0,
       md?.offsetY ?? 0,
       md?.scale ?? 1.0,
+      animState.mockupEasing,
+      animState.mockupMotionStrength,
+      md?.rotZ ?? 0,
+      md?.offsetZ ?? 0,
+      Number(p.fieldOfView ?? 42),
+      Number(p.lidAngle ?? 112),
     );
 
     // Dynamic studio lighting choreography synced with camera animation
@@ -835,7 +1080,7 @@ export function initMockup(
     const duration = Math.max(0.1, sceneState.duration);
     const fps = Math.max(1, sceneState.fps);
     const progress = ((frame / (duration * fps)) * (animState.mockupSpeed || 1)) % 1;
-    const md = opts.getModel?.() ?? { scale: 1, rotX: 0, rotY: 0, offsetX: 0, offsetY: 0, centerNonce: 0 };
+    const md = opts.getModel?.() ?? { scale: 1, rotX: 0, rotY: 0, rotZ: 0, offsetX: 0, offsetY: 0, offsetZ: 0, centerNonce: 0 };
     const lightState = apply3DAnimation(
       animState.mockupAnimation || 'static',
       progress,
@@ -852,6 +1097,12 @@ export function initMockup(
       md?.offsetX ?? 0,
       md?.offsetY ?? 0,
       md?.scale ?? 1.0,
+      animState.mockupEasing,
+      animState.mockupMotionStrength,
+      md?.rotZ ?? 0,
+      md?.offsetZ ?? 0,
+      Number(p.fieldOfView ?? 42),
+      Number(p.lidAngle ?? 112),
     );
     // The animation preset's own light choreography, PLUS the user's Light
     // Direction — added as an offset rather than replacing it, so dragging the

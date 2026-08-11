@@ -243,7 +243,13 @@ export class SceneRenderer3D implements IRenderer {
     camera.fov = fov;
     camera.aspect = this.width / this.height;
     const D = (this.height / 2) / Math.tan((fov * Math.PI) / 360);
-    const position = pose?.position ?? { x: 0, y: 0, z: D };
+    // `distance` is a multiplier on D, not a replacement for it — the same
+    // "camDistance, 1.0 = default fit" convention three3d/animations.ts uses.
+    // Below 1 moves the camera physically closer (the subject fills more of
+    // the frame at the SAME fov, so the keystone/perspective feel is
+    // unchanged — a different move than widening the lens). Templates that
+    // set an explicit `position` bypass this entirely, same as before.
+    const position = pose?.position ?? { x: 0, y: 0, z: D * (pose?.distance ?? 1) };
     const target = pose?.target ?? { x: 0, y: 0, z: 0 };
     camera.position.set(position.x, -position.y, position.z);
     camera.lookAt(target.x, -target.y, target.z);

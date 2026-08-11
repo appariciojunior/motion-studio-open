@@ -78,6 +78,8 @@ const ringStream: Template = {
     { key: 'cardBend', label: 'Card Bend', type: 'slider', min: 0, max: 12, step: 0.5, default: 4, section: 'Depth', unit: '%', precision: 1, description: 'Curves each image surface gently around the ring.' },
     { key: 'tiltX', label: 'Ring Tilt', type: 'slider', min: -60, max: 60, step: 1, default: -8, section: 'Depth', unit: '°', description: 'Rotates the complete physical ring without changing its radius.' },
     { key: 'perspective', label: 'Perspective', type: 'slider', min: 0, max: 40, step: 1, default: 18, section: 'Depth', unit: '%' },
+    { key: 'camDistance', label: 'Camera Distance', type: 'slider', min: 0.5, max: 2.5, step: 0.05, default: 1, section: 'Depth', unit: '×', precision: 2,
+      description: 'Moves the camera itself closer or further, at the same Perspective — a different move than widening the lens.' },
     { key: 'facing', label: 'Facing', type: 'pills', options: ['camera','ring'], default: 'ring', section: 'Depth' },
     { key: 'fade', label: 'Back Fade', type: 'slider', min: 0, max: 100, step: 1, default: 15, section: 'Finish', unit: '%' },
     { key: 'shadow', label: 'Shadow', type: 'toggle', options: ['on','off'], default: 'on', section: 'Finish' },
@@ -88,7 +90,7 @@ const ringStream: Template = {
     { key: 'offset', label: 'Offset', type: 'xypad', default: { x: 0, y: 0 }, section: 'Layout' },
   ],
 
-  camera: (v) => ({ fov: 15 + clamp(v.perspective / 40, 0, 1) * 14 }),
+  camera: (v) => ({ fov: 15 + clamp(v.perspective / 40, 0, 1) * 14, distance: v.camDistance }),
 
   transform3d: (frame, index, count, v, ctx) => {
     const { dir, cycles, phase } = ringPhase(frame, v, count, ctx);

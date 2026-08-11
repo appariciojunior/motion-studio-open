@@ -73,6 +73,10 @@ export default function ThreeStage3D({ effectId: forcedEffectId }: { effectId?: 
         const s = use3DStore.getState();
         return { fit: s.screenFit, zoom: s.screenZoom, offsetX: s.screenOffsetX, offsetY: s.screenOffsetY };
       },
+      getScreenStatus: () => {
+        const s = use3DStore.getState();
+        return { mode: s.statusBarMode, time: s.statusBarTime, battery: s.statusBarBattery, signal: s.statusBarSignal };
+      },
       onRenderer: (r) => { threeEngineRef.current = r; },
     });
 

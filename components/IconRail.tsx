@@ -1,8 +1,9 @@
 'use client';
 
+import { useState } from 'react';
 import { useUIStore } from '@/store/useUIStore';
 import { useProjectStore } from '@/store/useProjectStore';
-import { AddIcon, BoardIcon, LibraryIcon, MockupIcon, MoonIcon, ProjectsIcon, SunIcon, ThreeDIcon, WebIcon } from './EditorIcons';
+import { AddIcon, BoardIcon, ChevronDownIcon, ExperimentalsIcon, LibraryIcon, MockupIcon, MoonIcon, ProjectsIcon, SunIcon, ThreeDIcon, WebIcon } from './EditorIcons';
 
 const NAV = [
   { id: 'projects', label: 'Projects', icon: (
@@ -11,11 +12,14 @@ const NAV = [
   { id: 'library', label: 'Library', icon: (
     <LibraryIcon />
   ) },
-  { id: '3d', label: '3D', icon: (
-    <ThreeDIcon />
-  ) },
   { id: 'mockup', label: 'Mockup', icon: (
     <MockupIcon />
+  ) },
+];
+
+const EXPERIMENTAL_NAV = [
+  { id: '3d', label: '3D', icon: (
+    <ThreeDIcon />
   ) },
   { id: 'web', label: 'Web', icon: (
     <WebIcon />
@@ -24,7 +28,7 @@ const NAV = [
   // and the entry point for the drop-in React component export. Its nav id is
   // 'board' rather than the original 'new': the + button at the top of the rail
   // now creates a project, so the two ids would collide. Kept last in the list.
-  { id: 'board', label: 'Board', icon: (
+  { id: 'board', label: 'Boards', icon: (
     <BoardIcon />
   ) },
 ];
@@ -36,6 +40,8 @@ export default function IconRail() {
   const toggleTheme = useUIStore((s) => s.toggleTheme);
   const createProject = useProjectStore((s) => s.create);
   const projectCount = useProjectStore((s) => s.projects.length);
+  const [experimentalsOpen, setExperimentalsOpen] = useState(false);
+  const experimentalActive = EXPERIMENTAL_NAV.some((item) => item.id === active);
 
   // An ACTION, not a nav section — so it never takes the active state. The +
   // icon at the top of the rail now creates what it looks like it creates.
@@ -66,6 +72,30 @@ export default function IconRail() {
             <span className="rail-label">{n.label}</span>
           </button>
         ))}
+        <button
+          className={`rail-item rail-experimentals ${experimentalActive ? 'active' : ''}`}
+          onClick={() => setExperimentalsOpen((open) => !open)}
+          aria-expanded={experimentalsOpen}
+          aria-controls="experimental-nav-items"
+        >
+          <span className="rail-ico"><ExperimentalsIcon /></span>
+          <span className="rail-label">Experiments</span>
+          <span className={`rail-exp-chevron ${experimentalsOpen ? 'open' : ''}`}><ChevronDownIcon size={10} /></span>
+        </button>
+        <div
+          id="experimental-nav-items"
+          className={`rail-experimental-items ${experimentalsOpen ? 'open' : 'closed'}`}
+          aria-hidden={!experimentalsOpen}
+        >
+          <div className="rail-experimental-inner">
+            {EXPERIMENTAL_NAV.map((n) => (
+              <button key={n.id} tabIndex={experimentalsOpen ? 0 : -1} className={`rail-item rail-subitem ${active === n.id ? 'active' : ''}`} onClick={() => setActive(n.id)}>
+                <span className="rail-ico">{n.icon}</span>
+                <span className="rail-label">{n.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
       <div className="rail-bottom">
         <button
