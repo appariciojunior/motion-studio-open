@@ -416,6 +416,30 @@ export function initMockup(
     }
   }
 
+  // Remove only the reflected-light term from the cover glass shader. The
+  // material's colour, maps, roughness, metalness, transparency and diffuse
+  // lighting remain untouched, so this cannot recolour the device or increase
+  // its exposure. The rest of the device continues to use the stock PBR shader.
+  function suppressScreenGlassReflection() {
+    for (const material of materials as any[]) {
+      if (!material.userData.isScreenGlass) continue;
+      material.onBeforeCompile = (shader: THREE.WebGLProgramParametersWithUniforms) => {
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <lights_fragment_end>',
+          `#include <lights_fragment_end>
+          reflectedLight.directSpecular = vec3( 0.0 );
+          reflectedLight.indirectSpecular = vec3( 0.0 );
+          #ifdef USE_CLEARCOAT
+            clearcoatSpecularDirect = vec3( 0.0 );
+            clearcoatSpecularIndirect = vec3( 0.0 );
+          #endif`,
+        );
+      };
+      material.customProgramCacheKey = () => 'mockup-screen-glass-no-reflection-v1';
+      material.needsUpdate = true;
+    }
+  }
+
   // These GLBs ship their Screen mesh with position/normal/color only — no `uv`
   // attribute at all (verified on the iPhone 17 Pro mesh). A material `map` then
   // samples an undefined varying and the panel renders black, which is why
@@ -557,6 +581,7 @@ export function initMockup(
         screenMesh.userData.origMaterial = screenMesh.material;
         ensureScreenUVs(screenMesh);
         markScreenGlass(screenMesh);
+        suppressScreenGlassReflection();
       }
       opts.onParts?.(keys);
     },
@@ -660,25 +685,10 @@ export function initMockup(
       if (selected && mkey === selected) { m.emissive.setRGB(0.12, 0.35, 0.6); m.emissiveIntensity = 1; }
       else if (m.emissive) { m.emissive.set(emissiveHex); m.emissiveIntensity = emissiveIntensity; }
 
-      // The display glass is deliberately non-reflective. Only this geometry is
-      // neutralised: metal rails, camera rings and the enclosure keep the GLB's
-      // authored PBR response. Removing both environment and direct specular is
-      // important — envMapIntensity alone removes the softbox but a directional
-      // light can still leave a white highlight on mirror-smooth glass.
+      // Reflection is removed in the glass-only shader above. Keep every
+      // physical material property exactly as authored here.
       if ('envMapIntensity' in m) {
-        m.envMapIntensity = m.userData.isScreenGlass ? 0 : envIntensity;
-      }
-      if ('roughness' in m && m.userData.isScreenGlass) {
-        m.roughness = 1;
-      }
-      if ('metalness' in m && m.userData.isScreenGlass) {
-        m.metalness = 0;
-      }
-      if ('specularIntensity' in m && m.userData.isScreenGlass) {
-        m.specularIntensity = 0;
-      }
-      if ('clearcoat' in m && m.userData.isScreenGlass) {
-        m.clearcoat = 0;
+        m.envMapIntensity = envIntensity;
       }
 
       m.wireframe = wire;
