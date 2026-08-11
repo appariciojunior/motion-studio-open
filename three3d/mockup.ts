@@ -394,38 +394,41 @@ export function initMockup(
     const status = opts.getScreenStatus?.();
     if (!status || status.mode === 'off') return;
     const color = status.mode === 'light' ? '#ffffff' : '#050505';
-    const y = H * 0.035;
+    // iOS lays the two status clusters around the Dynamic Island, not against
+    // the display edges. Keep both clusters optically centred in their side
+    // areas so the layout stays balanced on every phone texture resolution.
+    const y = H * 0.036;
     ctx.save();
     ctx.fillStyle = color;
     ctx.strokeStyle = color;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.font = `600 ${Math.round(H * 0.018)}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
-    ctx.textAlign = 'left';
+    ctx.font = `600 ${Math.round(H * 0.0175)}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+    ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(status.time.trim() || '9:41', W * 0.075, y);
+    ctx.fillText(status.time.trim() || '9:41', W * 0.165, y);
 
     const signal = Math.max(0, Math.min(4, Math.round(status.signal)));
-    const barW = W * 0.009;
-    const gap = W * 0.005;
-    const sx = W * 0.778;
+    const barW = W * 0.008;
+    const gap = W * 0.004;
+    const sx = W * 0.748;
     for (let i = 0; i < 4; i++) {
-      const h = H * (0.004 + i * 0.0024);
+      const h = H * (0.0038 + i * 0.0022);
       ctx.globalAlpha = i < signal ? 1 : 0.25;
       ctx.fillRect(sx + i * (barW + gap), y + H * 0.006 - h, barW, h);
     }
     ctx.globalAlpha = 1;
 
-    const wx = W * 0.862;
-    ctx.lineWidth = Math.max(2, W * 0.006);
-    ctx.beginPath(); ctx.arc(wx, y + H * 0.002, W * 0.029, Math.PI * 1.18, Math.PI * 1.82); ctx.stroke();
-    ctx.beginPath(); ctx.arc(wx, y + H * 0.004, W * 0.017, Math.PI * 1.2, Math.PI * 1.8); ctx.stroke();
+    const wx = W * 0.825;
+    ctx.lineWidth = Math.max(2, W * 0.0055);
+    ctx.beginPath(); ctx.arc(wx, y + H * 0.002, W * 0.026, Math.PI * 1.18, Math.PI * 1.82); ctx.stroke();
+    ctx.beginPath(); ctx.arc(wx, y + H * 0.004, W * 0.015, Math.PI * 1.2, Math.PI * 1.8); ctx.stroke();
     ctx.beginPath(); ctx.arc(wx, y + H * 0.008, W * 0.004, 0, Math.PI * 2); ctx.fill();
 
-    const bx = W * 0.902;
-    const by = y - H * 0.009;
-    const bw = W * 0.061;
-    const bh = H * 0.018;
+    const bx = W * 0.868;
+    const by = y - H * 0.008;
+    const bw = W * 0.057;
+    const bh = H * 0.016;
     const radius = Math.max(2, W * 0.006);
     ctx.lineWidth = Math.max(2, W * 0.004);
     ctx.globalAlpha = 0.9;
