@@ -447,13 +447,32 @@ export function initMockup(
   // never drawn into) show whatever sits behind the Screen mesh — the device's
   // own bezel — instead of solid black.
   function makeScreenMaterial(tex: THREE.Texture): THREE.MeshBasicMaterial {
-    return new THREE.MeshBasicMaterial({ map: tex, toneMapped: false, transparent: true });
+    return new THREE.MeshBasicMaterial({
+      map: tex,
+      toneMapped: false,
+      transparent: true,
+      alphaTest: 0.001,
+    });
+  }
+
+  // ArqÃ© composes the display as an unlit image layer above the product render,
+  // rather than letting a PBR glass layer relight it. Pulling only this surface
+  // forward in depth reproduces that composition without touching any light,
+  // exposure, finish material, roughness or environment parameter.
+  function configureScreenComposite(mat: THREE.MeshBasicMaterial) {
+    mat.polygonOffset = true;
+    mat.polygonOffsetFactor = -4;
+    mat.polygonOffsetUnits = -4;
+    mat.depthTest = true;
+    mat.depthWrite = true;
+    if (screenMesh) screenMesh.renderOrder = 1000;
   }
 
   function setScreenMaterial(mat: THREE.MeshBasicMaterial) {
     if (!screenMesh) { mat.dispose(); return; }
     const old = screenMesh.material as THREE.Material;
     if (old && old !== screenMesh.userData.origMaterial) old.dispose();
+    configureScreenComposite(mat);
     screenMesh.material = mat;
   }
 
@@ -461,7 +480,16 @@ export function initMockup(
     if (!screenMesh || !screenMesh.userData.origMaterial) return;
     const old = screenMesh.material as THREE.Material;
     if (old && old !== screenMesh.userData.origMaterial) old.dispose();
-    screenMesh.material = screenMesh.userData.origMaterial;
+    const source = screenMesh.userData.origMaterial as THREE.MeshStandardMaterial;
+    const fallback = new THREE.MeshBasicMaterial({
+      color: source.color?.clone() ?? new THREE.Color(0x000000),
+      map: source.map ?? null,
+      toneMapped: false,
+      transparent: true,
+      alphaTest: 0.001,
+    });
+    configureScreenComposite(fallback);
+    screenMesh.material = fallback;
   }
 
   // ── Which materials the Finish repaints ─────────────────────────────────
@@ -557,6 +585,7 @@ export function initMockup(
         screenMesh.userData.origMaterial = screenMesh.material;
         ensureScreenUVs(screenMesh);
         markScreenGlass(screenMesh);
+        restoreScreenMaterial();
       }
       opts.onParts?.(keys);
     },
