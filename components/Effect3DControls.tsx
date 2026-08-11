@@ -18,6 +18,10 @@ export default function Effect3DControls({ effectId: forcedEffectId }: { effectI
   const setMockupAnimation = use3DStore((s) => s.setMockupAnimation);
   const mockupSpeed = use3DStore((s) => s.mockupSpeed || 1);
   const setMockupSpeed = use3DStore((s) => s.setMockupSpeed);
+  const mockupEasing = use3DStore((s) => s.mockupEasing);
+  const setMockupEasing = use3DStore((s) => s.setMockupEasing);
+  const motionStrength = use3DStore((s) => s.mockupMotionStrength);
+  const setMotionStrength = use3DStore((s) => s.setMockupMotionStrength);
 
   return (
     <>
@@ -48,6 +52,24 @@ export default function Effect3DControls({ effectId: forcedEffectId }: { effectI
             <div className="pills">
               {[0.5, 1, 1.5, 2].map((sp) => (
                 <button key={sp} className={`pill ${mockupSpeed === sp ? 'active' : ''}`} onClick={() => setMockupSpeed(sp)}>{sp}x</button>
+              ))}
+            </div>
+          </div>
+          <div className="ctl-row">
+            <label className="ctl-label">Motion</label>
+            <div className="pills">
+              {[0.5, 0.75, 1, 1.25].map((amount) => (
+                <button key={amount} className={`pill ${motionStrength === amount ? 'active' : ''}`} onClick={() => setMotionStrength(amount)}>
+                  {Math.round(amount * 100)}%
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="ctl-row">
+            <label className="ctl-label">Curve</label>
+            <div className="pills">
+              {([['preset', 'Natural'], ['smooth', 'Smooth'], ['linear', 'Linear']] as const).map(([value, label]) => (
+                <button key={value} className={`pill ${mockupEasing === value ? 'active' : ''}`} onClick={() => setMockupEasing(value)}>{label}</button>
               ))}
             </div>
           </div>

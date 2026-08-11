@@ -5,7 +5,6 @@ import { use3DStore, defaultModelFor } from '@/store/use3DStore';
 import { DEVICES, findDevice, selectDevice } from '@/three3d/devices';
 import { MOCKUP_ANIMATIONS } from '@/three3d/animations';
 import { DeviceThumb, MockupAnimThumb } from './MockupThumb';
-import { enableTheatreMockup, hideTheatreMockup } from '@/three3d/theatreMockup';
 
 const Chevron = () => (
   <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
@@ -22,24 +21,10 @@ export default function MockupPanel() {
   const setMockupAnimation = use3DStore((s) => s.setMockupAnimation);
   const mockupSpeed = use3DStore((s) => s.mockupSpeed || 1);
   const setMockupSpeed = use3DStore((s) => s.setMockupSpeed);
-  const theatreEnabled = use3DStore((s) => s.theatreEnabled);
-  const setTheatreEnabled = use3DStore((s) => s.setTheatreEnabled);
-  const [theatreLoading, setTheatreLoading] = useState(false);
-
-  const toggleTheatre = async () => {
-    if (theatreEnabled) {
-      hideTheatreMockup();
-      setTheatreEnabled(false);
-      return;
-    }
-    setTheatreLoading(true);
-    try {
-      await enableTheatreMockup();
-      setTheatreEnabled(true);
-    } finally {
-      setTheatreLoading(false);
-    }
-  };
+  const mockupEasing = use3DStore((s) => s.mockupEasing);
+  const setMockupEasing = use3DStore((s) => s.setMockupEasing);
+  const motionStrength = use3DStore((s) => s.mockupMotionStrength);
+  const setMotionStrength = use3DStore((s) => s.setMockupMotionStrength);
 
   const activeDevice = findDevice(modelUrl);
   const [openDevice, setOpenDevice] = useState<string | null>(activeDevice?.key ?? null);
@@ -67,22 +52,6 @@ export default function MockupPanel() {
       </div>
 
       <div className="tpl-list">
-        <div style={{ padding: '10px 12px 12px', borderBottom: '1px solid var(--border)' }}>
-          <div className="ctl-row">
-            <div>
-              <div className="ctl-label">Theatre.js timeline</div>
-              <div className="ctl-hint">Keyframe camera, device, lid and studio lights visually.</div>
-            </div>
-            <button className={`pill ${theatreEnabled ? 'active' : ''}`} onClick={toggleTheatre} disabled={theatreLoading}>
-              {theatreLoading ? 'Loading…' : theatreEnabled ? 'Close' : 'Open'}
-            </button>
-          </div>
-          {theatreEnabled && (
-            <div className="ctl-hint" style={{ marginTop: 7 }}>
-              Theatre now overrides the preset below. Its playhead follows this project timeline and exports frame-for-frame.
-            </div>
-          )}
-        </div>
         {DEVICES.map((d) => {
           const isActive = activeDevice?.key === d.key;
           const isOpen = openDevice === d.key;
@@ -126,6 +95,26 @@ export default function MockupPanel() {
                             onClick={(e) => { e.stopPropagation(); setMockupSpeed(sp); }}
                           >
                             {sp}x
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="ctl-row" style={{ marginTop: 8 }}>
+                      <label className="ctl-label">Motion</label>
+                      <div className="pills">
+                        {[0.5, 0.75, 1, 1.25].map((amount) => (
+                          <button key={amount} className={`pill ${motionStrength === amount ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); setMotionStrength(amount); }}>
+                            {Math.round(amount * 100)}%
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="ctl-row" style={{ marginTop: 8 }}>
+                      <label className="ctl-label">Curve</label>
+                      <div className="pills">
+                        {([['preset', 'Natural'], ['smooth', 'Smooth'], ['linear', 'Linear']] as const).map(([value, label]) => (
+                          <button key={value} className={`pill ${mockupEasing === value ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); setMockupEasing(value); }}>
+                            {label}
                           </button>
                         ))}
                       </div>

@@ -22,8 +22,6 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@react-three/fiber": "^9.0.0",
     "@tailwindcss/browser": "^4.3.3",
-    "@theatre/core": "^0.7.2",
-    "@theatre/studio": "^0.7.2",
     "jszip": "^3.10.1",
     "mp4-muxer": "^5.2.2",
     "next": "^16.2.10",

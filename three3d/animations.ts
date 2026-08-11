@@ -235,7 +235,8 @@ function interpolatePose(poseA: MockupPose, poseB: MockupPose, t: number): Mocku
 export function evaluateTimeline(
   keyframes: MockupKeyframe[],
   progress: number,
-  basePose: MockupPose = DEFAULT_MOCKUP_POSE
+  basePose: MockupPose = DEFAULT_MOCKUP_POSE,
+  easingOverride?: EasingPreset,
 ): MockupPose {
   if (!keyframes || keyframes.length === 0) return basePose;
   if (keyframes.length === 1) {
@@ -263,7 +264,7 @@ export function evaluateTimeline(
 
   // Local progress inside the keyframe span [kfA.time .. kfB.time]
   const rawT = (p - kfA.time) / (kfB.time - kfA.time);
-  const easedT = evaluateEasing(rawT, kfB.easing ?? 'easeInOutCubic');
+  const easedT = evaluateEasing(rawT, easingOverride ?? kfB.easing ?? 'easeInOutCubic');
 
   const fullPoseA: MockupPose = { ...basePose, ...kfA.pose };
   const fullPoseB: MockupPose = { ...basePose, ...kfB.pose };
@@ -575,12 +576,13 @@ export function apply3DAnimation(
   userOffsetX: number = 0,
   userOffsetY: number = 0,
   userScale: number = 1.0,
-  theatrePose?: MockupPose | null,
+  easingMode: 'preset' | 'smooth' | 'linear' = 'preset',
+  motionStrength: number = 1,
 ): MockupLightingState {
   const preset = MOCKUP_ANIMATIONS.find((a) => a.key === animKey);
 
   // If preset is 'static' or not found, let user orbit freely with mouse
-  if ((!preset || animKey === 'static') && !theatrePose) {
+  if (!preset || animKey === 'static') {
     controls.enabled = true;
     return {
       keyLightIntensity: 1.0,
@@ -597,7 +599,18 @@ export function apply3DAnimation(
   controls.enabled = false;
 
   // Evaluate the interpolated pose across the multi-keyframe timeline
-  const pose = theatrePose ?? evaluateTimeline(preset!.keyframes, progress, DEFAULT_MOCKUP_POSE);
+  const easingOverride = easingMode === 'smooth' ? 'smoothstep'
+    : easingMode === 'linear' ? 'linear'
+    : undefined;
+  const animatedPose = evaluateTimeline(preset.keyframes, progress, DEFAULT_MOCKUP_POSE, easingOverride);
+  // A single intensity control scales every authored channel coherently. This
+  // keeps camera, product and lighting choreography in phase instead of making
+  // users tune twenty individual tracks just to make a preset subtler.
+  const pose = interpolatePose(
+    DEFAULT_MOCKUP_POSE,
+    animatedPose,
+    Math.max(0, Math.min(1.5, motionStrength)),
+  );
 
   // 1. Update Camera FOV and Projection Matrix if changed
   if (Math.abs(camera.fov - pose.fov) > 0.1) {

@@ -36,7 +36,8 @@ export interface ThreeDState {
   // onto the active device's "Screen" mesh (three3d/mockup.ts + ScreenContent).
   mockupAnimation: string;
   mockupSpeed: number;
-  theatreEnabled: boolean;
+  mockupEasing: 'preset' | 'smooth' | 'linear';
+  mockupMotionStrength: number;
   // Keyed by screen SLOT ('phone' | 'laptop' | 'tablet' | 'display'), not by
   // device: one phone screenshot then serves every phone, and switching device
   // keeps the right artwork on screen instead of clearing it.
@@ -60,7 +61,8 @@ export interface ThreeDState {
   setModelUrl: (url: string | null, name: string | null) => void;
   setMockupAnimation: (key: string) => void;
   setMockupSpeed: (v: number) => void;
-  setTheatreEnabled: (v: boolean) => void;
+  setMockupEasing: (v: 'preset' | 'smooth' | 'linear') => void;
+  setMockupMotionStrength: (v: number) => void;
   setScreenMedia: (slot: string, media: { url: string; kind: 'image' | 'video' } | null) => void;
   clearScreenMedia: () => void;
   setScreenFit: (fit: 'cover' | 'width' | 'contain') => void;
@@ -145,7 +147,8 @@ export const use3DStore = create<ThreeDState>((set) => ({
   sunMaskOffsetY: -2,
   mockupAnimation: 'static',
   mockupSpeed: 1,
-  theatreEnabled: false,
+  mockupEasing: 'preset',
+  mockupMotionStrength: 1,
   screenMedia: {},
   screenFit: 'cover',
   screenZoom: 1,
@@ -176,7 +179,8 @@ export const use3DStore = create<ThreeDState>((set) => ({
   setModelUrl: (url, name) => set((s) => patchModel(s, { url, name })),
   setMockupAnimation: (key) => set({ mockupAnimation: key }),
   setMockupSpeed: (v) => set({ mockupSpeed: v }),
-  setTheatreEnabled: (v) => set({ theatreEnabled: v }),
+  setMockupEasing: (v) => set({ mockupEasing: v }),
+  setMockupMotionStrength: (v) => set({ mockupMotionStrength: v }),
   setScreenMedia: (slot, media) => set((s) => ({ screenMedia: { ...s.screenMedia, [slot]: media } })),
   clearScreenMedia: () => set({ screenMedia: {} }),
   // Switching to `width` also jumps to the top of the page: fitting a tall site
