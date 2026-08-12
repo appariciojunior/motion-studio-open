@@ -106,8 +106,16 @@ const framesBase: Template = {
     const sizeFactor = v.cardSize / BASE;
     const cardW = aspect < 1 ? v.cardSize * aspect : v.cardSize;
     const cardH = aspect < 1 ? v.cardSize : v.cardSize / aspect;
-    const pitchX = cardW + v.gap;
-    const pitchY = cardH + v.gap;
+    // The wall only covers the frame while its lattice period is at least as big
+    // as the frame, and a small Plane Size silently broke that — the wall became
+    // a floating patch with dead background around it. More CELLS is not an
+    // option (`count` is the sprite budget), so the GUTTER takes up the slack.
+    // It has to be the gutter and not a scale factor on the pitch: one factor
+    // adds a different amount to each axis and pulls the two mounts apart, which
+    // is the asymmetry this family was fixed for once already.
+    const gutter = Math.max(v.gap, ctx.width / cols - cardW, ctx.height / rows - cardH);
+    const pitchX = cardW + gutter;
+    const pitchY = cardH + gutter;
 
     // Masonry: rowsSkipped 0 aligns columns, 1 shifts alternate rows half a
     // cell, 2 steps in thirds. The shift is fractional so it survives wrapping.
@@ -116,6 +124,13 @@ const framesBase: Template = {
 
     // The wall is a torus: each axis wraps over its full lattice span, so cards
     // leaving one edge re-enter at the opposite one.
+    // The wall only covers the frame while its lattice period is at least as big
+    // as the frame, and a small Plane Size silently broke that — the wall became
+    // a floating patch with dead background around it. More CELLS is not an
+    // option (`count` is the sprite budget), so the pitch takes up the slack:
+    // one factor on both axes, so cells keep the shape the controls asked for and
+    // only the gutters open up. At 1 this is exactly the pitch the controls set.
+
     const spanX = cols * pitchX;
     const spanY = rows * pitchY;
 

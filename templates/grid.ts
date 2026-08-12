@@ -102,8 +102,22 @@ const grid: Template = {
     const sizeFactor = v.cardSize / BASE;
     const cardW = aspect < 1 ? v.cardSize * aspect : v.cardSize;
     const cardH = aspect < 1 ? v.cardSize : v.cardSize / aspect;
-    const pitchX = cardW + v.gap;
-    const pitchY = cardH + v.gap;
+    // The wall wraps as a torus over one lattice period, which only covers the
+    // frame while that period is at least as big as the frame. Nothing stopped a
+    // small Plane Size from breaking that: at Plane Size 60 / Gap 60 on a 6x6,
+    // the lattice spans 630x720 inside an 810x1080 canvas and leaves a 360px
+    // band of dead background down the frame.
+    //
+    // Covering it with more CELLS is not available — that size needs 8x9 = 72 of
+    // them and `count` is the sprite budget. So the GUTTER takes up the slack.
+    // Widening the gutter rather than scaling the pitch matters: a single factor
+    // on both pitches adds a different amount to each axis, which pulls the
+    // horizontal and vertical gutters apart — the exact asymmetry this family
+    // was fixed for once already. One gutter, solved on whichever axis needs it
+    // most, keeps them equal and covers the frame.
+    const gutter = Math.max(v.gap, ctx.width / cols - cardW, ctx.height / rows - cardH);
+    const pitchX = cardW + gutter;
+    const pitchY = cardH + gutter;
 
     const spanX = cols * pitchX;
     const spanY = rows * pitchY;

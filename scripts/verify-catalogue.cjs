@@ -184,6 +184,63 @@ for (const template of templateList.filter((t) => ['Frames', 'Grid'].includes(t.
   }
 }
 
+// ---------- lattice coverage across the CONTROL RANGES ----------
+// Everything above runs each template at its preset defaults, which is what let
+// a real defect ship: Grid's wall wraps as a torus over one lattice period and
+// only covers the frame while that period is at least as big as the frame. At
+// the defaults it was; dragging Plane Size down to 60 made the lattice span
+// 630x720 inside an 810x1080 canvas and left a 360px band of dead background.
+// A user reaches that state with one slider, so the sweep has to go there too.
+for (const template of templateList.filter((t) => ['Frames', 'Grid'].includes(t.meta.group))) {
+  const base = defaultsFor(template.meta.id);
+  const ease = resolveEasing(easingFor(template.meta.id));
+  const easedPhase = (p) => Math.floor(p) + ease(p - Math.floor(p));
+  const ctrl = (key) => template.controls.find((c) => c.key === key);
+  const spread = (key) => {
+    const c = ctrl(key);
+    if (!c) return [base[key]];
+    return [...new Set([c.min, Math.round((c.min + c.max) / 2), c.max, base[key]])];
+  };
+
+  for (const aspectKey of ['3:4', '16:9']) {
+    const { width, height } = dimsFor(aspectKey);
+    const ctx = { fps: FPS, width, height, duration: DURATION, totalFrames: TOTAL, ease, easedPhase, cardAspect: 3 / 4 };
+
+    for (const cardSize of spread('cardSize')) {
+      for (const gap of spread('gap')) {
+        for (const count of [4, 9, 36, 60]) {
+          const values = { ...base, cardSize, gap, count };
+          const poses = [];
+          for (let i = 0; i < count; i++) poses.push(template.transform(0, i, count, values, ctx));
+
+          // Derive the pitch from the OUTPUT rather than restating the formula,
+          // so this measures the behaviour and not the intent.
+          const pitchOf = (axis, other) => {
+            let best = Infinity;
+            for (const a of poses) for (const b of poses) {
+              if (a === b || Math.abs(a[other] - b[other]) > 0.5) continue;
+              const d = Math.abs(a[axis] - b[axis]);
+              if (d > 0.5 && d < best) best = d;
+            }
+            return best;
+          };
+          const px = pitchOf('x', 'y');
+          const py = (() => { let b = Infinity; for (const a of poses) for (const c of poses) { const d = Math.abs(a.y - c.y); if (d > 0.5 && d < b) b = d; } return b; })();
+          if (!Number.isFinite(px) || !Number.isFinite(py)) continue;
+
+          const spanX = (Math.max(...poses.map((p) => p.x)) - Math.min(...poses.map((p) => p.x))) + px;
+          const spanY = (Math.max(...poses.map((p) => p.y)) - Math.min(...poses.map((p) => p.y))) + py;
+          const where = `${aspectKey} cardSize ${cardSize} gap ${gap} count ${count}`;
+          check(spanX >= width - 1, template.meta.name,
+            `lattice spans only ${spanX.toFixed(0)}px across a ${width}px canvas — dead background at the sides`, where);
+          check(spanY >= height - 1, template.meta.name,
+            `lattice spans only ${spanY.toFixed(0)}px down a ${height}px canvas — dead background top and bottom`, where);
+        }
+      }
+    }
+  }
+}
+
 // ---------- report ----------
 if (failures.length) {
   console.error(`\nCatalogue verification FAILED — ${failures.length} distinct problem(s):\n`);
