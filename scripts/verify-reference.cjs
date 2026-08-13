@@ -170,6 +170,71 @@ for (const [name, { ages, widths }] of Object.entries(BLOOM)) {
 }
 
 // ============================================================
+//  Parallax — a scattered field with depth
+//
+//  Read straight from the store's paramsPerModeBaseline (its "Min Size" /
+//  "Max Size" panel fields, confirmed against the live Controls tab, not
+//  guessed from the schema — Parallax 02/03's own baseline entries omit
+//  minSize/maxSize entirely, so the panel falls back to the schema default
+//  for all three: 238/442, unconverted). `direction`/`planeSize`/
+//  `scaleCenter` sit in the same dict but never surface on the panel — dead
+//  keys from an earlier version of the scene, not read by anything here.
+// ============================================================
+const PARALLAX = {
+  'Parallax 01': { count: 133, spread: 300, travel: 300, depth: 60, fade: 0 },
+  'Parallax 02': { count: 200, spread: 300, travel: 150, depth: 100, fade: 78 },
+  'Parallax 03': { count: 140, spread: 180, travel: 100, depth: 60, fade: 80 },
+};
+for (const [name, ref] of Object.entries(PARALLAX)) {
+  const t = byName(name);
+  if (!t) continue;
+  const v = defaultsFor(t.meta.id);
+  near(v.minSize, REF_SCALE * 238, 1, name, 'min size');
+  near(v.maxSize, REF_SCALE * 442, 1, name, 'max size');
+  near(v.count, ref.count, 0, name, 'count');
+  near(v.spread, REF_SCALE * ref.spread, 1, name, 'spread');
+  near(v.travel, REF_SCALE * ref.travel, 1, name, 'travel');
+  near(v.depth, ref.depth, 0, name, 'depth');
+  near(v.fade, ref.fade, 0, name, 'fade');
+
+  const ctx = makeCtx(t.meta.id, { width: 810, height: 1080, duration: 8, cardAspect: 3 / 4 });
+  check(loopDrift(t, v, ctx) < 1e-6, name, 'does not return to frame 0 at the loop point');
+
+  // The parallax tell: at Depth > 0, a nearer (bigger) card has to cover more
+  // ground than a farther one over the same span — that is what makes a
+  // scatter read as depth instead of a flat field of random sizes. Compare
+  // the two most extreme cards the seeded scatter actually drew, so this
+  // measures the SAME hash the transform uses rather than an assumption
+  // about its distribution.
+  let nearest = { d: -1 }, farthest = { d: 2 };
+  const n = layerCountFor(t.meta.id, v, ctx);
+  for (let i = 0; i < n; i++) {
+    const p0 = t.transform(0, i, n, v, ctx);
+    if (p0.depth > nearest.d) nearest = { i, d: p0.depth };
+    if (p0.depth < farthest.d) farthest = { i, d: p0.depth };
+  }
+  // Instantaneous speed, not net displacement: a fast card can complete whole
+  // wraps between two sample points and land back near where it started,
+  // reading as "barely moved" even though it travelled the most of anyone —
+  // the same trap as tracking a lattice by residue mod pitch. A one-frame
+  // step is far shorter than any card's wrap period, so unwrapping it by the
+  // nearest multiple of the span recovers the real per-frame step.
+  const speed = (i) => {
+    const f = Math.max(1, Math.round(ctx.totalFrames / 3));
+    const a = t.transform(f, i, n, v, ctx);
+    const b = t.transform(f + 1, i, n, v, ctx);
+    const span = v.spread * 2;
+    let dy = b.y - a.y;
+    dy -= span * Math.round(dy / span);
+    return Math.abs(dy);
+  };
+  if (ref.depth > 0) {
+    check(speed(nearest.i) > speed(farthest.i), name,
+      'nearest card does not outrun the farthest one — no parallax read');
+  }
+}
+
+// ============================================================
 //  The lattice rule — cells grow, the gap holds
 //
 //  Four reference states, read off its Grid with the playhead paused. Its stage
