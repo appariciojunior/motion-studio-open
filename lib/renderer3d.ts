@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { getTemplate } from '@/templates';
+import { getTemplate, layerCountFor } from '@/templates';
 import { useSceneStore } from '@/store/useSceneStore';
 import { resolveEasing } from '@/lib/easing';
 import { assetIndexForSlot, clamp, lerp } from '@/lib/motion';
@@ -426,11 +426,13 @@ export class SceneRenderer3D implements IRenderer {
   }
 
   private syncTrackSlots(track: MotionTrack, rt: TrackRT3D, s: SceneState) {
-    const count = Math.max(1, Math.round(track.values.count ?? 6));
     const meta = getTemplate(track.templateId).meta;
     const r3fManaged = meta.id.startsWith('box-');
     const repeat = meta.repeatAssets === true;
     const aspect = cardAspectFor(meta, s.width, s.height, s.cardShape);
+    // Asked of the template — see the same call in lib/renderer.ts.
+    const count = layerCountFor(track.templateId, track.values,
+      { width: s.width, height: s.height, cardAspect: aspect });
     const pool = trackAssetIndices(track, s.assets).map((i) => s.assets[i]).filter(Boolean);
     const assetSig = (repeat ? 'R|' : '') + 'A' + aspect.toFixed(4) + '|' +
       pool.map((a) => a.id + ':' + a.url + ':' + a.visible + ':' + (a.crop ? a.crop.x + ',' + a.crop.y : 'c')).join('|');

@@ -149,3 +149,19 @@ export function easingFor(id: string): EasingSpec {
   const spec = getTemplate(id).meta.defaultEasing ?? DEFAULT_EASING;
   return { ...spec }; // clone so state never shares the preset reference
 }
+
+// The number of layers a template actually wants. Everything that sizes a
+// sprite pool, a thumbnail's pose list or a demo-slot tally must ask HERE, not
+// read `values.count` directly — a lattice family derives its cell total from
+// the canvas, so the two disagree and any site still reading the control lays
+// out a different wall than the stage.
+export function layerCountFor(
+  id: string,
+  values: Record<string, any>,
+  ctx: { width: number; height: number; cardAspect?: number },
+): number {
+  const t = getTemplate(id);
+  const derived = t.layerCount?.(values, ctx);
+  if (typeof derived === 'number' && Number.isFinite(derived)) return Math.max(1, Math.round(derived));
+  return Math.max(1, Math.round(values.count ?? 6));
+}

@@ -31,9 +31,10 @@ Module._resolveFilename = function (request, parent, isMain, options) {
   return originalResolve.call(this, request, parent, isMain, options);
 };
 
-const { templateList, defaultsFor, easingFor } = require('../templates');
+const { templateList, defaultsFor, easingFor, layerCountFor } = require('../templates');
 const { resolveEasing } = require('../lib/easing');
 const { loopCycles } = require('../lib/motion');
+const { solveLattice } = require('../templates/lattice');
 
 const SPRITE_BASE = 340;
 const FPS = 30;
@@ -69,7 +70,9 @@ function makeCtx(id, { width = 810, height = 1080, duration = 8, cardAspect } = 
   };
 }
 function loopDrift(template, values, ctx) {
-  const count = values.count;
+  // The layer count comes from the template: the lattice families derive theirs
+  // from the canvas and have no `count` control left to read.
+  const count = layerCountFor(template.meta.id, values, ctx);
   let worst = 0;
   for (let i = 0; i < count; i++) {
     const a = template.transform(0, i, count, values, ctx);
@@ -130,7 +133,7 @@ for (const [name, [planeSize, count, cycles, seconds]] of Object.entries(PULSE))
   const v = defaultsFor(t.meta.id);
   const W = 810, H = 1080;
   const ctx = makeCtx(t.meta.id, { width: W, height: H, cardAspect: W / H });
-  const rest = t.transform(0, 0, v.count, v, ctx);
+  const rest = t.transform(0, 0, layerCountFor(t.meta.id, v, ctx), v, ctx);
   near(rest.scale * SPRITE_BASE, Math.max(W, H) * (planeSize / 100), 2, name, 'card long edge');
   near(v.speed, (count * cycles) / seconds, 0.02, name, 'cards per second');
   check(loopDrift(t, v, ctx) < 1e-6, name, 'does not return to frame 0 at the loop point');
@@ -159,11 +162,59 @@ for (const [name, { ages, widths }] of Object.entries(BLOOM)) {
   for (let k = 0; k < ages.length; k++) {
     // age advances at `speed` lifecycle units per second
     const frame = Math.round((ages[k] * v.speed / (v.speed * duration)) * ctx.totalFrames);
-    const pose = t.transform(frame, 0, v.count, v, ctx);
+    const pose = t.transform(frame, 0, layerCountFor(t.meta.id, v, ctx), v, ctx);
     const widthPx = pose.scale * SPRITE_BASE * (W / H);
     near(widthPx, widths[k], 14, name, `card width at age ${ages[k]}s`);
   }
   check(loopDrift(t, v, ctx) < 1e-6, name, 'does not return to frame 0 at the loop point');
+}
+
+// ============================================================
+//  The lattice rule — cells grow, the gap holds
+//
+//  Four reference states, read off its Grid with the playhead paused. Its stage
+//  is 1080x1440, cards 3:4, gap pinned at 80 throughout; only planeSize moved:
+//
+//      planeSize 700 -> 3x3    400 -> 3x3    200 -> 5x5    100 -> 7x7
+//
+//  So shrinking a card ADDS cells and never touches the gap — its Grid ships no
+//  count control at all. Converted to this project's canvas (810x1080, a 0.75
+//  factor; cardSize is the card's LONG edge, which for a 3:4 portrait equals
+//  planeSize exactly) the derived rule has to land on the same four walls. This
+//  is the assertion the whole change rests on: everything else here checks that
+//  the wall is well-formed, only this checks that it is the RIGHT wall.
+// ============================================================
+{
+  const W = 810, H = 1080;
+  for (const [cardSize, cols, rows] of [[700, 3, 3], [400, 3, 3], [200, 5, 5], [100, 7, 7]]) {
+    const L = solveLattice({ cardSize, gap: 60 }, { width: W, height: H, cardAspect: 3 / 4 });
+    check(L.cols === cols && L.rows === rows, 'lattice rule',
+      `Plane Size ${cardSize} solves to ${L.cols}x${L.rows}, but the reference measured ${cols}x${rows}`);
+    check(Math.abs((L.pitchX - L.cardW) - 60) < 1e-6, 'lattice rule',
+      `Plane Size ${cardSize} moved the 60px gap to ${(L.pitchX - L.cardW).toFixed(1)}px`);
+  }
+
+  // The board and web-export surfaces do NOT derive their card total — it is
+  // however many elements the user placed in their own markup. Handed one, the
+  // lattice has to tile a complete rectangle of exactly that many: short of it
+  // and empty cells scroll through the frame, over it and the extra cards land
+  // exactly on top of earlier ones. Both were live regressions of this change
+  // until `solveLattice` took the caller's count.
+  for (const t of templateList.filter((x) => ['Frames', 'Grid'].includes(x.meta.group))) {
+    const v = defaultsFor(t.meta.id);
+    for (const n of [3, 4, 7, 12, 24]) {
+      const L = solveLattice(v, { width: W, height: H, cardAspect: 3 / 4 }, 3 / 4, n);
+      check(L.cols * L.rows === n, t.meta.name,
+        `a fixed ${n}-card board tiles ${L.cols}x${L.rows} = ${L.cols * L.rows} cells`);
+      const ctx = makeCtx(t.meta.id, { width: W, height: H, cardAspect: 3 / 4 });
+      const cells = new Set();
+      for (let i = 0; i < n; i++) {
+        const p = t.transform(0, i, n, v, ctx);
+        cells.add(`${Math.round(p.x * 100)}:${Math.round(p.y * 100)}`);
+      }
+      check(cells.size === n, t.meta.name, `a fixed ${n}-card board stacks two cards in one cell`);
+    }
+  }
 }
 
 // ============================================================
@@ -178,14 +229,16 @@ for (const t of templateList.filter((x) => x.meta.group === 'Frames')) {
   const v = defaultsFor(t.meta.id);
   const W = 810, H = 1080;
   const ctx = makeCtx(t.meta.id, { width: W, height: H, duration: 10, cardAspect: 3 / 4 });
-  const count = v.count;
-  const cols = (() => { let b = 1; for (let d = 1; d <= count; d++) { if (count % d) continue; if (Math.abs(d - v.columns) < Math.abs(b - v.columns)) b = d; } return b; })();
-  const rows = Math.round(count / cols);
-  const pitchY = v.cardSize + v.gap;
-  const pitchX = v.cardSize * (3 / 4) + v.gap;
+  const { cols, rows, cardW, pitchX, pitchY } = solveLattice(v, { width: W, height: H, cardAspect: 3 / 4 });
+  const count = layerCountFor(t.meta.id, v, { width: W, height: H, cardAspect: 3 / 4 });
 
-  check(cols * rows === count, t.meta.name, 'lattice is not a complete rectangle, so empty cells scroll through frame');
-  check(cols * pitchX >= W && rows * pitchY >= H, t.meta.name, 'lattice is smaller than the canvas, so it cannot cover');
+  check(cols * rows === count, t.meta.name, 'the sprite pool and the lattice disagree, so cells scroll through frame empty');
+  check(cols * pitchX >= W - 1e-6 && rows * pitchY >= H - 1e-6, t.meta.name, 'lattice is smaller than the canvas, so it cannot cover');
+  // Coverage now comes from having enough CELLS, so the gap stays exactly where
+  // the control put it. The old model bought coverage by inflating the gutter,
+  // which silently overrode the user's Gap.
+  check(Math.abs((pitchX - cardW) - v.gap) < 1e-6, t.meta.name,
+    `gap came out ${(pitchX - cardW).toFixed(0)}px, not the ${v.gap}px the preset sets`);
   check(loopDrift(t, v, ctx) < 1e-6, t.meta.name, 'does not return to frame 0 at the loop point');
 
   // A tilted wall rotates as one piece, so screen-space y carries the roll and
@@ -245,11 +298,8 @@ for (const t of templateList.filter((x) => x.meta.group === 'Grid')) {
   const W = 810, H = 1080;
   for (const duration of [17.6, 20]) {
     const ctx = makeCtx(t.meta.id, { width: W, height: H, duration, cardAspect: 3 / 4 });
-    const count = v.count;
-    const cols = (() => { let b = 1; for (let d = 1; d <= count; d++) { if (count % d) continue; if (Math.abs(d - v.columns) < Math.abs(b - v.columns)) b = d; } return b; })();
-    const rows = Math.round(count / cols);
-    const pitchX = v.cardSize * (3 / 4) + v.gap;
-    const pitchY = v.cardSize + v.gap;
+    const { cols, rows, pitchX, pitchY } = solveLattice(v, { width: W, height: H, cardAspect: 3 / 4 });
+    const count = layerCountFor(t.meta.id, v, { width: W, height: H, cardAspect: 3 / 4 });
 
     check(loopDrift(t, v, ctx) < 1e-6, t.meta.name, `does not loop at a ${duration}s clip`);
 
@@ -296,7 +346,7 @@ for (const t of templateList.filter((x) => x.meta.group === 'Ticker')) {
   const W = 810, H = 1080;
   const aspect = t.meta.cardAspect === 'canvas' ? W / H : (t.meta.cardAspect ?? 4 / 5);
   const ctx = makeCtx(t.meta.id, { width: W, height: H, cardAspect: aspect });
-  const count = v.count;
+  const count = layerCountFor(t.meta.id, v, ctx);
   const rows = Math.max(1, Math.round(v.rows));
   const horizontal = v.direction === 'left' || v.direction === 'right';
   const extent = horizontal ? W : H;
@@ -364,9 +414,10 @@ for (const id of ['wipe-01', 'wipe-02', 'wipe-03']) {
   const ctx = makeCtx(id, { width: 810, height: 1080, cardAspect: 810 / 1080 });
   let worst = 0;
   for (let f = 0; f <= ctx.totalFrames; f++) {
-    for (let i = 0; i < v.count; i++) {
-      const a = t.transform(f, i, v.count, v, ctx);
-      const b = takeoverOriginal(f, i, v.count, v, ctx);
+    const n = layerCountFor(id, v, ctx);
+    for (let i = 0; i < n; i++) {
+      const a = t.transform(f, i, n, v, ctx);
+      const b = takeoverOriginal(f, i, n, v, ctx);
       worst = Math.max(worst, Math.hypot(a.x - b.x, a.y - b.y), Math.abs(a.scale - b.scale), Math.abs(a.depth - b.depth));
     }
   }

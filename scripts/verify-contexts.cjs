@@ -37,7 +37,7 @@ Module._resolveFilename = function (request, parent, isMain, options) {
   return originalResolve.call(this, request, parent, isMain, options);
 };
 
-const { templateList, defaultsFor, easingFor } = require('../templates');
+const { templateList, defaultsFor, easingFor, layerCountFor } = require('../templates');
 const { resolveEasing } = require('../lib/easing');
 
 let assertions = 0;
@@ -87,7 +87,7 @@ function thumbnailPoses(template, frame) {
     : template.meta.cardAspect ?? 4 / 5;
   const texW = TEX_LONG * Math.min(1, texAspect);
   const texH = TEX_LONG * Math.min(1, 1 / texAspect);
-  const count = Math.max(1, Math.round(values.count ?? 6));
+  const count = layerCountFor(template.meta.id, values, { width: CTX_W, height: CTX_H, cardAspect: texAspect });
   const norm = SPRITE_BASE / TEX_LONG;
   const ease = resolveEasing(easingFor(template.meta.id));
   const ctx = {

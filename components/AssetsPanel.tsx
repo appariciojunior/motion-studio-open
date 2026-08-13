@@ -5,8 +5,8 @@ import { DndContext, DragOverlay, PointerSensor, closestCenter, useSensor, useSe
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useSceneStore, type AssetItem } from '@/store/useSceneStore';
-import { getTemplate } from '@/templates';
-import { CARD_SHAPES, DEFAULT_FOCUS, type CropFocus } from '@/lib/crop';
+import { getTemplate, layerCountFor } from '@/templates';
+import { CARD_SHAPES, DEFAULT_FOCUS, cardAspectFor, type CropFocus } from '@/lib/crop';
 import { isVideoSource } from '@/lib/videoTexture';
 import MobileSheet from './MobileSheet';
 import { useMobileInteractions } from './MobileInteractions';
@@ -180,8 +180,16 @@ function MobileAssetRow({
 export default function AssetsPanel() {
   const mobile = useMobileInteractions();
   const assets = useSceneStore((s) => s.assets);
-  const count = useSceneStore((s) => Math.max(1, Math.round(s.values.count ?? 1)));
+  // How many card slots the active template will actually fill — asked of the
+  // template, since a lattice family derives that from the canvas rather than
+  // from a control.
+  const count = useSceneStore((s) => layerCountFor(s.activeTemplateId, s.values, {
+    width: s.width,
+    height: s.height,
+    cardAspect: cardAspectFor(getTemplate(s.activeTemplateId).meta, s.width, s.height, s.cardShape),
+  }));
   const repeat = useSceneStore((s) => getTemplate(s.activeTemplateId).meta.repeatAssets === true);
+  const derivesCount = useSceneStore((s) => typeof getTemplate(s.activeTemplateId).layerCount === 'function');
   const addAssets = useSceneStore((s) => s.addAssets);
   const replaceAssetAt = useSceneStore((s) => s.replaceAssetAt);
   const removeAsset = useSceneStore((s) => s.removeAsset);
@@ -311,7 +319,10 @@ export default function AssetsPanel() {
           <span>
             {repeat
               ? `${realAssetCount || 'your'} image${realAssetCount === 1 ? '' : 's'} repeat across ${count} layers`
-              : `${count} ${count === 1 ? 'slot' : 'slots'} · linked to Count`}
+              // "linked to Count" is only true while a Count control exists. The
+              // lattice families derive their layer total from Plane Size, Gap
+              // and the canvas instead, so the copy has to follow.
+              : `${count} ${count === 1 ? 'slot' : 'slots'} · ${derivesCount ? 'set by the canvas' : 'linked to Count'}`}
           </span>
           <span className="spacer" />
           {realAssetCount > 0 && <button className="link-btn" onClick={clearAssets}>Clear all</button>}
