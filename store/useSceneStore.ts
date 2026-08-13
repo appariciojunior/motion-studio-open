@@ -304,13 +304,18 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       const posterDuration = id === 'poster-04' || id === 'poster-05' ? 13
         : id === 'poster-06' ? 22 : 21;
       const stickerDuration = id === 'stickers-01' ? 36 : 13;
+      const spinnerDuration = id === 'spinner-03' || id === 'spinner-05' ? 64
+        : id === 'spinner-04' ? 36
+        : id === 'spinner-06' ? 80
+        : id.startsWith('hinge-') ? (id === 'hinge-05' ? 15 : 12)
+        : id === 'fan-01' ? 24 : 18;
       const referenceCanvas = (isSpinnerPreset || isStickerPreset || isPosterPreset) ? dimsFor('4:5') : null;
       return {
         ...withTrack(s, s.activeTrackId, { templateId: id, values: defaultsFor(id), easing: easingFor(id) }),
         // These reconstructed families have an intrinsic source ratio, just as
         // their reference presets do. Users can still change it afterwards.
         cardShape: group === 'Spinner' ? '4:3' : isStickerPreset ? '1:1' : isPosterPreset ? '4:5' : s.cardShape,
-        duration: group === 'Spinner' ? 18 : isStickerPreset ? stickerDuration : isPosterPreset ? posterDuration : s.duration,
+        duration: isSpinnerPreset ? spinnerDuration : isStickerPreset ? stickerDuration : isPosterPreset ? posterDuration : s.duration,
         ...((isSpinnerPreset || isStickerPreset || isPosterPreset) && !s.background.userSet ? {
           background: { ...s.background, source: 'color' as const, color: '#FFFFFF', gradient: false },
         } : {}),

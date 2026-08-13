@@ -6,11 +6,17 @@ import { variant } from './variant';
 const BASE = 340;
 
 const DEG = Math.PI / 180;
-const CARD_SIZE = 370;
+// Measured against the 4:5 reference stage: a face-on 4:3 card spans about
+// 48% of the canvas width at the default 85% camera zoom.
+const CARD_SIZE = 450;
 
 function spinnerPhase(frame: number, v: Record<string, any>, ctx: Parameters<Template['transform']>[4]) {
   const direction = v.direction === 'reverse' ? -1 : 1;
   return ctx.easedPhase((frame / Math.max(1, ctx.totalFrames)) * Number(v.speed ?? 1) * direction);
+}
+
+function motionRotation(phase: number, v: Record<string, any>) {
+  return v.motionRotation === 'rotation' ? phase * Math.PI * 2 : 0;
 }
 
 function faceAlpha(cosine: number, v: Record<string, any>) {
@@ -31,6 +37,7 @@ const spinner: Template = {
   controls: [
     { key: 'direction', label: 'Direction', type: 'toggle', options: ['forward', 'reverse'], default: 'forward' },
     { key: 'speed', label: 'Speed', type: 'slider', min: 0.1, max: 3, step: 0.05, default: 1, unit: '×', section: 'Motion' },
+    { key: 'motionRotation', label: 'Motion Rotation', type: 'toggle', options: ['static', 'rotation'], default: 'static', section: 'Motion' },
     { key: 'count', label: 'Count', type: 'slider', min: 2, max: 40, step: 1, default: 9 },
     { key: 'cornerRadius', label: 'Corner', type: 'slider', min: 0, max: 100, step: 1, default: 10, unit: '%' },
     { key: 'shape', label: 'Shape', type: 'toggle', options: ['normal', 'squircle'], default: 'squircle' },
@@ -61,16 +68,22 @@ const spinner: Template = {
     const diameter = Number(v.diameter ?? 70);
     const hinge = Number(v.hinge ?? 0);
     const depth = (cosine + 1) / 2;
-    const edge = Math.max(0.12, Math.abs(cosine));
+    // Cards are tangent to the orbit, not radial. They are edge-on at the
+    // front/back of the ring and face-on at its two lateral extremes.
+    const edge = Math.max(0.12, Math.abs(sine));
     const horizontal = v.axis === 'horizontal';
+    const orbitX = horizontal ? 0 : sine * diameter + hinge * (1 - cosine);
+    const orbitY = horizontal ? sine * diameter + hinge * (1 - cosine) : 0;
+    const spin = motionRotation(phase, v);
+    const spinCos = Math.cos(spin), spinSin = Math.sin(spin);
     return {
-      x: (horizontal ? 0 : sine * diameter + hinge * (1 - cosine)) + Number(v.offsetX ?? 0),
-      y: (horizontal ? sine * diameter + hinge * (1 - cosine) : 0) + Number(v.offsetY ?? 0),
+      x: orbitX * spinCos - orbitY * spinSin + Number(v.offsetX ?? 0),
+      y: orbitX * spinSin + orbitY * spinCos + Number(v.offsetY ?? 0),
       scale: CARD_SIZE / BASE,
       scaleX: horizontal ? 1 : edge,
       scaleY: horizontal ? edge : 1,
-      rotation: Number(v.fanRotation ?? 0) * DEG,
-      alpha: faceAlpha(cosine, v),
+      rotation: Number(v.fanRotation ?? 0) * DEG + spin,
+      alpha: faceAlpha(sine, v),
       depth,
     };
   },
@@ -82,22 +95,34 @@ const spinner: Template = {
     const horizontal = v.axis === 'horizontal';
     const sin = Math.sin(a), cos = Math.cos(a);
     const depth = (cos + 1) / 2;
-    const localPoint = {
+    const orbitPoint = {
       x: horizontal ? 0 : sin * radius + hinge * (1 - cos),
       y: horizontal ? sin * radius + hinge * (1 - cos) : 0,
       z: cos * radius + hinge * sin,
     };
+    const spin = motionRotation(phase, v);
+    const spinCos = Math.cos(spin), spinSin = Math.sin(spin);
+    const localPoint = {
+      x: orbitPoint.x * spinCos - orbitPoint.y * spinSin,
+      y: orbitPoint.x * spinSin + orbitPoint.y * spinCos,
+      z: orbitPoint.z,
+    };
     const rig = { pitch: Number(v.rotateX ?? 0), yaw: Number(v.rotateY ?? 0), roll: Number(v.rotateZ ?? 0) };
     const point = tiltPointCanvas(localPoint, rig);
-    const qSpinner = quaternionFromEuler(horizontal ? -a : 0, horizontal ? 0 : a, Number(v.fanRotation ?? 0) * DEG);
+    const qSpinner = quaternionFromEuler(
+      horizontal ? Math.PI / 2 - a : 0,
+      horizontal ? 0 : a - Math.PI / 2,
+      Number(v.fanRotation ?? 0) * DEG,
+    );
+    const qMotion = quaternionFromEuler(0, 0, spin);
     const qRig = quaternionFromEuler(rig.pitch * DEG, rig.yaw * DEG, rig.roll * DEG);
     return {
       x: point.x + Number(v.offsetX ?? 0),
       y: point.y + Number(v.offsetY ?? 0),
       z: point.z,
-      quaternion: multiplyQuaternion(qRig, qSpinner),
+      quaternion: multiplyQuaternion(qRig, multiplyQuaternion(qMotion, qSpinner)),
       scale: CARD_SIZE / BASE,
-      alpha: faceAlpha(cos, v),
+      alpha: faceAlpha(sin, v),
     };
   },
   camera: (v) => ({
@@ -108,19 +133,29 @@ const spinner: Template = {
   }),
 };
 
+function spinnerPreset(
+  id: string,
+  name: string,
+  patch: Record<string, any> = {},
+  easing: 'linear' | 'glide' | 'flow' = 'linear',
+) {
+  const template = variant(spinner, id, name, patch);
+  return { ...template, meta: { ...template.meta, defaultEasing: { id: easing } } };
+}
+
 export const spinnerVariants: Template[] = [
   spinner,
-  variant(spinner, 'spinner-02', 'Spinner 02'),
-  variant(spinner, 'spinner-03', 'Spinner 03', { count: 32, axis: 'vertical', diameter: 500, rotateX: -60, rotateY: 60, rotateZ: 90, zoom: 50, perspective: 1500 }),
-  variant(spinner, 'spinner-04', 'Spinner 04', { count: 18, axis: 'vertical', rotateX: -18, rotateY: -4, offsetY: 7, perspective: 840 }),
-  variant(spinner, 'spinner-05', 'Spinner 05', { count: 32, perspective: 1000 }),
-  variant(spinner, 'spinner-06', 'Spinner 06', { count: 40, axis: 'vertical', diameter: 1000, rotateX: 20, zoom: 39 }),
-  variant(spinner, 'hinge-01', 'Hinge 01', { hinge: 282, rotateX: -45, rotateY: -45, zoom: 75 }),
-  variant(spinner, 'hinge-02', 'Hinge 02', { hinge: 282, rotateX: -45, zoom: 75 }),
-  variant(spinner, 'hinge-03', 'Hinge 03', { hinge: 282, rotateY: -30, zoom: 75 }),
-  variant(spinner, 'hinge-04', 'Hinge 04', { count: 12, hinge: 282, rotateY: -15, zoom: 75, perspective: 1345, offsetX: -5 }),
-  variant(spinner, 'hinge-05', 'Hinge 05', { count: 12, hinge: 280, rotateX: -115, rotateY: -35, rotateZ: -15, zoom: 75, perspective: 1000 }),
-  variant(spinner, 'fan-01', 'Fan 01', { count: 12, axis: 'vertical', fanRotation: 180, hinge: 75, rotateY: -60, rotateZ: -180, zoom: 125, perspective: 250, offsetX: -16, backface: 'hide' }),
-  variant(spinner, 'fan-02', 'Fan 02', { diameter: 50, zoom: 180, perspective: 150, offsetY: 34 }),
-  variant(spinner, 'fan-03', 'Fan 03', { axis: 'vertical', diameter: 440, fade: 13, fadeMode: 'solid', rotateX: -26, rotateY: 120, zoom: 127, perspective: 1000, offsetX: 34, offsetY: 5, backface: 'hide' }),
+  spinnerPreset('spinner-02', 'Spinner 02', { motionRotation: 'rotation' }),
+  spinnerPreset('spinner-03', 'Spinner 03', { count: 32, axis: 'vertical', diameter: 500, rotateX: -60, rotateY: 60, rotateZ: 90, zoom: 50, perspective: 1500 }),
+  spinnerPreset('spinner-04', 'Spinner 04', { count: 18, axis: 'vertical', rotateX: -18, rotateY: -4, offsetY: 7, perspective: 840 }),
+  spinnerPreset('spinner-05', 'Spinner 05', { count: 32, perspective: 1000 }),
+  spinnerPreset('spinner-06', 'Spinner 06', { count: 40, axis: 'vertical', diameter: 1000, rotateX: 20, zoom: 39 }),
+  spinnerPreset('hinge-01', 'Hinge 01', { hinge: 282, rotateX: -45, rotateY: -45, zoom: 75 }),
+  spinnerPreset('hinge-02', 'Hinge 02', { hinge: 282, rotateX: -45, zoom: 75 }),
+  spinnerPreset('hinge-03', 'Hinge 03', { hinge: 282, rotateY: -30, zoom: 75 }),
+  spinnerPreset('hinge-04', 'Hinge 04', { count: 12, hinge: 282, rotateY: -15, zoom: 75, perspective: 1345, offsetX: -5 }),
+  spinnerPreset('hinge-05', 'Hinge 05', { count: 12, hinge: 280, rotateX: -115, rotateY: -35, rotateZ: -15, zoom: 75, perspective: 1000 }, 'glide'),
+  spinnerPreset('fan-01', 'Fan 01', { count: 12, direction: 'reverse', axis: 'vertical', fanRotation: 180, hinge: 75, rotateY: -60, rotateZ: -180, zoom: 125, perspective: 250, offsetX: -16, backface: 'hide' }, 'flow'),
+  spinnerPreset('fan-02', 'Fan 02', { diameter: 50, zoom: 180, perspective: 150, offsetY: 34 }),
+  spinnerPreset('fan-03', 'Fan 03', { axis: 'vertical', diameter: 440, fade: 13, fadeMode: 'solid', rotateX: -26, rotateY: 120, zoom: 127, perspective: 1000, offsetX: 34, offsetY: 5, backface: 'hide' }),
 ];
