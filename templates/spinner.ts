@@ -6,9 +6,33 @@ import { variant } from './variant';
 const BASE = 340;
 
 const DEG = Math.PI / 180;
-// Measured against the 4:5 reference stage: a face-on 4:3 card spans about
+// Measured against the reference's 4:5 stage: a face-on 4:3 card spans about
 // 48% of the canvas width at the default 85% camera zoom.
-const CARD_SIZE = 450;
+const CARD_SIZE = 355;
+const ORBIT_BASE_SIZE = 420;
+
+function cardDimensions(ctx: Parameters<Template['transform']>[4], longEdge = CARD_SIZE) {
+  const aspect = Math.max(0.05, Number(ctx.cardAspect ?? 4 / 3));
+  return {
+    width: longEdge * Math.min(1, aspect),
+    height: longEdge * Math.min(1, 1 / aspect),
+  };
+}
+
+// MOVO's Diameter is the empty diameter left inside the belt, not the radius
+// followed by the card centres. Even at Diameter 0 the cards therefore orbit
+// around half of their cross-axis size instead of collapsing into one point.
+// Treating the public value as a raw radius was what crushed Spinner 01 into a
+// thin pile in the middle of the canvas.
+function orbitRadius(v: Record<string, any>, ctx: Parameters<Template['transform']>[4], horizontal: boolean) {
+  const card = cardDimensions(ctx, ORBIT_BASE_SIZE);
+  const crossAxisSize = horizontal ? card.height : card.width;
+  // Frame measurements at Diameter 0 and 70 show that the authored control is
+  // added to a card-sized base at half strength. The card-sized base keeps opposite
+  // faces separated by the same amount as the reference while still letting
+  // the belt close tightly when Diameter is reduced to zero.
+  return crossAxisSize + Math.max(0, Number(v.diameter ?? 70)) * 0.5;
+}
 
 function spinnerPhase(frame: number, v: Record<string, any>, ctx: Parameters<Template['transform']>[4]) {
   const direction = v.direction === 'reverse' ? -1 : 1;
@@ -65,15 +89,15 @@ const spinner: Template = {
     // This is the equivalent 2D projection, including the thin edge-on pass.
     const sine = Math.sin(angle);
     const cosine = Math.cos(angle);
-    const diameter = Number(v.diameter ?? 70);
     const hinge = Number(v.hinge ?? 0);
     const depth = (cosine + 1) / 2;
     // Cards are tangent to the orbit, not radial. They are edge-on at the
     // front/back of the ring and face-on at its two lateral extremes.
     const edge = Math.max(0.12, Math.abs(sine));
     const horizontal = v.axis === 'horizontal';
-    const orbitX = horizontal ? 0 : sine * diameter + hinge * (1 - cosine);
-    const orbitY = horizontal ? sine * diameter + hinge * (1 - cosine) : 0;
+    const radius = orbitRadius(v, ctx, horizontal);
+    const orbitX = horizontal ? 0 : sine * radius + hinge * (1 - cosine);
+    const orbitY = horizontal ? sine * radius + hinge * (1 - cosine) : 0;
     const spin = motionRotation(phase, v);
     const spinCos = Math.cos(spin), spinSin = Math.sin(spin);
     return {
@@ -90,9 +114,9 @@ const spinner: Template = {
   transform3d: (frame, index, count, v, ctx) => {
     const phase = spinnerPhase(frame, v, ctx);
     const a = phase * Math.PI * 2 + (index / count) * Math.PI * 2;
-    const radius = Number(v.diameter ?? 70);
     const hinge = Number(v.hinge ?? 0);
     const horizontal = v.axis === 'horizontal';
+    const radius = orbitRadius(v, ctx, horizontal);
     const sin = Math.sin(a), cos = Math.cos(a);
     const depth = (cos + 1) / 2;
     const orbitPoint = {
