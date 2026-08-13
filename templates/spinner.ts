@@ -8,7 +8,7 @@ const BASE = 340;
 const DEG = Math.PI / 180;
 // Measured against the reference's 4:5 stage: a face-on 4:3 card spans about
 // 48% of the canvas width at the default 85% camera zoom.
-const CARD_SIZE = 355;
+const CARD_SIZE = 420;
 const ORBIT_BASE_SIZE = 420;
 
 function cardDimensions(ctx: Parameters<Template['transform']>[4], longEdge = CARD_SIZE) {
@@ -150,7 +150,11 @@ const spinner: Template = {
     };
   },
   camera: (v) => ({
-    fov: clamp(50 * (125 / Math.max(50, Number(v.perspective ?? 125))), 5, 80),
+    // The reference's Perspective control uses a long lens. Keeping the old
+    // 50-degree house FOV made near faces flare into obvious trapezoids even
+    // though their size and orbit were correct. A 20-degree baseline preserves
+    // the same z=0 zoom while matching the reference's gentler keystone.
+    fov: clamp(20 * (125 / Math.max(50, Number(v.perspective ?? 125))), 5, 80),
     distance: 100 / Math.max(25, Number(v.zoom ?? 85)),
     near: 1,
     far: 100000,
