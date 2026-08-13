@@ -56,6 +56,11 @@ export interface LayerTransform3D {
   shadowStrength?: number;   // 0..1, per-card cast/receive contribution
   materialExposure?: number; // linear multiplier, 1 = neutral
   bend?: number;             // centre sag in normalized card-width units; 0 = flat
+  curl?: number;             // signed cylindrical page curl in radians
+  cornerPeel?: number;       // 0..1 directional sheet peel
+  peelAngle?: number;        // radians rotated around the moving fold
+  peelDirection?: number;    // degrees: 0 right, 90 top, 180 left, 270 bottom
+  backfaceColor?: string;    // optional solid reverse side (used by rolling stickers)
   velocity?: { x: number; y: number; z: number }; // px/s, used by finish passes
   scale: number;
   alpha: number;
