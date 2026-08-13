@@ -38,6 +38,8 @@ import { premium3dTemplates } from './premium3d';
 import { showcaseVariants } from './showcase';
 import { helix3dVariants } from './helix3d';
 import { interactiveCardsVariants } from './interactiveCards';
+import { spinnerVariants } from './spinner';
+import { stickerVariants } from './stickers';
 
 
 // The reference's complete "3D & Perspective" shelf, in the same order.
@@ -60,6 +62,8 @@ const perspective3dTemplates: Template[] = [
 export const templateList: Template[] = [
   ...perspective3dTemplates,
   ...interactiveCardsVariants,
+  ...spinnerVariants,
+  ...stickerVariants,
   ...carouselVariants,
   ...carouselRefVariants,
   ...orbitVariants,
