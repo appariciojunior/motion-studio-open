@@ -1,7 +1,7 @@
 import type { Template } from '@/lib/types';
 import { TAU, clamp, loopCycles, smooth } from '@/lib/motion';
 import {
-  backfaceFade,
+  depthDim,
   multiplyQuaternion,
   quaternionFromEuler,
   tiltNormalCanvas,
@@ -116,7 +116,12 @@ const ringStream: Template = {
       z: point.z,
       quaternion,
       scale: (metrics.cardPx / BASE) * (1 + smooth(depthN) * 0.035),
-      alpha: backfaceFade(normal.z, v.fade),
+      // depthDim, not backfaceFade: this is a RING, and lib/tilt3d says it in
+      // as many words — a ring's far arc has to stay present or the whole thing
+      // reads as a front-only fan. backfaceFade multiplies in a hard cut to
+      // zero near edge-on (added so sphere tiles never expose their DoubleSide
+      // back), and applying it here deleted every card on the far side.
+      alpha: depthDim(normal.z, v.fade),
       bend: v.cardBend / 100,
       thickness: 0,
       shadowStrength: v.shadow === 'on' ? 1 : 0,
@@ -143,7 +148,9 @@ const ringStream: Template = {
       y: p.y + v.offset.y,
       scale: (metrics.cardPx / BASE) * (0.84 + depthN * 0.19),
       rotation: 0,
-      alpha: backfaceFade(normal.z, v.fade),
+      // Same reasoning as transform3d above, and it matters more here: the 2D
+      // fallback has no depth at all, so losing the far arc leaves a bare row.
+      alpha: depthDim(normal.z, v.fade),
       depth: p.z,
     };
   },
