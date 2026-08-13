@@ -112,10 +112,13 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
   background: var(--inverse-bg); color: var(--inverse-fg);
   display: grid; place-items: center;
 }
+/* Section items are <a> now (one route per section), so the underline and the
+   UA link colour have to go — the rest of the rule already worked for buttons. */
 .rail-item {
   position: relative;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
   height: 52px; border-radius: var(--r-nav); color: var(--fg-faint);
+  text-decoration: none; cursor: pointer;
   transition: color var(--t-fast), background var(--t-fast);
   margin-bottom: 4px;
 }
@@ -1799,6 +1802,16 @@ select.field { padding-right: 26px; }
 }
 
 @keyframes editor-loading-spin { to { transform: rotate(360deg); } }
+
+/* 404 — borrows the loading screen's centring, stacked instead of inline. */
+.route-404 { flex-direction: column; gap: 8px; text-align: center; }
+.route-404-title { margin: 0; font-size: 18px; font-weight: 600; color: var(--fg); }
+.route-404-link {
+  margin-top: 6px; padding: 8px 14px; border-radius: var(--r-nav);
+  background: var(--card-inset); color: var(--fg); text-decoration: none;
+  font-size: var(--fs-ui); font-weight: 600;
+}
+.route-404-link:hover { background: var(--line); }
 
 @media (prefers-reduced-motion: reduce) {
   .editor-loading-mark { animation: none; border-right-color: currentColor; }

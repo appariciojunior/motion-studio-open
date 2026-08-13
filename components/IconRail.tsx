@@ -1,42 +1,33 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
+import { NAV_SECTIONS, sectionFromPathname, type NavSectionId } from '@/lib/navSections';
 import { useUIStore } from '@/store/useUIStore';
 import { useProjectStore } from '@/store/useProjectStore';
 import { AddIcon, BoardIcon, ChevronDownIcon, ExperimentalsIcon, LibraryIcon, MockupIcon, MoonIcon, ProjectsIcon, SunIcon, ThreeDIcon, WebIcon } from './EditorIcons';
 
-const NAV = [
-  { id: 'projects', label: 'Projects', icon: (
-    <ProjectsIcon />
-  ) },
-  { id: 'library', label: 'Library', icon: (
-    <LibraryIcon />
-  ) },
-  { id: 'mockup', label: 'Mockup', icon: (
-    <MockupIcon />
-  ) },
-];
+const ICONS: Record<NavSectionId, React.ReactNode> = {
+  projects: <ProjectsIcon />,
+  library: <LibraryIcon />,
+  mockup: <MockupIcon />,
+  '3d': <ThreeDIcon />,
+  web: <WebIcon />,
+  board: <BoardIcon />,
+};
 
-const EXPERIMENTAL_NAV = [
-  { id: '3d', label: '3D', icon: (
-    <ThreeDIcon />
-  ) },
-  { id: 'web', label: 'Web', icon: (
-    <WebIcon />
-  ) },
-  // Board mode — a DOM playground of arranged cards with hover interactions,
-  // and the entry point for the drop-in React component export. Its nav id is
-  // 'board' rather than the original 'new': the + button at the top of the rail
-  // now creates a project, so the two ids would collide. Kept last in the list.
-  { id: 'board', label: 'Boards', icon: (
-    <BoardIcon />
-  ) },
-];
+const NAV = NAV_SECTIONS.filter((section) => !section.experimental);
+const EXPERIMENTAL_NAV = NAV_SECTIONS.filter((section) => section.experimental);
 
 export default function IconRail() {
-  const active = useUIStore((s) => s.nav);
+  // The URL owns the active section (EditorShell mirrors it into the store for
+  // the panels). Reading the pathname here means back/forward and pasted links
+  // light up the right rail item without a second source of truth.
+  const active = sectionFromPathname(usePathname());
+  const router = useRouter();
   const theme = useUIStore((s) => s.theme);
-  const setActive = useUIStore((s) => s.setNav);
+  const setNav = useUIStore((s) => s.setNav);
   const toggleTheme = useUIStore((s) => s.toggleTheme);
   const createProject = useProjectStore((s) => s.create);
   const projectCount = useProjectStore((s) => s.projects.length);
@@ -47,7 +38,8 @@ export default function IconRail() {
   // icon at the top of the rail now creates what it looks like it creates.
   const newProject = () => {
     createProject(`Project ${projectCount + 1}`);
-    setActive('projects');
+    setNav('projects');
+    router.push('/projects');
   };
 
   return (
@@ -67,10 +59,19 @@ export default function IconRail() {
           <span className="rail-label">New</span>
         </button>
         {NAV.map((n) => (
-          <button key={n.id} className={`rail-item ${active === n.id ? 'active' : ''}`} onClick={() => setActive(n.id)}>
-            <span className="rail-ico">{n.icon}</span>
+          <Link
+            key={n.id}
+            href={n.href}
+            // Setting the store on click as well as on the URL change keeps the
+            // panel swap on the same frame as the click: the mirror in
+            // EditorShell is an effect, which lands a frame later.
+            onClick={() => setNav(n.id)}
+            aria-current={active === n.id ? 'page' : undefined}
+            className={`rail-item ${active === n.id ? 'active' : ''}`}
+          >
+            <span className="rail-ico">{ICONS[n.id]}</span>
             <span className="rail-label">{n.label}</span>
-          </button>
+          </Link>
         ))}
         <button
           className={`rail-item rail-experimentals ${experimentalActive ? 'active' : ''}`}
@@ -89,10 +90,17 @@ export default function IconRail() {
         >
           <div className="rail-experimental-inner">
             {EXPERIMENTAL_NAV.map((n) => (
-              <button key={n.id} tabIndex={experimentalsOpen ? 0 : -1} className={`rail-item rail-subitem ${active === n.id ? 'active' : ''}`} onClick={() => setActive(n.id)}>
-                <span className="rail-ico">{n.icon}</span>
+              <Link
+                key={n.id}
+                href={n.href}
+                tabIndex={experimentalsOpen ? 0 : -1}
+                onClick={() => setNav(n.id)}
+                aria-current={active === n.id ? 'page' : undefined}
+                className={`rail-item rail-subitem ${active === n.id ? 'active' : ''}`}
+              >
+                <span className="rail-ico">{ICONS[n.id]}</span>
                 <span className="rail-label">{n.label}</span>
-              </button>
+              </Link>
             ))}
           </div>
         </div>
