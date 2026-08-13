@@ -7,7 +7,12 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 
 export const metadata: Metadata = {
-  title: 'motion-studio-open',
+  // Section routes set their own short title ('Mockup', 'Library'…) and the
+  // template gives them the product name.
+  title: {
+    default: 'motion-studio-open',
+    template: '%s · motion-studio-open',
+  },
   description: 'motion-studio-open — an open-source factory for quick videos and GIFs.',
 };
 

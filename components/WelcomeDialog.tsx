@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useProjectStore } from '@/store/useProjectStore';
-import { useUIStore } from '@/store/useUIStore';
 
 const SEEN_KEY = 'motion-welcome-seen';
 
@@ -16,15 +15,18 @@ export default function WelcomeDialog() {
   }, []);
 
   // Accepting hands the user a real, named project to work in rather than an
-  // unsaved scratch scene. bootstrap() (page mount) has already created the
+  // unsaved scratch scene. bootstrap() (shell mount) has already created the
   // default project, so this only has to make sure one is open — it never
   // overwrites an existing project.
+  //
+  // It no longer forces the library section: the URL owns that now, and `/`
+  // already lands there. Yanking a first-time visitor who opened /mockup back
+  // to the library would break the link they followed.
   const enter = () => {
     try { localStorage.setItem(SEEN_KEY, '1'); } catch { /* storage blocked */ }
     const projects = useProjectStore.getState();
     projects.bootstrap();               // no-op when already booted
     if (!projects.activeId) projects.create('Default project');
-    useUIStore.getState().setNav('library');
     setOpen(false);
   };
 

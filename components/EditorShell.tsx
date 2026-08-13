@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
+import { usePathname } from 'next/navigation';
 import WelcomeDialog from '@/components/WelcomeDialog';
+import { sectionFromPathname } from '@/lib/navSections';
 import { startSceneAutosave } from '@/lib/scenePersist';
 import { useHistoryStore } from '@/store/useHistoryStore';
 import { useProjectStore } from '@/store/useProjectStore';
@@ -51,8 +53,35 @@ function EditorLoading() {
   );
 }
 
-export default function Home() {
+/**
+ * Mounted by app/(editor)/layout.tsx, so it survives every section navigation:
+ * the Pixi and Three canvases, the autosave loop and the whole store graph stay
+ * alive while the URL changes from /library to /mockup. The section pages under
+ * that layout render nothing — they only declare the route and its <title>.
+ *
+ * The URL is the source of truth for which section is open; useUIStore.nav is
+ * the read path the panels already use, mirrored from it here.
+ */
+export default function EditorShell({ children }: { children?: React.ReactNode }) {
   const mode = useViewportMode();
+  const pathname = usePathname();
+  const section = sectionFromPathname(pathname);
+  const seeded = useRef(false);
+
+  // Seed the store during the first render rather than in the effect below:
+  // an effect lands after the editor's first paint, so a deep link to /mockup
+  // would flash the library first. Safe to write mid-render only because no
+  // subscriber is mounted yet — DesktopEditor is rendered by this component.
+  if (!seeded.current) {
+    seeded.current = true;
+    if (useUIStore.getState().nav !== section) useUIStore.setState({ nav: section });
+  }
+
+  // Later changes — rail clicks, back/forward, a pasted URL. Rail clicks also
+  // set the store optimistically, so this mostly matters for history moves.
+  useEffect(() => {
+    if (useUIStore.getState().nav !== section) useUIStore.setState({ nav: section });
+  }, [section]);
 
   useEffect(() => {
     useUIStore.getState().hydratePreferences();
@@ -81,12 +110,20 @@ export default function Home() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  if (mode === 'pending') return <EditorLoading />;
+  if (mode === 'pending') {
+    return (
+      <>
+        <EditorLoading />
+        {children}
+      </>
+    );
+  }
 
   return (
     <>
       {mode === 'mobile' ? <MobileEditor /> : <DesktopEditor />}
       <WelcomeDialog />
+      {children}
     </>
   );
 }
