@@ -83,7 +83,11 @@ const spinner: Template = {
   ],
   transform: (frame, index, count, v, ctx) => {
     const phase = spinnerPhase(frame, v, ctx);
-    const angle = phase * Math.PI * 2 + (index / count) * Math.PI * 2;
+    // The reference deals media backwards around the belt. With Forward motion
+    // the slot at -40deg travels through the edge-on centre and then down the
+    // frame; using +index mirrored that sequence even though the ring silhouette
+    // itself looked correct.
+    const angle = phase * Math.PI * 2 - (index / count) * Math.PI * 2;
     // The reference family is a 3D card belt: the active axis is the axis
     // around which cards flip, yielding a compressed stack at the side view.
     // This is the equivalent 2D projection, including the thin edge-on pass.
@@ -113,7 +117,7 @@ const spinner: Template = {
   },
   transform3d: (frame, index, count, v, ctx) => {
     const phase = spinnerPhase(frame, v, ctx);
-    const a = phase * Math.PI * 2 + (index / count) * Math.PI * 2;
+    const a = phase * Math.PI * 2 - (index / count) * Math.PI * 2;
     const hinge = Number(v.hinge ?? 0);
     const horizontal = v.axis === 'horizontal';
     const radius = orbitRadius(v, ctx, horizontal);
