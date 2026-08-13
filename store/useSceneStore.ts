@@ -52,6 +52,7 @@ export interface BackgroundSettings {
   color2: string;
   imageUrl: string | null;            // for source: 'image'
   blur: number;                       // px blur for image/card backgrounds
+  userSet?: boolean;                  // preserve an explicit choice across template switches
 }
 
 export interface LogoSettings {
@@ -295,10 +296,27 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   // and seed the track easing from the template's default curve. Only the
   // ACTIVE track switches — the other layers keep their own motion.
   setActiveTemplate: (id) =>
-    set((s) => ({
-      ...withTrack(s, s.activeTrackId, { templateId: id, values: defaultsFor(id), easing: easingFor(id) }),
-      frame: 0,
-    })),
+    set((s) => {
+      const group = templates[id]?.meta.group;
+      const isStickerPreset = id.startsWith('stickers-');
+      const isPosterPreset = id.startsWith('poster-');
+      const posterDuration = id === 'poster-04' || id === 'poster-05' ? 13
+        : id === 'poster-06' ? 22 : 21;
+      const stickerDuration = id === 'stickers-01' ? 36 : 13;
+      const referenceCanvas = (isStickerPreset || isPosterPreset) ? dimsFor('4:5') : null;
+      return {
+        ...withTrack(s, s.activeTrackId, { templateId: id, values: defaultsFor(id), easing: easingFor(id) }),
+        // These reconstructed families have an intrinsic source ratio, just as
+        // their reference presets do. Users can still change it afterwards.
+        cardShape: group === 'Spinner' ? '4:3' : isStickerPreset ? '1:1' : isPosterPreset ? '4:5' : s.cardShape,
+        duration: group === 'Spinner' ? 18 : isStickerPreset ? stickerDuration : isPosterPreset ? posterDuration : s.duration,
+        ...((isStickerPreset || isPosterPreset) && !s.background.userSet ? {
+          background: { ...s.background, source: 'color' as const, color: '#FFFFFF', gradient: false },
+        } : {}),
+        ...(referenceCanvas ? { aspect: '4:5', ...referenceCanvas } : {}),
+        frame: 0,
+      };
+    }),
 
   setEasing: (easing) => set((s) => withTrack(s, s.activeTrackId, { easing })),
 
@@ -424,7 +442,9 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     }),
   setDuration: (d) => set(() => ({ duration: d })),
   toggleSafeArea: () => set((s) => ({ safeArea: !s.safeArea })),
-  setBackground: (patch) => set((s) => ({ background: { ...s.background, ...patch } })),
+  setBackground: (patch) => set((s) => ({
+    background: { ...s.background, ...patch, userSet: true },
+  })),
   setLogo: (patch) => set((s) => ({ logo: { ...s.logo, ...patch } })),
   setAudioUrl: (url) => set(() => ({ audioUrl: url })),
 
