@@ -27,10 +27,11 @@ const poster: Template = {
     { key: 'amount', label: 'Amount', type: 'toggle', options: ['normal', 'random'], default: 'normal' },
     { key: 'backface', label: 'Backface', type: 'toggle', options: ['image', 'sticker'], default: 'image' },
     { key: 'spread', label: 'Spread', type: 'slider', min: 0, max: 100, step: 1, default: 0, unit: '%' },
+    { key: 'speed', label: 'Speed', type: 'slider', min: 0.1, max: 3, step: 0.05, default: 1, unit: '×', section: 'Motion' },
     { key: 'perspective', label: 'Perspective', type: 'slider', min: 0, max: 200, step: 1, default: 125, advanced: true },
   ],
   transform: (frame, index, count, v, ctx) => {
-    const seconds = (frame / Math.max(1, ctx.totalFrames)) * ctx.duration;
+    const seconds = (frame / Math.max(1, ctx.totalFrames)) * ctx.duration * Number(v.speed ?? 1);
     const interval = (ctx.duration * 0.82) / Math.max(1, count);
     const start = (count - 1 - index) * interval;
     const peelDuration = Math.max(0.2, interval * 0.48);
@@ -49,7 +50,7 @@ const poster: Template = {
     };
   },
   transform3d: (frame, index, count, v, ctx) => {
-    const seconds = (frame / Math.max(1, ctx.totalFrames)) * ctx.duration;
+    const seconds = (frame / Math.max(1, ctx.totalFrames)) * ctx.duration * Number(v.speed ?? 1);
     const interval = (ctx.duration * 0.82) / Math.max(1, count);
     const start = (count - 1 - index) * interval;
     const peelDuration = Math.max(0.2, interval * 0.48);

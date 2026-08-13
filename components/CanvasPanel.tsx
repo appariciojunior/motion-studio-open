@@ -77,7 +77,11 @@ export default function CanvasPanel({ is3DMode = false }: { is3DMode?: boolean }
   const setLogo = useSceneStore((s) => s.setLogo);
   const setAudioUrl = useSceneStore((s) => s.setAudioUrl);
   const audioUrl = useSceneStore((s) => s.audioUrl);
-  const isStickerCanvas = activeTemplateId.startsWith('stickers-') || activeTemplateId.startsWith('poster-');
+  const isStickerCanvas = activeTemplateId.startsWith('stickers-')
+    || activeTemplateId.startsWith('poster-')
+    || activeTemplateId.startsWith('spinner-')
+    || activeTemplateId.startsWith('hinge-')
+    || activeTemplateId.startsWith('fan-');
 
   return (
     <>
@@ -141,7 +145,7 @@ export default function CanvasPanel({ is3DMode = false }: { is3DMode?: boolean }
       <div className="section-body" style={{ paddingTop: 4 }}>
         <Collapsible title="Background" defaultOpen={isStickerCanvas} openKey={activeTemplateId}>
           {isStickerCanvas && (
-            <div className="ctl-hint">The template starts on white. Your background choice is kept when switching Sticker or Poster presets.</div>
+            <div className="ctl-hint">The template starts on white. Your background choice is kept when switching Spinner, Sticker or Poster presets.</div>
           )}
           <div className="ctl-row">
             <label className="ctl-label">Source</label>
