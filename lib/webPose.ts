@@ -53,6 +53,7 @@ export function poseFor(
     skewX: (t.skewX ?? 0) - (rest.skewX ?? 0),
     skewY: (t.skewY ?? 0) - (rest.skewY ?? 0),
     alpha: t.alpha,
+    dim: t.dim,
     depth: t.depth,
   };
 }
@@ -77,6 +78,11 @@ export function transformCss(t: LayerTransform, mode: LayoutMode): string {
 export function applyPose(el: HTMLElement, t: LayerTransform, mode: LayoutMode, i: number) {
   el.style.transform = transformCss(t, mode);
   el.style.opacity = String(t.alpha);
+  // A receding card darkens rather than going see-through — same rule as the
+  // sprite renderer, so an exported board matches the stage.
+  const dim = Math.max(0, Math.min(1, t.dim ?? 0));
+  if (dim > 0) el.style.filter = `brightness(${(1 - dim).toFixed(3)})`;
+  else el.style.removeProperty('filter');
   el.style.zIndex = String(Math.round(t.depth * 1000 + i)); // stable tiebreak
   if (mode === 'own') {
     el.style.position = 'absolute';
@@ -88,7 +94,7 @@ export function applyPose(el: HTMLElement, t: LayerTransform, mode: LayoutMode, 
 
 /** Undo everything applyPose set, so switching modes doesn't leave residue. */
 export function clearPose(el: HTMLElement) {
-  for (const p of ['transform', 'opacity', 'z-index', 'position', 'left', 'top', 'margin', 'transform-origin']) {
+  for (const p of ['transform', 'opacity', 'filter', 'z-index', 'position', 'left', 'top', 'margin', 'transform-origin']) {
     el.style.removeProperty(p);
   }
 }

@@ -72,9 +72,13 @@ export function bakeCss(o: BakeOpts): string {
       const pct = (s / samples) * 100;
       const frame = (s / samples) * totalFrames;
       const t = poseFor(o.template, o.mode, frame, i, count, { ...o.values, count }, ctx);
+      const dim = Math.max(0, Math.min(1, t.dim ?? 0));
       const decls = [
         `transform: ${transformCss(t, o.mode)}`,
         `opacity: ${num(t.alpha)}`,
+        // A receding card darkens instead of going see-through — same rule as
+        // the sprite renderer, so exported CSS matches the stage.
+        `filter: brightness(${num(1 - dim)})`,
         `z-index: ${Math.round(t.depth * 1000 + i)}`,
       ];
       steps.push(`  ${num(pct)}% { ${decls.join('; ')}; }`);
