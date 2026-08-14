@@ -54,8 +54,18 @@ export function poseFor(
     skewY: (t.skewY ?? 0) - (rest.skewY ?? 0),
     alpha: t.alpha,
     dim: t.dim,
+    clip: t.clip,
     depth: t.depth,
   };
+}
+
+/** The CSS `clip-path` for a pose's clip, or '' when the card is whole. */
+export function clipPathCss(t: LayerTransform): string {
+  const c = t.clip;
+  if (!c) return '';
+  const pc = (n: number) => `${(Math.max(0, Math.min(1, n)) * 100).toFixed(2)}%`;
+  if (c.x0 <= 0 && c.y0 <= 0 && c.x1 >= 1 && c.y1 >= 1) return '';
+  return `inset(${pc(c.y0)} ${pc(1 - c.x1)} ${pc(1 - c.y1)} ${pc(c.x0)})`;
 }
 
 /** The CSS `transform` value for a pose. Order matches the sprite pipeline. */
@@ -83,6 +93,10 @@ export function applyPose(el: HTMLElement, t: LayerTransform, mode: LayoutMode, 
   const dim = Math.max(0, Math.min(1, t.dim ?? 0));
   if (dim > 0) el.style.filter = `brightness(${(1 - dim).toFixed(3)})`;
   else el.style.removeProperty('filter');
+  // A wipe reveals a still card with a moving edge, so it clips rather than
+  // moves — same rule as the sprite renderer's mask.
+  const cp = clipPathCss(t);
+  if (cp) el.style.clipPath = cp; else el.style.removeProperty('clip-path');
   el.style.zIndex = String(Math.round(t.depth * 1000 + i)); // stable tiebreak
   if (mode === 'own') {
     el.style.position = 'absolute';
@@ -94,7 +108,7 @@ export function applyPose(el: HTMLElement, t: LayerTransform, mode: LayoutMode, 
 
 /** Undo everything applyPose set, so switching modes doesn't leave residue. */
 export function clearPose(el: HTMLElement) {
-  for (const p of ['transform', 'opacity', 'filter', 'z-index', 'position', 'left', 'top', 'margin', 'transform-origin']) {
+  for (const p of ['transform', 'opacity', 'filter', 'clip-path', 'z-index', 'position', 'left', 'top', 'margin', 'transform-origin']) {
     el.style.removeProperty(p);
   }
 }

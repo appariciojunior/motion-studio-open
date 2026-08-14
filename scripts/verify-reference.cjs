@@ -380,6 +380,55 @@ for (const [name, ref] of Object.entries(PARALLAX)) {
 }
 
 // ============================================================
+//  Wipe — the image never moves; an edge uncovers it
+//
+//  Measured on the reference by reading its own card rects at 17 points across
+//  the loop: every card returned (540, 720) at 1080x1440 EVERY time, with only
+//  the slot indices advancing. Nothing translates and nothing scales — what
+//  moves is the reveal edge. The sibling Takeover family (templates/wipe.ts)
+//  pushes cards in from an edge instead, which is a different mechanic and is
+//  deliberately left alone.
+//
+//  Timing: the slot indices flip every 1.67s while the timeline reads 8.4s, so
+//  `duration` there is PER-IMAGE and the clip is duration x count. (Parallax's
+//  `duration` is the whole clip — the reference is not consistent between
+//  families, so it has to be measured each time.)
+// ============================================================
+for (const name of ['Wipe 01', 'Wipe 02', 'Wipe 03', 'Wipe 04']) {
+  const t = byName(name);
+  if (!t) continue;
+  const v = defaultsFor(t.meta.id);
+  const ctx = makeCtx(t.meta.id, { width: 810, height: 1080, duration: 8, cardAspect: 810 / 1080 });
+  const n = layerCountFor(t.meta.id, v, ctx);
+  near(v.count, 5, 0, name, 'count');
+  near(v.seconds, 1.67, 0.01, name, 'seconds per image');
+  check(loopDrift(t, v, ctx) < 1e-6, name, 'does not return to frame 0 at the loop point');
+
+  // Nothing may translate or resize across the whole clip — the entire effect
+  // lives in the clip rect. This is the assertion the port rests on: a
+  // push-based wipe fails it immediately.
+  let moved = 0, resized = 0, everClipped = false, fullyRevealed = false;
+  for (let i = 0; i < n; i++) {
+    const a = t.transform(0, i, n, v, ctx);
+    for (let f = 0; f <= ctx.totalFrames; f += 3) {
+      const p = t.transform(f, i, n, v, ctx);
+      if (Math.hypot(p.x - a.x, p.y - a.y) > 1e-6) moved++;
+      if (Math.abs(p.scale - a.scale) > 1e-6) resized++;
+      const c = p.clip;
+      if (c && (c.x0 > 0.001 || c.y0 > 0.001 || c.x1 < 0.999 || c.y1 < 0.999)) everClipped = true;
+      if (p.alpha > 0.5 && (!c || (c.x0 <= 0.001 && c.y0 <= 0.001 && c.x1 >= 0.999 && c.y1 >= 0.999))) fullyRevealed = true;
+    }
+  }
+  check(moved === 0, name, `${moved} samples translated — a Wipe reveals a still card, it does not push one`);
+  check(everClipped, name, 'no card is ever partly clipped — nothing is being wiped');
+  check(fullyRevealed, name, 'no card ever reaches full frame — the wipe never completes');
+  // `scale` is the only thing allowed to change size, and only where set.
+  if ((v.scale ?? 0) === 0) {
+    check(resized === 0, name, 'a card resized although Scale is 0');
+  }
+}
+
+// ============================================================
 //  The lattice rule — cells grow, the gap holds
 //
 //  Four reference states, read off its Grid with the playhead paused. Its stage
