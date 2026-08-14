@@ -38,6 +38,12 @@ export interface LayerTransform {
   skewY?: number;
   scaleX?: number;   // optional non-uniform squash (default 1) — flips/page turns
   scaleY?: number;   // optional non-uniform squash (default 1) — split-flap
+  // Darken the card toward black, 0 = untouched .. 1 = fully black. This is
+  // how a card RECEDES: dropping its alpha instead makes it see-through, so
+  // whatever it overlaps ghosts through it and the field reads as broken
+  // glass rather than as depth. Reach for `alpha` when a card is genuinely
+  // appearing or leaving, and `dim` when it is merely far away.
+  dim?: number;
   depth: number;     // sort order; higher = drawn on top / nearer
 }
 

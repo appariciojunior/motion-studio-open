@@ -26,6 +26,10 @@ interface Slot {
   texH: number;
   cornerR: number; // last-applied corner radius fraction, for mask caching
   bindKey: string; // guards async image/video loads from overwriting a newer slot
+  // The slot's undimmed tint (white for a real image, grey for a placeholder).
+  // Kept because the per-frame loop multiplies it by the pose's `dim`, and
+  // would otherwise erase the placeholder's own tint.
+  baseTint: number;
 }
 
 // The GPU-side realization of one motion track. Each track owns its own sprite
@@ -36,6 +40,14 @@ interface TrackRT {
   slots: Slot[];
   assetSig: string;
   countSig: number;
+}
+
+// Multiply every channel of a packed 0xRRGGBB tint, for `dim`.
+function scaleTint(tint: number, k: number): number {
+  const r = Math.round(((tint >> 16) & 0xff) * k);
+  const g = Math.round(((tint >> 8) & 0xff) * k);
+  const b = Math.round((tint & 0xff) * k);
+  return (r << 16) | (g << 8) | b;
 }
 
 // A single white rounded texture, tinted per placeholder card.
@@ -238,7 +250,7 @@ export class SceneRenderer {
       label.anchor.set(0.5);
       sprite.addChild(label);
       rt.container.addChild(sprite);
-      rt.slots.push({ sprite, mask, label, texW: 480, texH: 600, cornerR: -1, bindKey: '' });
+      rt.slots.push({ sprite, mask, label, texW: 480, texH: 600, cornerR: -1, bindKey: '', baseTint: 0xffffff });
     }
     while (rt.slots.length > count) {
       const slot = rt.slots.pop()!;
@@ -257,6 +269,7 @@ export class SceneRenderer {
       slot.bindKey = binding;
       if (!asset || !asset.visible) {
         slot.sprite.texture = this.placeholder;
+        slot.baseTint = PLACEHOLDER_FILL;
         slot.sprite.tint = PLACEHOLDER_FILL;
         slot.label.text = String(i + 1);
         slot.label.visible = true;
@@ -266,10 +279,12 @@ export class SceneRenderer {
           // Never leave the previous template's image visible while a new crop
           // is decoding. Local/demo files replace this again in the same tick.
           slot.sprite.texture = this.placeholder;
+          slot.baseTint = PLACEHOLDER_FILL;
           slot.sprite.tint = PLACEHOLDER_FILL;
           slot.label.text = String(i + 1);
           slot.label.visible = true;
         }
+        slot.baseTint = 0xffffff;
         slot.sprite.tint = 0xffffff;
         const { url, crop, kind } = asset;
         this.loadTexture(url, kind).then((base) => {
@@ -485,6 +500,10 @@ export class SceneRenderer {
         slot.sprite.scale.set(norm * t.scale * (t.scaleX ?? 1), norm * t.scale * (t.scaleY ?? 1));
         slot.sprite.rotation = t.rotation;
         slot.sprite.alpha = t.alpha;
+        // `dim` darkens toward black rather than going see-through, so a
+        // receding card occludes what is behind it instead of ghosting it.
+        const dim = clamp(t.dim ?? 0, 0, 1);
+        slot.sprite.tint = dim > 0 ? scaleTint(slot.baseTint, 1 - dim) : slot.baseTint;
         slot.sprite.skew.set(t.skewX ?? 0, t.skewY ?? 0);
         slot.sprite.zIndex = t.depth * 1000 + i; // stable tiebreak
         this.applyMask(slot, track.values.cornerRadius ?? 0);
