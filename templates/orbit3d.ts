@@ -61,7 +61,7 @@ function ringPhase(frame: number, v: Record<string, any>, count: number, ctx: { 
 
 const ringStream: Template = {
   meta: {
-    id: 'orbit-3d-01', name: 'Ring Stream', group: 'Orbit',
+    id: 'orbit-3d-01', name: 'Ring Stream', group: 'Orbit', isNew: true,
     // Linear on purpose — see ringPhase above. The curve picker still works for
     // anyone who wants the stepped feel back.
     defaultEasing: { id: 'linear' }, engine: 'webgl', catalog3d: true, repeatAssets: true,
@@ -75,7 +75,12 @@ const ringStream: Template = {
     { key: 'opening', label: 'Ring Opening', type: 'slider', min: 15, max: 85, step: 1, default: 70, section: 'Layout', unit: '%', description: 'Controls the inner diameter while keeping the ring complete.' },
     { key: 'cardSizePct', label: 'Card Size', type: 'slider', min: 8, max: 36, step: 1, default: 18, section: 'Layout', unit: '%' },
     { key: 'cornerRadius', label: 'Corner Radius', type: 'slider', min: 0, max: 20, step: 0.5, default: 3, section: 'Finish', unit: '%', precision: 1 },
-    { key: 'cardBend', label: 'Card Bend', type: 'slider', min: 0, max: 12, step: 0.5, default: 4, section: 'Depth', unit: '%', precision: 1, description: 'Curves each image surface gently around the ring.' },
+    // Signed, so the slider sits at centre and reads as one axis: negative
+    // cups each image inward toward the ring's centre, positive bows it
+    // outward, 0 is flat. The 3D renderer already flips the arc's centre by
+    // the sign (lib/renderer3d makeBentPlaneGeometry) and clamps to +/-0.45,
+    // so only this range was holding the outward half back.
+    { key: 'cardBend', label: 'Card Bend', type: 'slider', min: -12, max: 12, step: 0.5, default: 4, section: 'Depth', unit: '%', precision: 1, description: 'Curves each image surface around the ring — negative cups inward, positive bows outward.' },
     { key: 'tiltX', label: 'Ring Tilt', type: 'slider', min: -60, max: 60, step: 1, default: -8, section: 'Depth', unit: '°', description: 'Rotates the complete physical ring without changing its radius.' },
     { key: 'perspective', label: 'Perspective', type: 'slider', min: 0, max: 40, step: 1, default: 18, section: 'Depth', unit: '%' },
     { key: 'camDistance', label: 'Camera Distance', type: 'slider', min: 0.5, max: 2.5, step: 0.05, default: 1, section: 'Depth', unit: '×', precision: 2,

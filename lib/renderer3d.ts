@@ -47,8 +47,18 @@ function makeBentPlaneGeometry(sag: number): THREE.PlaneGeometry {
   const ac = new THREE.Vector2().subVectors(a, c);
   const radius = (ab.length() * bc.length() * ac.length()) / (2 * Math.abs(ab.cross(ac)));
   const centre = new THREE.Vector2(0, bend - Math.sign(bend) * radius);
-  const baseAngle = new THREE.Vector2().subVectors(a, centre).angle() - Math.PI / 2;
-  const arc = baseAngle * 2;
+  // The arc from c to a around the centre, taken the SHORT way. This used to be
+  // `(a - centre).angle() * 2 - PI`, which relies on the centre sitting BELOW
+  // the chord and so only held for a positive bend. Vector2.angle() returns
+  // [0, 2*PI), so a negative bend — centre above the chord — picked the reflex
+  // angle and swept the card nearly all the way round its own circle: at
+  // bend -0.04 the centre vertex landed 6.25 units out instead of 0.04, about
+  // 150x too far. Measuring the signed difference works for either side.
+  const angleA = new THREE.Vector2().subVectors(a, centre).angle();
+  const angleC = new THREE.Vector2().subVectors(c, centre).angle();
+  let arc = angleA - angleC;
+  if (arc > Math.PI) arc -= Math.PI * 2;
+  if (arc < -Math.PI) arc += Math.PI * 2;
   const uv = geometry.attributes.uv;
   const position = geometry.attributes.position;
   const point = new THREE.Vector2();
