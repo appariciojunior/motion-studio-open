@@ -493,10 +493,11 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     const index = current.findIndex((asset) => asset.id === id);
     const a = current[index];
     if (a?.origin === 'upload') idbDelete(id).catch(() => {});
-    if (index < 0 || a?.origin === 'demo') return;
-    set((s) => ({ assets: s.assets.map((asset, slot) => slot === index
-      ? { ...demoSourceForSlot(slot), id: asset.id, visible: true, origin: 'demo' as const }
-      : asset) }));
+    if (index < 0) return;
+    // Removal must remove the media item itself. Replacing it with a demo asset
+    // made the card look deleted while keeping a permanent, undeletable slot in
+    // the list. The panel supplies empty rows up to the template's card count.
+    set((s) => ({ assets: s.assets.filter((asset) => asset.id !== id) }));
   },
   toggleAsset: (id) =>
     set((s) => ({

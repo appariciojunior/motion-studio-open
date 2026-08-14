@@ -278,15 +278,21 @@ export default function AssetsPanel() {
     slotInputRef.current?.click();
   };
 
-  // The list is sized by the template's `count` — one row per layer slot.
-  // Repeat-mode templates cycle a small image set across many layers, so the
-  // panel shows just the images plus one add-row instead of `count` slots.
+  // Keep every uploaded slot visible, even when the active template renders
+  // fewer layers. The old repeat-mode cap (`min(count, ...)`) hid uploads as
+  // soon as a template had a low Count (often one), which also made those
+  // hidden cards impossible to remove. Empty demo entries deliberately stay
+  // in the list as holes so replacement keeps each card's position.
   const realAssetCount = assets.filter((asset) => asset.origin !== 'demo').length;
-  const rows = repeat ? Math.min(count, realAssetCount + 1) : count;
+  // Always retain the template's complete card grid. Repeat-mode templates
+  // still render the same source more than once, but must not collapse the
+  // editor to a single row. Always retain one empty row after the current
+  // media, so standard/model images never hide where to add another one.
+  const rows = Math.max(count, assets.length + 1);
   const slots = Array.from({ length: rows }, (_, i) => assets[i] ?? null);
-  const filled = slots.filter((asset) => asset && asset.origin !== 'demo').length;
+  const filled = slots.filter(Boolean).length;
   const sortableEntries = slots
-    .map((asset, index) => asset && asset.origin !== 'demo' ? { asset, index } : null)
+    .map((asset, index) => asset ? { asset, index } : null)
     .filter((entry): entry is { asset: AssetItem; index: number } => entry !== null);
 
   const finishMobileDrag = ({ active, over }: DragEndEvent) => {
@@ -395,7 +401,7 @@ export default function AssetsPanel() {
               <ul className="mobile-asset-list" onPointerDown={(event) => {
                 if (!(event.target as HTMLElement).closest('.mobile-asset-row')) setSwipeOpenId(null);
               }}>
-                {slots.map((asset, index) => asset && asset.origin !== 'demo' ? (
+                {slots.map((asset, index) => asset ? (
                   <MobileAssetRow
                     key={asset.id}
                     asset={asset}
@@ -430,7 +436,7 @@ export default function AssetsPanel() {
         ) : (
         <ul className="asset-list">
           {slots.map((a, i) =>
-            a && a.origin !== 'demo' ? (
+            a ? (
               <li
                 key={a.id}
                 data-slot-idx={i}

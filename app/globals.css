@@ -107,15 +107,20 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
    ============================================================ */
 .rail { grid-area: rail; align-items: stretch; border-right: 1px solid var(--line); }
 .rail-top { padding: 12px 8px 0; display: flex; flex-direction: column; align-items: stretch; flex: 1; }
+.rail-logo-wrap { display: flex; flex-direction: column; align-items: center; margin: 8px auto 16px; }
 .rail-logo {
-  width: 40px; height: 40px; margin: 8px auto 16px;
+  width: 40px; height: 40px;
   background: var(--inverse-bg); color: var(--inverse-fg);
   display: grid; place-items: center;
 }
+.rail-beta-tag { margin-top: 6px; }
+/* Section items are <a> now (one route per section), so the underline and the
+   UA link colour have to go — the rest of the rule already worked for buttons. */
 .rail-item {
   position: relative;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
   height: 52px; border-radius: var(--r-nav); color: var(--fg-faint);
+  text-decoration: none; cursor: pointer;
   transition: color var(--t-fast), background var(--t-fast);
   margin-bottom: 4px;
 }
@@ -987,6 +992,33 @@ select.field { padding-right: 26px; }
 }
 
 /* ============================================================
+   PRODUCT TOUR — first-run spotlight walkthrough (desktop only)
+   ============================================================ */
+.tour-scrim { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 200; pointer-events: none; }
+.tour-scrim-fill { fill: rgba(0,0,0,0.55); }
+:root[data-theme="dark"] .tour-scrim-fill { fill: rgba(0,0,0,0.7); }
+.tour-ring {
+  position: fixed; top: 0; left: 0; z-index: 201; pointer-events: none;
+  border: 2px solid var(--fg);
+  transition: transform 260ms cubic-bezier(.22,1,.36,1), width 260ms cubic-bezier(.22,1,.36,1), height 260ms cubic-bezier(.22,1,.36,1);
+}
+.tour-card {
+  position: fixed; top: 0; left: 0; z-index: 202;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r-card);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.18); padding: 16px;
+  display: flex; flex-direction: column; gap: 10px;
+  transition: transform 260ms cubic-bezier(.22,1,.36,1);
+}
+.tour-step {
+  font-size: var(--fs-eyebrow); font-weight: 500; letter-spacing: 1.5px;
+  text-transform: uppercase; color: var(--fg-faint); line-height: 15px;
+}
+.tour-title { font-size: 15px; font-weight: 600; color: var(--fg); line-height: 1.3; }
+.tour-body { margin: 0; font-size: var(--fs-label); line-height: 1.5; color: var(--fg-label); }
+.tour-actions { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
+.tour-nav { display: flex; gap: 8px; }
+
+/* ============================================================
    WELCOME — first-run dialog over a heavily blurred, faded app
    ============================================================ */
 .welcome-backdrop { background: rgba(17,24,39,0.3); backdrop-filter: blur(10px); }
@@ -995,13 +1027,6 @@ select.field { padding-right: 26px; }
 .welcome-title { margin: 0; font-size: 18px; font-weight: 600; color: var(--fg); line-height: 1.2; }
 .welcome-body p { margin: 0; font-size: var(--fs-label); line-height: 1.55; color: var(--fg-label); }
 .welcome-body p b { color: var(--fg); font-weight: 600; }
-.welcome-list {
-  margin: 2px 0; padding: 14px 16px; list-style: none;
-  background: var(--card-soft); border: 1px solid var(--line);
-  display: flex; flex-direction: column; gap: 7px;
-}
-.welcome-list li { font-size: var(--fs-ui); line-height: 1.5; color: var(--fg-label); }
-.welcome-list li b { color: var(--fg); font-weight: 600; }
 .welcome-love { color: var(--fg-muted); }
 .welcome-agree {
   display: flex; align-items: center; gap: 9px; margin-top: 4px;
@@ -1799,6 +1824,16 @@ select.field { padding-right: 26px; }
 }
 
 @keyframes editor-loading-spin { to { transform: rotate(360deg); } }
+
+/* 404 — borrows the loading screen's centring, stacked instead of inline. */
+.route-404 { flex-direction: column; gap: 8px; text-align: center; }
+.route-404-title { margin: 0; font-size: 18px; font-weight: 600; color: var(--fg); }
+.route-404-link {
+  margin-top: 6px; padding: 8px 14px; border-radius: var(--r-nav);
+  background: var(--card-inset); color: var(--fg); text-decoration: none;
+  font-size: var(--fs-ui); font-weight: 600;
+}
+.route-404-link:hover { background: var(--line); }
 
 @media (prefers-reduced-motion: reduce) {
   .editor-loading-mark { animation: none; border-right-color: currentColor; }
