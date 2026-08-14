@@ -47,6 +47,12 @@ function SliderControl({ def, value, onChange }: RowProps) {
   const [dragging, setDragging] = useState(false);
   const num = Number(value);
   const pct = Math.max(0, Math.min(100, ((num - min) / (max - min)) * 100));
+  // Where the fill starts. A range that spans zero anchors there; everything
+  // else keeps filling from the left edge.
+  const signed = min < 0 && max > 0;
+  const zeroPct = signed ? (-min / (max - min)) * 100 : 0;
+  const fillLeft = signed ? Math.min(pct, zeroPct) : 0;
+  const fillWidth = signed ? Math.abs(pct - zeroPct) : pct;
   const decimals = def.precision ?? (step < 1 ? Math.min(3, Math.ceil(-Math.log10(step))) : 0);
 
   const setFromX = (clientX: number, fine = false) => {
@@ -100,8 +106,13 @@ function SliderControl({ def, value, onChange }: RowProps) {
       }}
       title="Double-click to reset"
     >
-      <div className="sfill" style={{ width: `${pct}%` }} />
-      {min < 0 && max > 0 && <div className="szero" style={{ left: `${((-min) / (max - min)) * 100}%` }} />}
+      {/* A control that spans zero fills FROM zero, not from the left edge:
+          right of centre reads positive, left reads negative, and zero reads
+          empty. Filling from the edge made a signed slider look like a
+          magnitude bar — Card Bend at 0 showed a half-full track, which reads
+          as "half on" rather than "neutral". */}
+      <div className="sfill" style={{ left: `${fillLeft}%`, width: `${fillWidth}%` }} />
+      {signed && <div className="szero" style={{ left: `${zeroPct}%` }} />}
       <div className="shandle" style={{ left: `${pct}%` }} />
       {mobile && dragging && <output className="slider-bubble" style={{ left: `${pct}%` }}>{num.toFixed(decimals)}{def.unit ?? ''}</output>}
       {editing ? (

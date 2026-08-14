@@ -393,8 +393,10 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
   position: relative; width: 100%; height: var(--ctl-h); border-radius: var(--r-ctrl);
   background: var(--card-inset); cursor: ew-resize; user-select: none; overflow: hidden;
 }
+/* `left` and `width` both come from the component: a range that spans zero
+   fills from its zero point rather than from the left edge. */
 .sfill {
-  position: absolute; inset: 0 auto 0 0; background: var(--card);
+  position: absolute; top: 0; bottom: 0; background: var(--card);
   border: 1px solid var(--handle); border-radius: var(--r-ctrl); pointer-events: none;
 }
 .shandle {
