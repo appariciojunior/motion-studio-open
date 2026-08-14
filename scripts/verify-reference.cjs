@@ -170,7 +170,7 @@ for (const [name, { ages, widths }] of Object.entries(BLOOM)) {
 }
 
 // ============================================================
-//  Parallax — a scattered field with depth
+//  Parallax — a scattered field that flickers, not a scrolling wall
 //
 //  Read straight from the store's paramsPerModeBaseline (its "Min Size" /
 //  "Max Size" panel fields, confirmed against the live Controls tab, not
@@ -179,11 +179,21 @@ for (const [name, { ages, widths }] of Object.entries(BLOOM)) {
 //  for all three: 238/442, unconverted). `direction`/`planeSize`/
 //  `scaleCenter` sit in the same dict but never surface on the panel — dead
 //  keys from an earlier version of the scene, not read by anything here.
+//
+//  `travel` is carried over UNconverted (not canvas-scaled): a first pass
+//  modelled it as a scroll distance, which a 0.5s-apart pair of rasterized
+//  frames on Parallax 01 disproved — every visible card sat in the exact
+//  same place, unmoved. What actually turns over between samples 2s apart is
+//  the whole VISIBLE SET, each card crossfading in/out on its own staggered,
+//  fixed position. `travel` now sets how many of those on/off cycles the
+//  field runs per loop, fitted to the observed ~2-2.5s turnover — not
+//  measured to the schema's own precision, which is why this section does
+//  not assert an exact value for it.
 // ============================================================
 const PARALLAX = {
-  'Parallax 01': { count: 133, spread: 300, travel: 300, depth: 60, fade: 0 },
-  'Parallax 02': { count: 200, spread: 300, travel: 150, depth: 100, fade: 78 },
-  'Parallax 03': { count: 140, spread: 180, travel: 100, depth: 60, fade: 80 },
+  'Parallax 01': { count: 133, spread: 300, depth: 60, fade: 0 },
+  'Parallax 02': { count: 200, spread: 300, depth: 100, fade: 78 },
+  'Parallax 03': { count: 140, spread: 180, depth: 60, fade: 80 },
 };
 for (const [name, ref] of Object.entries(PARALLAX)) {
   const t = byName(name);
@@ -193,44 +203,54 @@ for (const [name, ref] of Object.entries(PARALLAX)) {
   near(v.maxSize, REF_SCALE * 442, 1, name, 'max size');
   near(v.count, ref.count, 0, name, 'count');
   near(v.spread, REF_SCALE * ref.spread, 1, name, 'spread');
-  near(v.travel, REF_SCALE * ref.travel, 1, name, 'travel');
   near(v.depth, ref.depth, 0, name, 'depth');
   near(v.fade, ref.fade, 0, name, 'fade');
 
   const ctx = makeCtx(t.meta.id, { width: 810, height: 1080, duration: 8, cardAspect: 3 / 4 });
   check(loopDrift(t, v, ctx) < 1e-6, name, 'does not return to frame 0 at the loop point');
 
-  // The parallax tell: at Depth > 0, a nearer (bigger) card has to cover more
-  // ground than a farther one over the same span — that is what makes a
-  // scatter read as depth instead of a flat field of random sizes. Compare
-  // the two most extreme cards the seeded scatter actually drew, so this
-  // measures the SAME hash the transform uses rather than an assumption
-  // about its distribution.
-  let nearest = { d: -1 }, farthest = { d: 2 };
+  // Every card holds a FIXED position and size — position/size must not
+  // depend on frame at all, only on index/seed. Sample two frames far apart
+  // in time and confirm neither moved nor resized, which is the property the
+  // rasterized-canvas comparison actually measured on the reference.
   const n = layerCountFor(t.meta.id, v, ctx);
+  const f1 = Math.round(ctx.totalFrames * 0.2), f2 = Math.round(ctx.totalFrames * 0.7);
+  let moved = 0;
+  for (let i = 0; i < n; i++) {
+    const a = t.transform(f1, i, n, v, ctx);
+    const b = t.transform(f2, i, n, v, ctx);
+    if (Math.hypot(a.x - b.x, a.y - b.y) > 1e-6 || Math.abs(a.scale - b.scale) > 1e-6) moved++;
+  }
+  check(moved === 0, name, `${moved} of ${n} cards changed position or size across the clip — should be fixed per card`);
+
+  // Every card must actually reach full visibility at some point (its
+  // crossfade peaks at 1), and — the fade cue — the peak alpha a far card
+  // ever reaches has to be measurably lower than a near card's, whenever
+  // Fade is on.
+  let nearest = { d: -1 }, farthest = { d: 2 };
   for (let i = 0; i < n; i++) {
     const p0 = t.transform(0, i, n, v, ctx);
     if (p0.depth > nearest.d) nearest = { i, d: p0.depth };
     if (p0.depth < farthest.d) farthest = { i, d: p0.depth };
   }
-  // Instantaneous speed, not net displacement: a fast card can complete whole
-  // wraps between two sample points and land back near where it started,
-  // reading as "barely moved" even though it travelled the most of anyone —
-  // the same trap as tracking a lattice by residue mod pitch. A one-frame
-  // step is far shorter than any card's wrap period, so unwrapping it by the
-  // nearest multiple of the span recovers the real per-frame step.
-  const speed = (i) => {
-    const f = Math.max(1, Math.round(ctx.totalFrames / 3));
-    const a = t.transform(f, i, n, v, ctx);
-    const b = t.transform(f + 1, i, n, v, ctx);
-    const span = v.spread * 2;
-    let dy = b.y - a.y;
-    dy -= span * Math.round(dy / span);
-    return Math.abs(dy);
+  const peakAlpha = (i) => {
+    let best = 0;
+    for (let f = 0; f <= ctx.totalFrames; f += 2) best = Math.max(best, t.transform(f, i, n, v, ctx).alpha);
+    return best;
   };
-  if (ref.depth > 0) {
-    check(speed(nearest.i) > speed(farthest.i), name,
-      'nearest card does not outrun the farthest one — no parallax read');
+  // Every card's crossfade has to reach lifecycle=1 (fully in its hold) at
+  // its peak — Fade then dims that peak toward the background by up to
+  // Fade% scaled by how far the card sits (1-depth). Check against each
+  // card's OWN expected ceiling, not a flat threshold: at 140 seeded cards
+  // and Fade 80, the single best-placed card can land at depth 0.79 rather
+  // than 1.0, and 80% of that remaining 21% is a real, correct dim — not a
+  // bug a flat ">0.98" would have wrongly flagged.
+  const expectedPeak = (d) => 1 - (v.fade / 100) * (1 - d);
+  near(peakAlpha(nearest.i), expectedPeak(nearest.d), 0.03, name, 'nearest card peak alpha vs. its own Fade ceiling');
+  near(peakAlpha(farthest.i), expectedPeak(farthest.d), 0.03, name, 'farthest card peak alpha vs. its own Fade ceiling');
+  if (ref.fade > 0) {
+    check(peakAlpha(farthest.i) < peakAlpha(nearest.i) - 0.05, name,
+      'a far card peaks as bright as a near one — Fade is not dimming by depth');
   }
 }
 
