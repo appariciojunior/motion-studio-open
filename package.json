@@ -9,7 +9,8 @@
     "dev:network": "next dev -H 0.0.0.0",
     "build": "next build",
     "start": "next start",
-    "start:network": "next start -H 0.0.0.0"
+    "start:network": "next start -H 0.0.0.0",
+    "check:upstream": "node scripts/verify-fork-only.cjs"
   },
   "keywords": [],
   "author": "",
