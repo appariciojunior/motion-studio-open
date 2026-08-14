@@ -9,7 +9,7 @@ Module._resolveFilename = function (request, parent, isMain, options) {
   return originalResolve.call(this, request, parent, isMain, options);
 };
 
-const { templateList, catalogTemplateList, templateGroups, getTemplate, defaultsFor } = require('../templates');
+const { templateList, catalogTemplateList, templateGroups, getTemplate, defaultsFor, layerCountFor } = require('../templates');
 const { tiltPointCanvas, tiltNormalCanvas } = require('../lib/tilt3d');
 
 let assertions = 0;
@@ -130,7 +130,7 @@ for (const aspect of [4 / 5, 1, 16 / 9]) {
 
 for (const template of templateList.filter((item) => relevantGroups.has(item.meta.group))) {
   const values = defaultsFor(template.meta.id);
-  const count = Math.max(1, Math.round(values.count ?? 6));
+  const count = layerCountFor(template.meta.id, values, { width: ctx.width, height: ctx.height });
   const controls = template.controls.filter((control) => control.type === 'slider' && ['tilt','tiltX','tiltAmount','ringTilt','curvature','perspective'].includes(control.key));
   const samples = [values, ...controls.flatMap((control) => [
     { ...values, [control.key]: control.min },

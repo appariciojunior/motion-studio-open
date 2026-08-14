@@ -32,7 +32,7 @@ Module._resolveFilename = function (request, parent, isMain, options) {
   return originalResolve.call(this, request, parent, isMain, options);
 };
 
-const { templateList, catalogTemplateList, templateGroups, defaultsFor, easingFor } = require('../templates');
+const { templateList, catalogTemplateList, templateGroups, defaultsFor, easingFor, layerCountFor } = require('../templates');
 const { resolveEasing } = require('../lib/easing');
 const { ASPECTS, dimsFor } = require('../store/useSceneStore');
 const { CARD_SHAPES, cardAspectFor } = require('../lib/crop');
@@ -75,9 +75,6 @@ for (const template of templateList) {
   const values = defaultsFor(template.meta.id);
   const ease = resolveEasing(easingFor(template.meta.id));
   const easedPhase = (p) => Math.floor(p) + ease(p - Math.floor(p));
-  // Cap the layer count: a few families run to 140 cards and the sweep is
-  // already 42 canvases per template.
-  const count = Math.min(60, Math.max(1, Math.round(values.count ?? 6)));
 
   for (const aspectKey of Object.keys(ASPECTS)) {
     const { width, height } = dimsFor(aspectKey);
@@ -86,6 +83,12 @@ for (const template of templateList) {
       combos++;
       const cardAspect = cardAspectFor(template.meta, width, height, shape === 'auto' ? undefined : shape);
       const ctx = { fps: FPS, width, height, duration: DURATION, totalFrames: TOTAL, ease, easedPhase, cardAspect };
+      // Asked of the template and derived INSIDE the canvas loop: a lattice
+      // family's cell total is a function of the frame, so a per-template count
+      // hoisted out of here would test a wall the renderer never builds. Capped
+      // because a few families run to 140 cards and the sweep is already 42
+      // canvases per template.
+      const count = Math.min(60, layerCountFor(template.meta.id, values, { width, height, cardAspect }));
       const where = `${aspectKey}/${shape}`;
       const name = template.meta.name;
 
@@ -148,10 +151,10 @@ for (const template of templateList.filter((t) => ['Frames', 'Grid'].includes(t.
   const values = defaultsFor(template.meta.id);
   const ease = resolveEasing(easingFor(template.meta.id));
   const easedPhase = (p) => Math.floor(p) + ease(p - Math.floor(p));
-  const count = values.count;
 
   for (const [shapeName, cardAspect] of [['auto', 3 / 4], ...Object.entries(CARD_SHAPES)]) {
     const ctx = { fps: FPS, width: 1080, height: 810, duration: DURATION, totalFrames: TOTAL, ease, easedPhase, cardAspect };
+    const count = layerCountFor(template.meta.id, values, { width: 1080, height: 810, cardAspect });
     const long = values.cardSize;
     const cardW = cardAspect < 1 ? long * cardAspect : long;
     const cardH = cardAspect < 1 ? long : long / cardAspect;
@@ -181,6 +184,68 @@ for (const template of templateList.filter((t) => ['Frames', 'Grid'].includes(t.
       template.meta.name,
       `gutters unequal: ${gutterAcross.toFixed(0)}px across vs ${gutterDown.toFixed(0)}px down`,
       `card shape ${shapeName}`);
+  }
+}
+
+// ---------- lattice coverage across the CONTROL RANGES ----------
+// Everything above runs each template at its preset defaults, which is what let
+// a real defect ship: Grid's wall wraps as a torus over one lattice period and
+// only covers the frame while that period is at least as big as the frame. At
+// the defaults it was; dragging Plane Size down to 60 made the lattice span
+// 630x720 inside an 810x1080 canvas and left a 360px band of dead background.
+// A user reaches that state with one slider, so the sweep has to go there too.
+for (const template of templateList.filter((t) => ['Frames', 'Grid'].includes(t.meta.group))) {
+  const base = defaultsFor(template.meta.id);
+  const ease = resolveEasing(easingFor(template.meta.id));
+  const easedPhase = (p) => Math.floor(p) + ease(p - Math.floor(p));
+  const ctrl = (key) => template.controls.find((c) => c.key === key);
+  const spread = (key) => {
+    const c = ctrl(key);
+    if (!c) return [base[key]];
+    return [...new Set([c.min, Math.round((c.min + c.max) / 2), c.max, base[key]])];
+  };
+
+  for (const aspectKey of ['3:4', '16:9']) {
+    const { width, height } = dimsFor(aspectKey);
+    const ctx = { fps: FPS, width, height, duration: DURATION, totalFrames: TOTAL, ease, easedPhase, cardAspect: 3 / 4 };
+
+    for (const cardSize of spread('cardSize')) {
+      for (const gap of spread('gap')) {
+        {
+          // No count in this sweep any more: these families derive their cell
+          // total from Plane Size, Gap and the canvas, so the pair above IS the
+          // whole input space. Feeding an arbitrary count would test a wall the
+          // renderer cannot produce.
+          const values = { ...base, cardSize, gap };
+          const count = layerCountFor(template.meta.id, values, { width, height, cardAspect: 3 / 4 });
+          const poses = [];
+          for (let i = 0; i < count; i++) poses.push(template.transform(0, i, count, values, ctx));
+
+          // Derive the pitch from the OUTPUT rather than restating the formula,
+          // so this measures the behaviour and not the intent.
+          const pitchOf = (axis, other) => {
+            let best = Infinity;
+            for (const a of poses) for (const b of poses) {
+              if (a === b || Math.abs(a[other] - b[other]) > 0.5) continue;
+              const d = Math.abs(a[axis] - b[axis]);
+              if (d > 0.5 && d < best) best = d;
+            }
+            return best;
+          };
+          const px = pitchOf('x', 'y');
+          const py = (() => { let b = Infinity; for (const a of poses) for (const c of poses) { const d = Math.abs(a.y - c.y); if (d > 0.5 && d < b) b = d; } return b; })();
+          if (!Number.isFinite(px) || !Number.isFinite(py)) continue;
+
+          const spanX = (Math.max(...poses.map((p) => p.x)) - Math.min(...poses.map((p) => p.x))) + px;
+          const spanY = (Math.max(...poses.map((p) => p.y)) - Math.min(...poses.map((p) => p.y))) + py;
+          const where = `${aspectKey} cardSize ${cardSize} gap ${gap} (${count} cells)`;
+          check(spanX >= width - 1, template.meta.name,
+            `lattice spans only ${spanX.toFixed(0)}px across a ${width}px canvas — dead background at the sides`, where);
+          check(spanY >= height - 1, template.meta.name,
+            `lattice spans only ${spanY.toFixed(0)}px down a ${height}px canvas — dead background top and bottom`, where);
+        }
+      }
+    }
   }
 }
 

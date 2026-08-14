@@ -1,6 +1,6 @@
 import * as PIXI from 'pixi.js';
 import { PixelateFilter } from 'pixi-filters';
-import { getTemplate } from '@/templates';
+import { getTemplate, layerCountFor } from '@/templates';
 import { getEffect } from '@/effects';
 import { useSceneStore, type SceneState } from '@/store/useSceneStore';
 import { resolveEasing } from '@/lib/easing';
@@ -204,10 +204,15 @@ export class SceneRenderer {
   // into repeatAssets (high-count fields). Slots past the list cycle the
   // available images; numbered placeholders appear only with zero assets.
   private syncTrackSlots(track: MotionTrack, rt: TrackRT, s: SceneState) {
-    const count = Math.max(1, Math.round(track.values.count ?? 6));
     const meta = getTemplate(track.templateId).meta;
     const repeat = meta.repeatAssets === true;
     const aspect = cardAspectFor(meta, s.width, s.height, s.cardShape);
+    // Asked of the template, not read off its `count` control: a lattice family
+    // derives how many cells the canvas needs, so its pool has to follow the
+    // canvas. `countSig` below already keys the rebuild on this number, so a
+    // resize or a card-size change re-pools on its own.
+    const count = layerCountFor(track.templateId, track.values,
+      { width: s.width, height: s.height, cardAspect: aspect });
     // Which scene assets feed this track, in track order.
     const indices = trackAssetIndices(track, s.assets);
     const pool = indices.map((i) => s.assets[i]).filter(Boolean);

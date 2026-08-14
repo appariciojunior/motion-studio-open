@@ -5,8 +5,8 @@ import { DndContext, DragOverlay, PointerSensor, closestCenter, useSensor, useSe
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useSceneStore, type AssetItem } from '@/store/useSceneStore';
-import { getTemplate } from '@/templates';
-import { CARD_SHAPES, DEFAULT_FOCUS, type CropFocus } from '@/lib/crop';
+import { getTemplate, layerCountFor } from '@/templates';
+import { CARD_SHAPES, DEFAULT_FOCUS, cardAspectFor, type CropFocus } from '@/lib/crop';
 import { isVideoSource } from '@/lib/videoTexture';
 import MobileSheet from './MobileSheet';
 import { useMobileInteractions } from './MobileInteractions';
@@ -180,8 +180,16 @@ function MobileAssetRow({
 export default function AssetsPanel() {
   const mobile = useMobileInteractions();
   const assets = useSceneStore((s) => s.assets);
-  const count = useSceneStore((s) => Math.max(1, Math.round(s.values.count ?? 1)));
+  // How many card slots the active template will actually fill — asked of the
+  // template, since a lattice family derives that from the canvas rather than
+  // from a control.
+  const count = useSceneStore((s) => layerCountFor(s.activeTemplateId, s.values, {
+    width: s.width,
+    height: s.height,
+    cardAspect: cardAspectFor(getTemplate(s.activeTemplateId).meta, s.width, s.height, s.cardShape),
+  }));
   const repeat = useSceneStore((s) => getTemplate(s.activeTemplateId).meta.repeatAssets === true);
+  const derivesCount = useSceneStore((s) => typeof getTemplate(s.activeTemplateId).layerCount === 'function');
   const addAssets = useSceneStore((s) => s.addAssets);
   const replaceAssetAt = useSceneStore((s) => s.replaceAssetAt);
   const removeAsset = useSceneStore((s) => s.removeAsset);
@@ -270,15 +278,21 @@ export default function AssetsPanel() {
     slotInputRef.current?.click();
   };
 
-  // The list is sized by the template's `count` — one row per layer slot.
-  // Repeat-mode templates cycle a small image set across many layers, so the
-  // panel shows just the images plus one add-row instead of `count` slots.
+  // Keep every uploaded slot visible, even when the active template renders
+  // fewer layers. The old repeat-mode cap (`min(count, ...)`) hid uploads as
+  // soon as a template had a low Count (often one), which also made those
+  // hidden cards impossible to remove. Empty demo entries deliberately stay
+  // in the list as holes so replacement keeps each card's position.
   const realAssetCount = assets.filter((asset) => asset.origin !== 'demo').length;
-  const rows = repeat ? Math.min(count, realAssetCount + 1) : count;
+  // Always retain the template's complete card grid. Repeat-mode templates
+  // still render the same source more than once, but must not collapse the
+  // editor to a single row. Always retain one empty row after the current
+  // media, so standard/model images never hide where to add another one.
+  const rows = Math.max(count, assets.length + 1);
   const slots = Array.from({ length: rows }, (_, i) => assets[i] ?? null);
-  const filled = slots.filter((asset) => asset && asset.origin !== 'demo').length;
+  const filled = slots.filter(Boolean).length;
   const sortableEntries = slots
-    .map((asset, index) => asset && asset.origin !== 'demo' ? { asset, index } : null)
+    .map((asset, index) => asset ? { asset, index } : null)
     .filter((entry): entry is { asset: AssetItem; index: number } => entry !== null);
 
   const finishMobileDrag = ({ active, over }: DragEndEvent) => {
@@ -311,7 +325,10 @@ export default function AssetsPanel() {
           <span>
             {repeat
               ? `${realAssetCount || 'your'} image${realAssetCount === 1 ? '' : 's'} repeat across ${count} layers`
-              : `${count} ${count === 1 ? 'slot' : 'slots'} · linked to Count`}
+              // "linked to Count" is only true while a Count control exists. The
+              // lattice families derive their layer total from Plane Size, Gap
+              // and the canvas instead, so the copy has to follow.
+              : `${count} ${count === 1 ? 'slot' : 'slots'} · ${derivesCount ? 'set by the canvas' : 'linked to Count'}`}
           </span>
           <span className="spacer" />
           {realAssetCount > 0 && <button className="link-btn" onClick={clearAssets}>Clear all</button>}
@@ -384,7 +401,7 @@ export default function AssetsPanel() {
               <ul className="mobile-asset-list" onPointerDown={(event) => {
                 if (!(event.target as HTMLElement).closest('.mobile-asset-row')) setSwipeOpenId(null);
               }}>
-                {slots.map((asset, index) => asset && asset.origin !== 'demo' ? (
+                {slots.map((asset, index) => asset ? (
                   <MobileAssetRow
                     key={asset.id}
                     asset={asset}
@@ -419,7 +436,7 @@ export default function AssetsPanel() {
         ) : (
         <ul className="asset-list">
           {slots.map((a, i) =>
-            a && a.origin !== 'demo' ? (
+            a ? (
               <li
                 key={a.id}
                 data-slot-idx={i}

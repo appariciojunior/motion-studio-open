@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Template } from '@/lib/types';
-import { defaultsFor, easingFor } from '@/templates';
+import { defaultsFor, easingFor, layerCountFor } from '@/templates';
 import { resolveEasing } from '@/lib/easing';
 
 // Live template thumbnail: run the template's own transform at a fixed frame
@@ -125,12 +125,14 @@ export default function TemplateThumb({
       : template.meta.cardAspect ?? 4 / 5;
     const texW = TEX_LONG * Math.min(1, texAspect);
     const texH = TEX_LONG * Math.min(1, 1 / texAspect);
-    // The REAL count. It is a layout input, not a drawing cost: lattice families
-    // derive their columns, rows and wrap period from it, so clamping it here
-    // used to lay out a different grid than the stage — measured at up to
-    // 2645px of divergence on Grid, on an 810px-wide canvas. The draw budget is
-    // enforced further down instead, by showing fewer of the correct cards.
-    const count = Math.max(1, Math.round(v.count ?? 6));
+    // The REAL count, asked of the template. It is a layout input, not a drawing
+    // cost: lattice families derive their columns, rows and wrap period from it,
+    // so clamping it here used to lay out a different grid than the stage —
+    // measured at up to 2645px of divergence on Grid, on an 810px-wide canvas.
+    // The draw budget is enforced further down instead, by showing fewer of the
+    // correct cards.
+    const count = layerCountFor(template.meta.id, v,
+      { width: CTX_BASE.width, height: CTX_BASE.height, cardAspect: texAspect });
     const norm = SPRITE_BASE / TEX_LONG;
     const ease = resolveEasing(easingFor(template.meta.id));
     const ctx = {
