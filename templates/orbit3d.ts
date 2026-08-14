@@ -77,14 +77,14 @@ const ringStream: Template = {
     { key: 'cornerRadius', label: 'Corner Radius', type: 'slider', min: 0, max: 20, step: 0.5, default: 3, section: 'Finish', unit: '%', precision: 1 },
     // Signed, so the slider sits at centre and reads as one axis: negative
     // cups each image inward toward the ring's centre, positive bows it
-    // outward, 0 is flat. The 3D renderer already flips the arc's centre by
-    // the sign (lib/renderer3d makeBentPlaneGeometry) and clamps to +/-0.45,
-    // so only this range was holding the outward half back.
-    // Runs to the renderer's own ceiling: lib/renderer3d clamps the sag to
-    // +/-0.45 of the card's width, and this control feeds it /100, so +/-45 is
-    // exactly as far as the geometry goes. It used to stop at 12, which reached
-    // barely a quarter of that — at 45 the card wraps through about 167 degrees
-    // of arc, a deep curl rather than a gentle bow.
+    // outward, 0 is flat. The 3D renderer flips the arc's centre by the sign
+    // (lib/renderer3d makeBentPlaneGeometry).
+    //
+    // The range runs to that renderer's own ceiling: it clamps the sag to
+    // +/-0.45 of the card's width and this control feeds it /100, so +/-45 is
+    // exactly as far as the geometry goes. It first shipped stopping at 12,
+    // barely a quarter of that — at 45 the surface wraps through about 168
+    // degrees of arc, a deep curl rather than a gentle bow.
     { key: 'cardBend', label: 'Card Bend', type: 'slider', min: -45, max: 45, step: 0.5, default: 4, section: 'Depth', unit: '%', precision: 1, description: 'Curves each image surface around the ring — negative cups inward, positive bows outward.' },
     { key: 'tiltX', label: 'Ring Tilt', type: 'slider', min: -60, max: 60, step: 1, default: -8, section: 'Depth', unit: '°', description: 'Rotates the complete physical ring without changing its radius.' },
     { key: 'perspective', label: 'Perspective', type: 'slider', min: 0, max: 40, step: 1, default: 18, section: 'Depth', unit: '%' },
