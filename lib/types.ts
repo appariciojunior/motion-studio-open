@@ -68,6 +68,12 @@ export interface LayerTransform3D {
   shadowStrength?: number;   // 0..1, per-card cast/receive contribution
   materialExposure?: number; // linear multiplier, 1 = neutral
   bend?: number;             // centre sag in normalized card-width units; 0 = flat
+  // Darken the card toward black, 0 = untouched .. 1 = black — the 3D twin of
+  // LayerTransform.dim, and for the same reason: a card that is merely FAR
+  // must not go see-through, or whatever sits behind it shows through and the
+  // scene reads as glass. Distinct from `materialExposure`, which is lighting
+  // and is ignored entirely for cards without thickness.
+  dim?: number;
   curl?: number;             // signed cylindrical page curl in radians
   cornerPeel?: number;       // 0..1 directional sheet peel
   peelAngle?: number;        // radians rotated around the moving fold

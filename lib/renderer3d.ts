@@ -1043,14 +1043,22 @@ export class SceneRenderer3D implements IRenderer {
     slot.front.material.side = customBackface ? THREE.FrontSide : THREE.DoubleSide;
     slot.front.material.opacity = alpha;
     slot.front.material.depthWrite = alpha > 0.995;
+    // `dim` darkens a card that is merely FAR, without touching its opacity —
+    // fading such a card on alpha lets whatever is behind it show through, and
+    // a ring then reads as glass rather than as depth. It is deliberately
+    // separate from `exposure`: exposure is lighting, and the branch below
+    // ignores lighting entirely to keep flat cards colour-accurate.
+    const lit = 1 - clamp(t.dim ?? 0, 0, 1);
     if (physical) {
-      slot.front.material.color.setRGB(exposure, exposure, exposure);
-      slot.front.material.emissiveIntensity = 0.18 + exposure * 0.14;
+      const e = exposure * lit;
+      slot.front.material.color.setRGB(e, e, e);
+      slot.front.material.emissiveIntensity = (0.18 + exposure * 0.14) * lit;
     } else {
       // Match CSS 3D panels: the source image stays color-accurate while its
-      // geometry supplies the perspective. Only cards with thickness are lit.
+      // geometry supplies the perspective. Only cards with thickness are lit —
+      // so here `dim` is the ONLY thing that may darken the image.
       slot.front.material.color.setRGB(0, 0, 0);
-      slot.front.material.emissiveIntensity = 1;
+      slot.front.material.emissiveIntensity = lit;
     }
     slot.front.castShadow = shadow;
     slot.front.receiveShadow = shadow;
