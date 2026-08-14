@@ -23,11 +23,9 @@ function globePoint(frame: number, index: number, count: number, v: Record<strin
   if (layout === 'grid') {
     // Fallback matches the control's own derivation: rows = sqrt(count·A/2) is
     // what makes a lat/lon cell the same shape as the card that sits in it.
-    const aspectForRows = Math.max(0.2, ctx.cardAspect ?? 16 / 9);
+    const aspectForRows = Math.max(0.2, ctx.cardAspect ?? 4 / 3);
     const rows = Math.max(3, Math.min(count, Math.round(v.rows ?? Math.sqrt((count * aspectForRows) / 2))));
     const columns = Math.max(3, Math.ceil(count / rows));
-    cellW = (TAU * radius) / columns;
-    cellH = (Math.PI * radius) / rows;
     const row = index % rows;
     const col = Math.floor(index / rows);
     const dir = v.direction === 'right' ? -1 : v.direction === 'alternate' && row % 2 ? -1 : 1;
@@ -35,6 +33,14 @@ function globePoint(frame: number, index: number, count: number, v: Record<strin
     const phase = v.motion === 'continuous' ? raw : ctx.easedPhase(raw);
     lat = ((row + 0.5) / rows - 0.5) * Math.PI * 0.92;
     lon = ((col - phase + (row % 2) * 0.5) / columns) * TAU;
+    // Every row holds the same number of columns, but a row's circle SHRINKS
+    // toward the poles — its circumference is 2πr·cos(lat), not 2πr. Sizing all
+    // rows off the equator handed the top row four times the width it owns, so
+    // its cards piled into each other and splayed outward: the sphere grew a
+    // pinecone rim. Scaling the cell by cos(lat) is what keeps every row's tiles
+    // inside their own arc.
+    cellW = (TAU * radius * Math.max(0.12, Math.cos(lat))) / columns;
+    cellH = (Math.PI * radius) / rows;
   } else {
     const dir = v.direction === 'right' ? -1 : 1;
     const raw = (frame / ctx.totalFrames) * loopCycles(v.speed, ctx.duration) * dir;
@@ -66,7 +72,7 @@ function globePoint(frame: number, index: number, count: number, v: Record<strin
   // The card's long edge has to fit the cell BOTH ways: `cellW` across, and
   // `cellH * aspect` down (a 16:9 card `cellH` tall is `cellH * 16/9` wide).
   // The smaller of the two is what actually fits.
-  const cardAspect = Math.max(0.2, ctx.cardAspect ?? 16 / 9);
+  const cardAspect = Math.max(0.2, ctx.cardAspect ?? 4 / 3);
   const cellFit = Math.min(cellW, cellH * cardAspect);
   // `Card Size` is then a FILL FACTOR on that cell, calibrated so the shipped
   // default (20) lands at 1.0 — a full, touching tile. Below it the sphere goes
@@ -80,7 +86,14 @@ function globePoint(frame: number, index: number, count: number, v: Record<strin
 const cardGlobe: Template = {
   meta: {
     id: 'globe-01', name: 'Card Globe', group: GROUP, isNew: true,
-    engine: 'webgl', catalog3d: true, repeatAssets: true, cardAspect: 16 / 9,
+    // 4:3, not 16:9. Counting the reference photograph gives roughly 20 columns
+    // by 11 rows, and a lat/lon cell's aspect is 2·rows/cols — so its tiles are
+    // about 1.1 wide, near square. A 16:9 tile forces a much wider cell, which
+    // makes each card ~22% of the sphere's diameter; being a FLAT plane tangent
+    // to the surface, a card that large overhangs the silhouette by half its
+    // width and the ball grows spikes around its rim. Squarer tiles shrink the
+    // overhang instead of hiding it.
+    engine: 'webgl', catalog3d: true, repeatAssets: true, cardAspect: 4 / 3,
     defaultEasing: { id: 'linear' },
   },
   controls: [
@@ -93,11 +106,11 @@ const cardGlobe: Template = {
     // gives the 20 columns the reference shows. The reference has no count
     // control at all; it repeats the media set to fill a fixed grid, which is
     // what `repeatAssets` already does here.
-    { key: 'count', label: 'Card Count', type: 'slider', min: 8, max: 200, step: 1, default: 160, section: 'Layout', advanced: true },
+    { key: 'count', label: 'Card Count', type: 'slider', min: 8, max: 240, step: 1, default: 200, section: 'Layout', advanced: true },
     // Rows decides the CELL SHAPE, and the cell has to match the card's shape or
     // the tiling gaps on one axis. A lat/lon cell is (2πr/cols) x (πr/rows), so
     // its aspect is 2·rows/cols; setting that equal to the card aspect A gives
-    // rows = sqrt(count·A/2) — 12 for 160 landscape cards, not 8. At 8 the cells
+    // rows = sqrt(count·A/2) — 12 for 200 cards at 4:3, not 8. At 8 the cells
     // came out PORTRAIT (147x184) while the cards are landscape, so each row
     // left ~100px of empty band above it and the sphere read as floating stripes.
     { key: 'rows', label: 'Latitude Rows', type: 'slider', min: 3, max: 16, step: 1, default: 12, section: 'Layout', advanced: true },

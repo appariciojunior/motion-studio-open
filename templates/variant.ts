@@ -21,6 +21,10 @@ export function variant(
     // the variant renders flat while its base renders in 3D. That is what was
     // happening to Orbit 3D 02 and 03.
     transform3d: base.transform3d,
+    // Same trap, same shape: a variant that loses `layerCount` silently falls
+    // back to reading a `count` control the lattice families no longer have, so
+    // every preset but the base rendered a 6-card wall.
+    layerCount: base.layerCount,
     camera: base.camera,
   };
 }

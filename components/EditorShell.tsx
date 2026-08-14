@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { usePathname } from 'next/navigation';
+import AppTour from '@/components/AppTour';
 import WelcomeDialog from '@/components/WelcomeDialog';
 import { sectionFromPathname } from '@/lib/navSections';
 import { startSceneAutosave } from '@/lib/scenePersist';
@@ -123,6 +124,7 @@ export default function EditorShell({ children }: { children?: React.ReactNode }
     <>
       {mode === 'mobile' ? <MobileEditor /> : <DesktopEditor />}
       <WelcomeDialog />
+      {mode === 'desktop' && <AppTour />}
       {children}
     </>
   );

@@ -2,7 +2,7 @@ import type { Template } from '@/lib/types';
 import type { EasingSpec } from '@/lib/easing';
 import { TAU, clamp, stepHold } from '@/lib/motion';
 import { variant } from './variant';
-import { divisorNear } from './frames';
+import { latticeCount, solveLattice } from './lattice';
 
 const BASE = 340;
 
@@ -28,6 +28,10 @@ const BASE = 340;
 //    px. Halving that for this project's canvas and dividing back out by the 3:4
 //    ratio cancels exactly, so `cardSize` here equals the reference planeSize.
 //  · Pitch is card + gap on both axes (700+80, 933+80).
+//  · The wall has NO count control. Shrinking the cards ADDS cells and leaves
+//    the gap exactly where it was — see templates/lattice.ts for the four states
+//    that fix the rule and the fit. So the cell total is derived here too, from
+//    `layerCount`, and Count and Columns are gone from the panel.
 //  · The clip loops exactly, and the wall returns to its home cell six times
 //    across it — a 2.93s cycle on a 17.6s clip.
 //
@@ -62,14 +66,8 @@ const grid: Template = {
   },
 
   controls: [
-    // The lattice has to hold at least as many distinct cells along each axis as
-    // the wall takes steps, or the whole composition repeats inside one clip:
-    // a 3x3 returns to itself every 3 steps, so six steps played the same three
-    // frames twice. Six columns and six rows give six distinct steps. Most of
-    // those cells sit off-canvas at any moment — that is the overscan doing its
-    // job, and it is what the reference gets for free by virtualizing.
-    { key: 'count',        label: 'Count',         type: 'slider', min: 2, max: 60, step: 1,   default: 36 },
-    { key: 'columns',      label: 'Columns',       type: 'slider', min: 1, max: 10, step: 1,   default: 6, section: 'Layout', description: 'Snaps to a divisor of Count so the wall has no half-filled row.' },
+    // Plane Size and Gap are the whole layout. The wall's cell total follows
+    // from them and the canvas — same two controls the reference ships.
     { key: 'cardSize',     label: 'Plane Size',    type: 'slider', min: 60, max: 1000, step: 1, default: 700 },
     { key: 'gap',          label: 'Gap',           type: 'slider', min: 0, max: 400, step: 1,  default: 60 },
     { key: 'cornerRadius', label: 'Corner Radius', type: 'slider', min: 0, max: 100, step: 1,  default: 0 },
@@ -84,26 +82,19 @@ const grid: Template = {
     { key: 'offset',       label: 'Offset',        type: 'xypad',                              default: { x: 0, y: 0 } },
   ],
 
+  // The wall covers the canvas by holding enough cells, so the count is a
+  // consequence of Plane Size, Gap and the frame — never a control.
+  layerCount: (v, ctx) => latticeCount(v, ctx, 3 / 4),
+
   transform: (frame, index, count, v, ctx) => {
-    // Same no-half-row rule as Frames: an incomplete last row would read as a
-    // hole punched in the wall, and here it never scrolls away.
-    const cols = divisorNear(count, clamp(Math.round(v.columns), 1, 10));
-    const rows = Math.max(1, Math.round(count / cols));
+    // Solved from the canvas, not factored back out of `count`. The pool was
+    // sized by the same solver, so on the stage the two agree exactly; `count`
+    // goes in only so the board and web-export surfaces, whose card total comes
+    // from the user's own markup, still tile a complete rectangle.
+    const { cols, rows, pitchX, pitchY } = solveLattice(v, ctx, 3 / 4, count);
     const col = index % cols;
     const row = Math.floor(index / cols);
-
-    // The renderer normalizes a sprite's LONG edge, so cardSize is that edge and
-    // the short one follows the card's RESOLVED aspect — which the scene's card
-    // shape can override away from this family's declared 3:4. Spacing off the
-    // declared value instead leaves one gutter right and the other wrong: at the
-    // 4:5 shape a nominal 60px gap comes out 60 vertically and 25 across.
-    // `gap` is a true edge gap in canvas px, so pitch reads as "card plus gutter".
-    const aspect = ctx.cardAspect ?? 3 / 4;
     const sizeFactor = v.cardSize / BASE;
-    const cardW = aspect < 1 ? v.cardSize * aspect : v.cardSize;
-    const cardH = aspect < 1 ? v.cardSize : v.cardSize / aspect;
-    const pitchX = cardW + v.gap;
-    const pitchY = cardH + v.gap;
 
     const spanX = cols * pitchX;
     const spanY = rows * pitchY;
@@ -170,8 +161,8 @@ const SMOOTH: EasingSpec = { id: 'smooth' };
 
 export const gridVariants: Template[] = [
   grid,
-  // A dense 7x7 of smaller tiles.
-  preset('grid-02', 'Grid 02', { count: 49, columns: 7, cardSize: 537, gap: 59 }, { id: 'glide' }),
+  // Smaller tiles, so the wall solves to a denser lattice on its own.
+  preset('grid-02', 'Grid 02', { cardSize: 537, gap: 59 }, { id: 'glide' }),
   preset('grid-03', 'Grid 03', { gap: 89 }, SMOOTH),
   // Wide gutters and a real zoom — the tiles read as separate prints on a wall.
   preset('grid-04', 'Grid 04', { cardSize: 637, gap: 375, zoom: 'on', zoomAmount: 30 }, SMOOTH),

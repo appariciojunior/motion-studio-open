@@ -120,6 +120,17 @@ export interface Template {
     cardAspect?: number | 'canvas';           // cover-crop shape: w/h ratio (default 4/5) or the canvas aspect (full-bleed)
   };
   controls: ControlDef[];                     // its FULL own set
+  // How many layers this template wants, when that is a consequence of the
+  // canvas rather than a choice. A lattice family is the case: its wall has to
+  // hold enough cells to cover the frame, so shrinking the card must ADD cells —
+  // the reference tool derives them the same way and ships no count control at
+  // all. Templates that leave this out keep taking the layer count from their
+  // own `count` control, which is still the right model for everything whose
+  // card total is a design decision.
+  layerCount?: (
+    values: Record<string, any>,
+    ctx: Pick<TransformCtx, 'width' | 'height' | 'cardAspect'>,
+  ) => number;
   transform: (
     frame: number,                            // absolute frame index
     index: number,                            // this layer's slot 0..count-1

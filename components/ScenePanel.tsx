@@ -91,7 +91,7 @@ export default function ScenePanel() {
       <div className="section-head"><span className="eyebrow">Timing</span></div>
       <div className="section-body">
         <ControlRow
-          def={{ key: '_duration', label: 'Duration', type: 'slider', min: 1, max: 30, step: 1, default: 8 }}
+          def={{ key: '_duration', label: 'Duration', type: 'slider', min: 1, max: 60, step: 1, default: 8 }}
           value={duration}
           onChange={(v) => setDuration(Math.max(1, Number(v)))}
         />

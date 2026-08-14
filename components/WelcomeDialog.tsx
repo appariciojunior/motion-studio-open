@@ -28,6 +28,9 @@ export default function WelcomeDialog() {
     projects.bootstrap();               // no-op when already booted
     if (!projects.activeId) projects.create('Default project');
     setOpen(false);
+    // Lets a first-time visitor's tour start right after they agree, instead of
+    // AppTour racing WelcomeDialog's own localStorage check on mount.
+    try { window.dispatchEvent(new Event('motion-welcome-done')); } catch { /* noop */ }
   };
 
   if (!open) return null;
@@ -47,15 +50,10 @@ export default function WelcomeDialog() {
             Use it responsibly. It is <b>not to be sold or commercialised</b>{' — '}
             it&apos;s here for you and your company, where needed.
           </p>
-
-          <ul className="welcome-list">
-            <li><b>Spacebar</b> plays and pauses, globally.</li>
-            <li>All sliders affect the canvas immediately.</li>
-            <li>You define the timeline length and the speed of the animation.</li>
-            <li>Tweak any template and save it as a custom.</li>
-            <li>Search across all templates.</li>
-            <li>Export in full resolution — 1080p, 2K or 4K.</li>
-          </ul>
+          <p>
+            This is a <b>beta</b>: since it&apos;s still being tested, some things
+            might break or behave unexpectedly.
+          </p>
 
           <p className="welcome-love">
             Made with love, so you can have great videos for your deck
