@@ -17,7 +17,7 @@ const SPRITE_BASE = 340;
 
 interface CardPose {
   x: number; y: number; w: number; h: number;
-  rotation: number; skewX: number; alpha: number; z: number; r: number;
+  rotation: number; skewX: number; alpha: number; dim: number; z: number; r: number;
 }
 
 export default function TemplateThumb({
@@ -154,6 +154,7 @@ export default function TemplateThumb({
         rotation: t.rotation,
         skewX: t.skewX ?? 0,
         alpha: t.alpha,
+        dim: Math.max(0, Math.min(1, t.dim ?? 0)),
         z: Math.round(t.depth * 1000 + i),
         r: (Math.min(w, h) / 2) * Math.max(0, Math.min(1, (v.cornerRadius ?? 0) / 100)),
       });
@@ -161,15 +162,19 @@ export default function TemplateThumb({
 
     // Draw budget. A thumbnail is a few hundred px across and the catalogue runs
     // to 140 cards, so keep the DOM bounded — but drop whole cards rather than
-    // move them. Off-canvas ones go first, then the furthest from centre, so what
-    // survives is what a viewer would actually have seen.
+    // move them. Invisible ones go first (a scattered flicker field like
+    // Parallax has most of its cards at alpha 0 at any instant, and picking
+    // purely by distance from centre could fill the whole budget with
+    // currently-invisible cards while every actually-visible one gets cut for
+    // sitting farther out), then off-canvas ones, then the furthest from
+    // centre — so what survives is what a viewer would actually have seen.
     if (out.length <= DRAW_BUDGET) return out;
     const halfW = CTX_BASE.width / 2, halfH = CTX_BASE.height / 2;
     const offCanvas = (p: CardPose) =>
       Math.abs(p.x) - p.w / 2 > halfW || Math.abs(p.y) - p.h / 2 > halfH;
     return out
-      .map((p, i) => ({ p, i, off: offCanvas(p) ? 1 : 0, d: Math.hypot(p.x, p.y) }))
-      .sort((a, b) => a.off - b.off || a.d - b.d)
+      .map((p, i) => ({ p, i, invisible: p.alpha < 0.02 ? 1 : 0, off: offCanvas(p) ? 1 : 0, d: Math.hypot(p.x, p.y) }))
+      .sort((a, b) => a.invisible - b.invisible || a.off - b.off || a.d - b.d)
       .slice(0, DRAW_BUDGET)
       .sort((a, b) => a.i - b.i)
       .map((e) => e.p);
@@ -189,6 +194,9 @@ export default function TemplateThumb({
             top: `${50 + (p.y / CTX_BASE.height) * 100}%`,
             transform: `translate(-50%, -50%) rotate(${p.rotation}rad) skewX(${p.skewX}rad)`,
             opacity: p.alpha,
+            // Mirrors the renderer: a receding card darkens, it does not
+            // go see-through.
+            filter: p.dim > 0 ? `brightness(${(1 - p.dim).toFixed(3)})` : undefined,
             zIndex: p.z,
             borderRadius: `${Math.max(1, (p.r / p.w) * 100)}%`,
           }}

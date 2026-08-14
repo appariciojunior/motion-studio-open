@@ -191,9 +191,13 @@ for (const [name, { ages, widths }] of Object.entries(BLOOM)) {
 //  not assert an exact value for it.
 // ============================================================
 const PARALLAX = {
-  'Parallax 01': { count: 133, spread: 300, depth: 60, fade: 0 },
-  'Parallax 02': { count: 200, spread: 300, depth: 100, fade: 78 },
-  'Parallax 03': { count: 140, spread: 180, depth: 60, fade: 80 },
+  // sdx/sdy are the reference's own lit-pixel standard deviations on its
+  // 1080x1440 stage, read off its canvas with golden-ratio time sampling
+  // (plain k/8 sampling can alias onto a single phase and read a healthy
+  // field as collapsed — it did, on our side, during this port).
+  'Parallax 01': { count: 133, depth: 60, fade: 0, sdx: 312, sdy: 351, coverMin: 12, coverMax: 32 },
+  'Parallax 02': { count: 200, depth: 100, fade: 78, sdx: 281, sdy: 440, coverMin: 15, coverMax: 35 },
+  'Parallax 03': { count: 140, depth: 60, fade: 80, sdx: 293, sdy: 408, coverMin: 19, coverMax: 30 },
 };
 for (const [name, ref] of Object.entries(PARALLAX)) {
   const t = byName(name);
@@ -202,55 +206,176 @@ for (const [name, ref] of Object.entries(PARALLAX)) {
   near(v.minSize, REF_SCALE * 238, 1, name, 'min size');
   near(v.maxSize, REF_SCALE * 442, 1, name, 'max size');
   near(v.count, ref.count, 0, name, 'count');
-  near(v.spread, REF_SCALE * ref.spread, 1, name, 'spread');
   near(v.depth, ref.depth, 0, name, 'depth');
   near(v.fade, ref.fade, 0, name, 'fade');
+  // All three reference presets measure as a scatter over the WHOLE frame,
+  // whatever their own `spread` says (180 and 300 both fill it) — so ours
+  // carry 100%. This is the assertion the visible fix rests on: an earlier
+  // pass read `spread` as a px radius and clumped every card into the middle.
+  near(v.spread, 100, 0, name, 'spread (% of frame)');
 
   const ctx = makeCtx(t.meta.id, { width: 810, height: 1080, duration: 8, cardAspect: 3 / 4 });
   check(loopDrift(t, v, ctx) < 1e-6, name, 'does not return to frame 0 at the loop point');
 
-  // Every card holds a FIXED position and size — position/size must not
-  // depend on frame at all, only on index/seed. Sample two frames far apart
-  // in time and confirm neither moved nor resized, which is the property the
-  // rasterized-canvas comparison actually measured on the reference.
+  // Every card holds a FIXED position and size RELATIVE TO THE OTHERS — that
+  // is the property the rasterized-canvas comparison actually measured on
+  // the reference (a 0.5s-apart pair of frames, playhead paused, showed every
+  // visible card in the same spot). A later pass added a shared camera path
+  // on top (the user caught it watching the real export, and it turned out
+  // to be a genuine "Camera path" feature — see the header), which moves
+  // every card's ABSOLUTE position together — so this checks the ratio
+  // between two cards' scales and their separation scaled by that ratio,
+  // both of which the shared camera cancels out of, rather than raw x/y/scale.
   const n = layerCountFor(t.meta.id, v, ctx);
   const f1 = Math.round(ctx.totalFrames * 0.2), f2 = Math.round(ctx.totalFrames * 0.7);
+  // Any single card's own scale ratio between the two frames IS the shared
+  // camera's zoom ratio over that span (each card's fixed sizeFactor cancels
+  // out of scale(f1)/scale(f2)) — so every other card's own scale ratio, and
+  // its separation from this one, has to track that SAME number.
+  const i2 = Math.min(n - 1, 1);
+  const ref1 = t.transform(f1, i2, n, v, ctx), ref2 = t.transform(f2, i2, n, v, ctx);
+  const camRatio = ref1.scale / ref2.scale;
   let moved = 0;
   for (let i = 0; i < n; i++) {
-    const a = t.transform(f1, i, n, v, ctx);
-    const b = t.transform(f2, i, n, v, ctx);
-    if (Math.hypot(a.x - b.x, a.y - b.y) > 1e-6 || Math.abs(a.scale - b.scale) > 1e-6) moved++;
+    if (i === i2) continue;
+    const a = t.transform(f1, i, n, v, ctx), b = t.transform(f2, i, n, v, ctx);
+    const sepA = Math.hypot(a.x - ref1.x, a.y - ref1.y);
+    const sepB = Math.hypot(b.x - ref2.x, b.y - ref2.y);
+    const scaleOk = Math.abs(a.scale / b.scale - camRatio) < 1e-4;
+    const sepOk = sepB < 1e-6 || Math.abs(sepA / sepB - camRatio) < 1e-3;
+    if (!scaleOk || !sepOk) moved++;
   }
-  check(moved === 0, name, `${moved} of ${n} cards changed position or size across the clip — should be fixed per card`);
+  check(moved === 0, name,
+    `${moved} of ${n} cards moved relative to the others (beyond the shared camera) across the clip`);
 
-  // Every card must actually reach full visibility at some point (its
-  // crossfade peaks at 1), and — the fade cue — the peak alpha a far card
-  // ever reaches has to be measurably lower than a near card's, whenever
-  // Fade is on.
+  // Nothing fades over time. Measured: consecutive frames align at correlation
+  // 0.95-0.99 under a single translation, so a card's opacity is a property of
+  // its depth alone. Fade dims the far ones, once and for good.
   let nearest = { d: -1 }, farthest = { d: 2 };
   for (let i = 0; i < n; i++) {
     const p0 = t.transform(0, i, n, v, ctx);
     if (p0.depth > nearest.d) nearest = { i, d: p0.depth };
     if (p0.depth < farthest.d) farthest = { i, d: p0.depth };
   }
-  const peakAlpha = (i) => {
-    let best = 0;
-    for (let f = 0; f <= ctx.totalFrames; f += 2) best = Math.max(best, t.transform(f, i, n, v, ctx).alpha);
-    return best;
-  };
-  // Every card's crossfade has to reach lifecycle=1 (fully in its hold) at
-  // its peak — Fade then dims that peak toward the background by up to
-  // Fade% scaled by how far the card sits (1-depth). Check against each
-  // card's OWN expected ceiling, not a flat threshold: at 140 seeded cards
-  // and Fade 80, the single best-placed card can land at depth 0.79 rather
-  // than 1.0, and 80% of that remaining 21% is a real, correct dim — not a
-  // bug a flat ">0.98" would have wrongly flagged.
-  const expectedPeak = (d) => 1 - (v.fade / 100) * (1 - d);
-  near(peakAlpha(nearest.i), expectedPeak(nearest.d), 0.03, name, 'nearest card peak alpha vs. its own Fade ceiling');
-  near(peakAlpha(farthest.i), expectedPeak(farthest.d), 0.03, name, 'farthest card peak alpha vs. its own Fade ceiling');
+  // Fade must DARKEN, never make a card see-through: an alpha-based recede
+  // let whatever a far card overlapped ghost straight through it. So alpha
+  // stays pinned at 1 and the recede rides `dim`.
+  const expectedDim = (d) => (v.fade / 100) * (1 - d);
+  let varies = 0;
+  for (const i of [nearest.i, farthest.i]) {
+    const p0 = t.transform(0, i, n, v, ctx);
+    for (let f = 0; f <= ctx.totalFrames; f += 5) {
+      const p = t.transform(f, i, n, v, ctx);
+      if (Math.abs(p.alpha - p0.alpha) > 1e-6 || Math.abs((p.dim ?? 0) - (p0.dim ?? 0)) > 1e-6) { varies++; break; }
+    }
+  }
+  check(varies === 0, name, 'a card changes brightness over the clip — this family does not flicker');
+  for (let i = 0; i < n; i++) {
+    if (t.transform(0, i, n, v, ctx).alpha !== 1) {
+      check(false, name, 'a card is semi-transparent — Fade must darken, not make cards see-through');
+      break;
+    }
+  }
+  near(t.transform(0, nearest.i, n, v, ctx).dim ?? 0, expectedDim(nearest.d), 0.02, name, 'nearest card dim vs. its Fade depth');
+  near(t.transform(0, farthest.i, n, v, ctx).dim ?? 0, expectedDim(farthest.d), 0.02, name, 'farthest card dim vs. its Fade depth');
   if (ref.fade > 0) {
-    check(peakAlpha(farthest.i) < peakAlpha(nearest.i) - 0.05, name,
-      'a far card peaks as bright as a near one — Fade is not dimming by depth');
+    check(expectedDim(farthest.d) > expectedDim(nearest.d) + 0.05, name,
+      'a far card is as bright as a near one — Fade is not dimming by depth');
+  }
+
+  // THE MOTION SIGNATURE: the camera HOLDS at each pin and lurches between
+  // them. Measured on the reference by cross-correlating consecutive frames —
+  // the field's velocity hits zero at 0.4/2.5/4.3/7.3/9.7/11.9/14.0s on its
+  // 14s clip, which is its six pin times to within a sample. A continuous
+  // drift (or a flicker duty cycle) cannot produce that, and two earlier
+  // passes of this port shipped exactly those wrong models.
+  if (v.camPath && v.camPath !== 'orbit') {
+    const speedAt = (u) => {
+      const f = u * ctx.totalFrames;
+      const a = t.transform(f, 0, n, v, ctx), b = t.transform(f + 1, 0, n, v, ctx);
+      return Math.hypot(b.x - a.x, b.y - a.y);
+    };
+    let fastest = 0;
+    for (let k = 0; k <= 600; k++) fastest = Math.max(fastest, speedAt(k / 600));
+    // At each interior pin the field must be practically stopped, while the
+    // clip as a whole is clearly moving.
+    check(fastest > 1, name, 'the camera never moves');
+    for (let p = 1; p <= 5; p++) {
+      const atPin = speedAt(p / 6);
+      check(atPin < fastest * 0.12, name,
+        `the camera does not rest at pin ${p}/6 (${atPin.toFixed(1)} vs peak ${fastest.toFixed(1)} px/frame)`);
+    }
+    // ...and the travel must be CONCENTRATED into bursts, not spread evenly.
+    // Peak-over-mean speed is the shape-independent way to say that: uniform
+    // motion gives 1, a held-and-lurching camera gives well above it. Testing a
+    // segment's MIDPOINT instead would have been wrong — Parallax 03's authored
+    // bezier [0.33, 0, 0, 1] is an ease-out, so its burst is at the segment's
+    // start, and only 01/02's [0.76, 0, 0.24, 1] peaks in the middle.
+    let sum = 0;
+    for (let k = 0; k < 600; k++) sum += speedAt(k / 600);
+    const mean = sum / 600;
+    check(fastest > mean * 2, name,
+      `the camera crawls uniformly instead of holding and lurching (peak ${fastest.toFixed(1)} vs mean ${mean.toFixed(1)} px/frame)`);
+  }
+
+  // THE SPATIAL SIGNATURE. Rasterize our own field the way the reference's
+  // canvas was read — lit cards only — and compare the spread and how much of
+  // the frame is covered. A uniform scatter over the whole frame gives
+  // sd/canvas = 1/sqrt(12) = 0.289 on both axes, which is what the reference
+  // measures (0.244-0.306). The bug this guards against read `spread` as a px
+  // radius and clumped everything into the middle: the same rasterization gave
+  // 0.11-0.16, with a lit bbox that never reached an edge.
+  //
+  // Measured on OUR canvas and compared as a FRACTION of it, deliberately:
+  // our card sizes are scaled for a 1080 long edge, so rasterizing them on the
+  // reference's 1440-tall stage understates them and biases every coverage
+  // number — a trap this check itself fell into on the first pass.
+  {
+    const RW = 810, RH = 1080, STEP = 6;
+    const rctx = makeCtx(t.meta.id, { width: RW, height: RH, duration: 14, cardAspect: 3 / 4 });
+    const rn = layerCountFor(t.meta.id, v, rctx);
+    const cols = Math.ceil(RW / STEP), rows = Math.ceil(RH / STEP);
+    const sdxs = [], sdys = [], covers = [];
+    let touchesEveryEdge = false;
+    for (let k = 0; k < 12; k++) {
+      const u = (k * 0.6180339887) % 1;             // non-aliasing sampling
+      const frame = Math.round(u * rctx.totalFrames);
+      const lit = new Uint8Array(cols * rows);
+      for (let i = 0; i < rn; i++) {
+        const p = t.transform(frame, i, rn, v, rctx);
+        if (p.alpha <= 0.05) continue;
+        const long = SPRITE_BASE * p.scale;
+        const cw = long * (3 / 4), ch = long;
+        const x0 = RW / 2 + p.x - cw / 2, y0 = RH / 2 + p.y - ch / 2;
+        const gx0 = Math.max(0, Math.ceil(x0 / STEP)), gx1 = Math.min(cols - 1, Math.floor((x0 + cw) / STEP));
+        const gy0 = Math.max(0, Math.ceil(y0 / STEP)), gy1 = Math.min(rows - 1, Math.floor((y0 + ch) / STEP));
+        for (let gy = gy0; gy <= gy1; gy++) for (let gx = gx0; gx <= gx1; gx++) lit[gy * cols + gx] = 1;
+      }
+      let cnt = 0, sx = 0, sy = 0, sxx = 0, syy = 0;
+      let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+      for (let gy = 0; gy < rows; gy++) for (let gx = 0; gx < cols; gx++) {
+        if (!lit[gy * cols + gx]) continue;
+        const x = gx * STEP, y = gy * STEP;
+        cnt++; sx += x; sy += y; sxx += x * x; syy += y * y;
+        if (x < minX) minX = x; if (x > maxX) maxX = x;
+        if (y < minY) minY = y; if (y > maxY) maxY = y;
+      }
+      if (!cnt) continue;
+      const mx = sx / cnt, my = sy / cnt;
+      sdxs.push(Math.sqrt(Math.max(0, sxx / cnt - mx * mx)) / RW);
+      sdys.push(Math.sqrt(Math.max(0, syy / cnt - my * my)) / RH);
+      covers.push(100 * cnt / (cols * rows));
+      if (minX <= STEP * 2 && minY <= STEP * 2 && maxX >= RW - STEP * 3 && maxY >= RH - STEP * 3) touchesEveryEdge = true;
+    }
+    const median = (a) => { const s = [...a].sort((p, q) => p - q); return s[Math.floor(s.length / 2)]; };
+    check(touchesEveryEdge, name, 'the lit field never reaches all four frame edges — the scatter is not filling the frame');
+    near(median(sdxs), ref.sdx / 1080, 0.06, name, 'lit-field spread across (fraction of canvas)');
+    near(median(sdys), ref.sdy / 1440, 0.06, name, 'lit-field spread down (fraction of canvas)');
+    // Density: the reference's three presets all sit near a quarter of the
+    // frame lit despite counting 133/200/140 cards, so the wall grows with the
+    // count rather than staying a fixed size. Sizing it independently made the
+    // densest preset cover 63% where the reference covers 35%.
+    near(median(covers), (ref.coverMin + ref.coverMax) / 2, 10, name, 'share of the frame covered');
   }
 }
 
