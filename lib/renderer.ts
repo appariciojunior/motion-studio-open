@@ -1,5 +1,6 @@
 import * as PIXI from 'pixi.js';
 import { PixelateFilter } from 'pixi-filters';
+import type { LayerTransform } from '@/lib/types';
 import { getTemplate, layerCountFor } from '@/templates';
 import { getEffect } from '@/effects';
 import { useSceneStore, type SceneState } from '@/store/useSceneStore';
@@ -24,7 +25,7 @@ interface Slot {
   label: PIXI.Text;
   texW: number;
   texH: number;
-  cornerR: number; // last-applied corner radius fraction, for mask caching
+  maskKey: string; // last-applied corner radius + clip, so the mask redraws only on change
   bindKey: string; // guards async image/video loads from overwriting a newer slot
   // The slot's undimmed tint (white for a real image, grey for a placeholder).
   // Kept because the per-frame loop multiplies it by the pose's `dim`, and
@@ -250,7 +251,7 @@ export class SceneRenderer {
       label.anchor.set(0.5);
       sprite.addChild(label);
       rt.container.addChild(sprite);
-      rt.slots.push({ sprite, mask, label, texW: 480, texH: 600, cornerR: -1, bindKey: '', baseTint: 0xffffff });
+      rt.slots.push({ sprite, mask, label, texW: 480, texH: 600, maskKey: '', bindKey: '', baseTint: 0xffffff });
     }
     while (rt.slots.length > count) {
       const slot = rt.slots.pop()!;
@@ -273,7 +274,7 @@ export class SceneRenderer {
         slot.sprite.tint = PLACEHOLDER_FILL;
         slot.label.text = String(i + 1);
         slot.label.visible = true;
-        slot.texW = 480; slot.texH = 600; slot.cornerR = -1;
+        slot.texW = 480; slot.texH = 600; slot.maskKey = '';
       } else {
         if (bindingChanged) {
           // Never leave the previous template's image visible while a new crop
@@ -292,7 +293,7 @@ export class SceneRenderer {
           const tex = this.croppedView(url, base, aspect, crop);
           slot.sprite.texture = tex;
           slot.label.visible = false;
-          slot.texW = tex.width; slot.texH = tex.height; slot.cornerR = -1;
+          slot.texW = tex.width; slot.texH = tex.height; slot.maskKey = '';
           this.onDirty?.(); // texture arrived — an idle preview must redraw
         });
       }
@@ -305,12 +306,20 @@ export class SceneRenderer {
     this.trackRTs.forEach((rt) => { rt.assetSig = ''; rt.countSig = -1; });
   }
 
-  private applyMask(slot: Slot, cornerRadiusPct: number) {
+  private applyMask(slot: Slot, cornerRadiusPct: number, clip?: LayerTransform['clip']) {
     const frac = Math.max(0, Math.min(1, cornerRadiusPct / 100));
-    if (slot.cornerR === frac) return; // cached
-    slot.cornerR = frac;
-    if (frac === 0) {
-      // no rounding → drop the stencil mask entirely (matters at high counts)
+    const c = clip
+      ? {
+          x0: Math.max(0, Math.min(1, clip.x0)), y0: Math.max(0, Math.min(1, clip.y0)),
+          x1: Math.max(0, Math.min(1, clip.x1)), y1: Math.max(0, Math.min(1, clip.y1)),
+        }
+      : null;
+    const partial = !!c && (c.x0 > 0 || c.y0 > 0 || c.x1 < 1 || c.y1 < 1);
+    const key = partial ? `${frac}|${c!.x0}|${c!.y0}|${c!.x1}|${c!.y1}` : `${frac}`;
+    if (slot.maskKey === key) return; // cached
+    slot.maskKey = key;
+    if (frac === 0 && !partial) {
+      // nothing to stencil → drop the mask entirely (matters at high counts)
       slot.sprite.mask = null;
       slot.mask.visible = false;
       slot.mask.clear();
@@ -319,9 +328,20 @@ export class SceneRenderer {
     slot.sprite.mask = slot.mask;
     slot.mask.visible = true;
     const w = slot.texW, h = slot.texH;
-    const r = (Math.min(w, h) / 2) * frac;
     slot.mask.clear();
-    slot.mask.roundRect(-w / 2, -h / 2, w, h, r).fill(0xffffff);
+    if (!partial) {
+      slot.mask.roundRect(-w / 2, -h / 2, w, h, (Math.min(w, h) / 2) * frac).fill(0xffffff);
+      return;
+    }
+    // Only the uncovered band. Its own corner radius is capped by the band, so
+    // a half-revealed rounded card does not round the wipe edge itself — the
+    // radius applies to the band, which for the wipe presets (all corner
+    // radius 0) is exactly a straight edge.
+    const bx = -w / 2 + c!.x0 * w, by = -h / 2 + c!.y0 * h;
+    const bw = Math.max(0, (c!.x1 - c!.x0) * w), bh = Math.max(0, (c!.y1 - c!.y0) * h);
+    if (bw <= 0 || bh <= 0) { slot.mask.rect(0, 0, 0, 0).fill(0xffffff); return; }
+    const r = Math.min((Math.min(w, h) / 2) * frac, Math.min(bw, bh) / 2);
+    slot.mask.roundRect(bx, by, bw, bh, r).fill(0xffffff);
   }
 
   // ---- effects ----
@@ -506,7 +526,7 @@ export class SceneRenderer {
         slot.sprite.tint = dim > 0 ? scaleTint(slot.baseTint, 1 - dim) : slot.baseTint;
         slot.sprite.skew.set(t.skewX ?? 0, t.skewY ?? 0);
         slot.sprite.zIndex = t.depth * 1000 + i; // stable tiebreak
-        this.applyMask(slot, track.values.cornerRadius ?? 0);
+        this.applyMask(slot, track.values.cornerRadius ?? 0, t.clip);
 
         // Rank across tracks: stacking order dominates, card depth breaks ties.
         const score = order * 1e6 + t.depth;

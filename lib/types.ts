@@ -44,6 +44,12 @@ export interface LayerTransform {
   // glass rather than as depth. Reach for `alpha` when a card is genuinely
   // appearing or leaving, and `dim` when it is merely far away.
   dim?: number;
+  // Show only part of the card, as fractions of its own box (0,0 = top-left,
+  // 1,1 = bottom-right). The card does NOT move or squash — it stays exactly
+  // where it is and a straight edge uncovers it, which is the only way to
+  // build a real wipe: translating a full-frame card slides it, and scaling
+  // one distorts it. Omitted means the whole card.
+  clip?: { x0: number; y0: number; x1: number; y1: number };
   depth: number;     // sort order; higher = drawn on top / nearer
 }
 
