@@ -154,4 +154,66 @@ for (const template of templateList.filter((item) => relevantGroups.has(item.met
   }
 }
 
+// ---------- Card Bend must curve BOTH ways ----------
+// The bent-plane geometry accepts a signed sag, but its arc used to be derived
+// from (a - centre).angle() * 2, which only holds while the arc centre sits
+// BELOW the chord — i.e. for a positive bend. Vector2.angle() returns
+// [0, 2*PI), so a negative bend picked the REFLEX angle and swept the card
+// nearly all the way round its own circle: at bend -0.04 the centre vertex
+// landed 6.25 units out instead of 0.04, about 150x too far. Nothing caught it
+// because no control could reach a negative bend until Orbit 3D's Card Bend
+// was centred on zero.
+{
+  const THREE = require('three');
+  const bentGeometry = (sag) => {
+    // Mirrors lib/renderer3d makeBentPlaneGeometry.
+    const bend = Math.max(-0.45, Math.min(0.45, sag));
+    const g = new THREE.PlaneGeometry(1, 1, 20, 8);
+    if (Math.abs(bend) < 0.0001) return g;
+    const a = new THREE.Vector2(-0.5, 0), b = new THREE.Vector2(0, bend), c = new THREE.Vector2(0.5, 0);
+    const ab = new THREE.Vector2().subVectors(a, b);
+    const bc = new THREE.Vector2().subVectors(b, c);
+    const ac = new THREE.Vector2().subVectors(a, c);
+    const radius = (ab.length() * bc.length() * ac.length()) / (2 * Math.abs(ab.cross(ac)));
+    const centre = new THREE.Vector2(0, bend - Math.sign(bend) * radius);
+    const angleA = new THREE.Vector2().subVectors(a, centre).angle();
+    const angleC = new THREE.Vector2().subVectors(c, centre).angle();
+    let arc = angleA - angleC;
+    if (arc > Math.PI) arc -= Math.PI * 2;
+    if (arc < -Math.PI) arc += Math.PI * 2;
+    const uv = g.attributes.uv, position = g.attributes.position;
+    const pt = new THREE.Vector2();
+    for (let i = 0; i < uv.count; i++) {
+      const ratio = 1 - uv.getX(i);
+      const y = position.getY(i);
+      pt.copy(c).rotateAround(centre, arc * ratio);
+      position.setXYZ(i, pt.x, y, -pt.y);
+    }
+    return g;
+  };
+  const centreZ = (sag) => {
+    const p = bentGeometry(sag).attributes.position;
+    let cz = null, maxAbsX = 0;
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i);
+      maxAbsX = Math.max(maxAbsX, Math.abs(x));
+      if (Math.abs(x) < 1e-6 && cz === null) cz = p.getZ(i);
+    }
+    return { cz, maxAbsX };
+  };
+  for (const sag of [0.04, 0.12, 0.3]) {
+    const pos = centreZ(sag), neg = centreZ(-sag);
+    // The centre displaces by exactly the sag, opposite ways, and the card
+    // never widens — a runaway arc shows up as either.
+    assert(Math.abs(pos.cz + sag) < 1e-6,
+      `Card Bend +${sag} put the centre vertex at ${pos.cz}, expected ${-sag}`);
+    assert(Math.abs(neg.cz - sag) < 1e-6,
+      `Card Bend -${sag} put the centre vertex at ${neg.cz}, expected ${sag}`);
+    assert(Math.abs(pos.maxAbsX - 0.5) < 1e-6,
+      `Card Bend +${sag} widened the card to ${pos.maxAbsX * 2}`);
+    assert(Math.abs(neg.maxAbsX - 0.5) < 1e-6,
+      `Card Bend -${sag} widened the card to ${neg.maxAbsX * 2}`);
+  }
+}
+
 console.log(`Tilt verification passed (${assertions} assertions across ${templateList.length} templates).`);
