@@ -10,6 +10,7 @@ import { storiesVariants } from './stories';
 import { flickerVariants, flickerRefVariants } from './flicker';
 import { fieldVariants } from './field';
 import { wipeVariants } from './wipe';
+import { wipeRevealVariants } from './wipeReveal';
 import { globeVariants } from './globe';
 import { spiralVariants } from './spiral';
 import { spiralImagesVariants } from './spiralImages';
@@ -74,6 +75,7 @@ export const templateList: Template[] = [
   ...wheelVariants,
   ...fieldVariants,
   ...wipeVariants,
+  ...wipeRevealVariants,
   ...storiesVariants,
   ...storiesFocusVariants,
   ...flickerVariants,

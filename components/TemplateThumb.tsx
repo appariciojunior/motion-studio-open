@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Template } from '@/lib/types';
+import type { LayerTransform, Template } from '@/lib/types';
 import { defaultsFor, easingFor, layerCountFor } from '@/templates';
 import { resolveEasing } from '@/lib/easing';
 
@@ -15,9 +15,18 @@ const TEX_LONG = 600;                 // placeholder long edge
 const DRAW_BUDGET = 28;              // max cards a thumbnail paints; layout still uses the real count
 const SPRITE_BASE = 340;
 
+// The pose's clip as a CSS inset(), or undefined when the card is whole.
+function clipPathFor(c: LayerTransform['clip']): string | undefined {
+  if (!c) return undefined;
+  if (c.x0 <= 0 && c.y0 <= 0 && c.x1 >= 1 && c.y1 >= 1) return undefined;
+  const pc = (n: number) => `${(Math.max(0, Math.min(1, n)) * 100).toFixed(2)}%`;
+  return `inset(${pc(c.y0)} ${pc(1 - c.x1)} ${pc(1 - c.y1)} ${pc(c.x0)})`;
+}
+
 interface CardPose {
   x: number; y: number; w: number; h: number;
   rotation: number; skewX: number; alpha: number; dim: number; z: number; r: number;
+  clipPath?: string;
 }
 
 export default function TemplateThumb({
@@ -155,6 +164,7 @@ export default function TemplateThumb({
         skewX: t.skewX ?? 0,
         alpha: t.alpha,
         dim: Math.max(0, Math.min(1, t.dim ?? 0)),
+        clipPath: clipPathFor(t.clip),
         z: Math.round(t.depth * 1000 + i),
         r: (Math.min(w, h) / 2) * Math.max(0, Math.min(1, (v.cornerRadius ?? 0) / 100)),
       });
@@ -197,6 +207,8 @@ export default function TemplateThumb({
             // Mirrors the renderer: a receding card darkens, it does not
             // go see-through.
             filter: p.dim > 0 ? `brightness(${(1 - p.dim).toFixed(3)})` : undefined,
+            // Mirrors the renderer's mask: a wipe clips a still card.
+            clipPath: p.clipPath,
             zIndex: p.z,
             borderRadius: `${Math.max(1, (p.r / p.w) * 100)}%`,
           }}

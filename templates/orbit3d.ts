@@ -77,10 +77,15 @@ const ringStream: Template = {
     { key: 'cornerRadius', label: 'Corner Radius', type: 'slider', min: 0, max: 20, step: 0.5, default: 3, section: 'Finish', unit: '%', precision: 1 },
     // Signed, so the slider sits at centre and reads as one axis: negative
     // cups each image inward toward the ring's centre, positive bows it
-    // outward, 0 is flat. The 3D renderer already flips the arc's centre by
-    // the sign (lib/renderer3d makeBentPlaneGeometry) and clamps to +/-0.45,
-    // so only this range was holding the outward half back.
-    { key: 'cardBend', label: 'Card Bend', type: 'slider', min: -12, max: 12, step: 0.5, default: 4, section: 'Depth', unit: '%', precision: 1, description: 'Curves each image surface around the ring — negative cups inward, positive bows outward.' },
+    // outward, 0 is flat. The 3D renderer flips the arc's centre by the sign
+    // (lib/renderer3d makeBentPlaneGeometry).
+    //
+    // The range runs to that renderer's own ceiling: it clamps the sag to
+    // +/-0.45 of the card's width and this control feeds it /100, so +/-45 is
+    // exactly as far as the geometry goes. It first shipped stopping at 12,
+    // barely a quarter of that — at 45 the surface wraps through about 168
+    // degrees of arc, a deep curl rather than a gentle bow.
+    { key: 'cardBend', label: 'Card Bend', type: 'slider', min: -45, max: 45, step: 0.5, default: 4, section: 'Depth', unit: '%', precision: 1, description: 'Curves each image surface around the ring — negative cups inward, positive bows outward.' },
     { key: 'tiltX', label: 'Ring Tilt', type: 'slider', min: -60, max: 60, step: 1, default: -8, section: 'Depth', unit: '°', description: 'Rotates the complete physical ring without changing its radius.' },
     { key: 'perspective', label: 'Perspective', type: 'slider', min: 0, max: 40, step: 1, default: 18, section: 'Depth', unit: '%' },
     { key: 'camDistance', label: 'Camera Distance', type: 'slider', min: 0.5, max: 2.5, step: 0.05, default: 1, section: 'Depth', unit: '×', precision: 2,
@@ -121,16 +126,23 @@ const ringStream: Template = {
       z: point.z,
       quaternion,
       scale: (metrics.cardPx / BASE) * (1 + smooth(depthN) * 0.035),
+      // Back Fade DARKENS the far arc; it does not make it see-through. On
+      // alpha, the cards behind the ring showed straight through the ones in
+      // front and the whole thing read as glass. It rides materialExposure
+      // instead, which is a plain brightness multiply on the card's colour, so
+      // a far card is dim AND solid.
+      //
       // depthDim, not backfaceFade: this is a RING, and lib/tilt3d says it in
       // as many words — a ring's far arc has to stay present or the whole thing
       // reads as a front-only fan. backfaceFade multiplies in a hard cut to
       // zero near edge-on (added so sphere tiles never expose their DoubleSide
       // back), and applying it here deleted every card on the far side.
-      alpha: depthDim(normal.z, v.fade),
+      alpha: 1,
       bend: v.cardBend / 100,
       thickness: 0,
       shadowStrength: v.shadow === 'on' ? 1 : 0,
       materialExposure: 0.78 + depthN * 0.28,
+      dim: 1 - depthDim(normal.z, v.fade),
       velocity: {
         x: Math.cos(a) * width * angularRate,
         y: Math.sin(a) * depth * angularRate * Math.sin(v.tiltX * Math.PI / 180),
@@ -155,7 +167,9 @@ const ringStream: Template = {
       rotation: 0,
       // Same reasoning as transform3d above, and it matters more here: the 2D
       // fallback has no depth at all, so losing the far arc leaves a bare row.
-      alpha: depthDim(normal.z, v.fade),
+      // Darkens rather than going see-through, matching the 3D path.
+      alpha: 1,
+      dim: 1 - depthDim(normal.z, v.fade),
       depth: p.z,
     };
   },
