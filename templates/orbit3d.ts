@@ -22,15 +22,30 @@ function ringMetrics(v: Record<string, any>, count: number, ctx: { width: number
   const inner = outer * clamp(v.opening / 100, 0.15, 0.85);
   const radius = (outer + inner) / 4;
 
-  // A card must never consume more arc than its slot owns. This keeps every
-  // count airy instead of collapsing the cards into a closed black drum.
-  const requested = usable * clamp(v.cardSizePct / 100, 0.08, 0.36);
+  // Card Size is a share of the card's OWN ANGULAR SLOT, not of the canvas.
+  //
+  // On a ring these quantities are over-determined: pick a radius and a count
+  // and the card's absolute size is already decided, so a control for each
+  // must have one of them quietly yield. Both ways round were measured on the
+  // shipped preset and both left a dead slider:
+  //
+  //   card yields (min(requested, slot))  Card Size did nothing above 16%,
+  //                                       71% of its range dead — and its own
+  //                                       default of 18 already sat past that
+  //   ring yields (max(requested, safe))  Ring Size AND Ring Opening went
+  //                                       completely inert instead
+  //
+  // Making it a fraction of the slot removes the contest rather than picking a
+  // loser: Ring Size, Ring Opening and Padding own the radius, Card Size owns
+  // how much of its slot the card fills, and neither can starve the other.
+  // Cards also cannot collide by construction — at 100% a card exactly meets
+  // its neighbours.
   const arcPerCard = (TAU * radius) / Math.max(4, count);
   return {
     radius,
-    // Use the full long edge for the safety bound. Assets may be landscape or
-    // square when Card shape is Auto; assuming 4:5 here made wide images touch.
-    cardPx: Math.min(requested, arcPerCard * 0.72),
+    // Use the full long edge for the fill. Assets may be landscape or square
+    // when Card shape is Auto; assuming 4:5 here made wide images touch.
+    cardPx: arcPerCard * clamp(v.cardSizePct / 100, 0.05, 1),
   };
 }
 
@@ -73,7 +88,7 @@ const ringStream: Template = {
     { key: 'padding', label: 'Padding', type: 'slider', min: 0, max: 20, step: 1, default: 6, section: 'Layout', unit: '%' },
     { key: 'ringSizePct', label: 'Ring Size', type: 'slider', min: 45, max: 95, step: 1, default: 94, section: 'Layout', unit: '%' },
     { key: 'opening', label: 'Ring Opening', type: 'slider', min: 15, max: 85, step: 1, default: 70, section: 'Layout', unit: '%', description: 'Controls the inner diameter while keeping the ring complete.' },
-    { key: 'cardSizePct', label: 'Card Size', type: 'slider', min: 8, max: 36, step: 1, default: 18, section: 'Layout', unit: '%' },
+    { key: 'cardSizePct', label: 'Card Size', type: 'slider', min: 20, max: 100, step: 1, default: 72, section: 'Layout', unit: '%', description: 'How much of its slot on the ring each card fills. 100% means neighbours just touch.' },
     { key: 'cornerRadius', label: 'Corner Radius', type: 'slider', min: 0, max: 20, step: 0.5, default: 3, section: 'Finish', unit: '%', precision: 1 },
     // Signed, so the slider sits at centre and reads as one axis: negative
     // cups each image inward toward the ring's centre, positive bows it
@@ -181,6 +196,6 @@ export const orbit3dVariants: Template[] = [
     style: 'showcase', count: 10, ringSizePct: 86, opening: 48, tiltX: 0, perspective: 28, spread: 92, speed: 0.25,
   }),
   variant(ringStream, 'orbit-3d-03', 'Orbit Bloom', {
-    style: 'bloom', count: 8, ringSizePct: 72, opening: 42, tiltX: -29, perspective: 26, cardSizePct: 25, fade: 45, pulse: 16,
+    style: 'bloom', count: 8, ringSizePct: 72, opening: 42, tiltX: -29, perspective: 26, fade: 45, pulse: 16,
   }),
 ];

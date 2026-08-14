@@ -218,4 +218,63 @@ for (const template of templateList.filter((item) => relevantGroups.has(item.met
   }
 }
 
+// Every Layout slider on the Orbit ring has to move the ring.
+//
+// A ring over-determines itself: radius, count and card size are three
+// controls for two degrees of freedom, so a naive guard makes one of them
+// silently lose. Both arrangements were measured on the shipped preset and
+// both shipped a dead slider — capping the card killed Card Size above 16% of
+// its range, and growing the ring instead killed Ring Size and Ring Opening
+// outright. Card Size is now a share of its own angular slot, which removes
+// the contest; this is the assertion that keeps it removed.
+//
+// Deliberately narrow. The same sweep across the whole catalogue accuses 577
+// sliders, almost all falsely: it reads only transform/transform3d at frame 0,
+// so a control the RENDERER reads (Corner Radius), one camera() reads (Camera
+// FOV), or one that only shows over time (Speed) looks inert to it. A sound
+// catalogue-wide version would have to cover those three surfaces too.
+{
+  const ringCtx = {
+    fps: 30, width: 810, height: 1080, duration: 6, totalFrames: 180,
+    ease: (t) => t, easedPhase: (p) => p, cardAspect: 4 / 5,
+  };
+  const poseSignature = (tpl, values) => {
+    const count = values.count;
+    const out = [];
+    for (let i = 0; i < count; i++) {
+      const p = tpl.transform3d(0, i, count, values, ringCtx);
+      out.push([p.x, p.y, p.z, p.scale].map((n) => n.toFixed(3)).join(','));
+    }
+    return out.join('|');
+  };
+  for (const id of ['orbit-3d-01', 'orbit-3d-02', 'orbit-3d-03']) {
+    const tpl = getTemplate(id);
+    const base = defaultsFor(id);
+    for (const control of tpl.controls) {
+      if (control.type !== 'slider' || control.section !== 'Layout') continue;
+      // Sweep each control in the style that actually shows it — Ring Width is
+      // showcase-only, so on a stream preset it is hidden, not broken.
+      const shown = control.visibleWhen
+        ? { ...base, [control.visibleWhen.key]: control.visibleWhen.equals }
+        : base;
+      let dead = 0, steps = 0;
+      let previous = poseSignature(tpl, { ...shown, [control.key]: control.min });
+      for (let x = control.min + control.step; x <= control.max + 1e-9; x += control.step) {
+        const next = poseSignature(tpl, { ...shown, [control.key]: x });
+        steps++;
+        if (next === previous) dead++;
+        previous = next;
+      }
+      assert(dead === 0, `${id} ${control.label} is inert for ${dead}/${steps} of its range`);
+    }
+    // And the shipped defaults must not overlap: a card has to fit its slot.
+    const count = base.count;
+    const metrics = tpl.transform3d(0, 0, count, base, ringCtx);
+    const radius = Math.hypot(metrics.x, metrics.y, metrics.z);
+    const slot = (Math.PI * 2 * radius) / count;
+    assert(metrics.scale * 340 < slot,
+      `${id} cards are ${metrics.scale * 340} wide in a ${slot} slot — they collide`);
+  }
+}
+
 console.log(`Tilt verification passed (${assertions} assertions across ${templateList.length} templates).`);
