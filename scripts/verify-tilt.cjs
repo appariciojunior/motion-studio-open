@@ -201,7 +201,9 @@ for (const template of templateList.filter((item) => relevantGroups.has(item.met
     }
     return { cz, maxAbsX };
   };
-  for (const sag of [0.04, 0.12, 0.3]) {
+  // 0.45 is the renderer's own ceiling and Card Bend's new maximum — about
+  // 168 degrees of arc, where the circumradius maths is closest to degenerate.
+  for (const sag of [0.04, 0.12, 0.3, 0.45]) {
     const pos = centreZ(sag), neg = centreZ(-sag);
     // The centre displaces by exactly the sag, opposite ways, and the card
     // never widens — a runaway arc shows up as either.
