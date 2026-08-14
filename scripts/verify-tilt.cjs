@@ -238,12 +238,17 @@ for (const template of templateList.filter((item) => relevantGroups.has(item.met
     fps: 30, width: 810, height: 1080, duration: 6, totalFrames: 180,
     ease: (t) => t, easedPhase: (p) => p, cardAspect: 4 / 5,
   };
+  // Position and size are not the whole pose. Card Rotation only turns the
+  // card in place, so a signature of x/y/z/scale reported it as inert when it
+  // was working — the summary was incomplete, not the control. Orientation
+  // counts, so the quaternion is in.
   const poseSignature = (tpl, values) => {
     const count = values.count;
     const out = [];
     for (let i = 0; i < count; i++) {
       const p = tpl.transform3d(0, i, count, values, ringCtx);
-      out.push([p.x, p.y, p.z, p.scale].map((n) => n.toFixed(3)).join(','));
+      const q = p.quaternion || { x: 0, y: 0, z: 0, w: 1 };
+      out.push([p.x, p.y, p.z, p.scale, q.x, q.y, q.z, q.w].map((n) => n.toFixed(4)).join(','));
     }
     return out.join('|');
   };

@@ -249,6 +249,26 @@ for (const template of templateList.filter((t) => ['Frames', 'Grid'].includes(t.
   }
 }
 
+// No two templates may share a display name.
+//
+// Not a tidiness rule — things key off the name. verify-reference fits presets
+// against measured geometry BY NAME, so a second "Bloom 01" silently stole the
+// fixtures belonging to the first and the suite failed with ten wrong-width
+// errors pointing at a template that had not been touched. A duplicate is also
+// simply unusable in the picker, where the group is the only thing telling two
+// identically named entries apart.
+{
+  const byName = new Map();
+  for (const template of templateList) {
+    const list = byName.get(template.meta.name) || [];
+    list.push(template.meta.id);
+    byName.set(template.meta.name, list);
+  }
+  for (const [name, ids] of byName) {
+    check(ids.length === 1, name, `duplicate template name, shared by ${ids.join(' and ')}`, 'catalogue');
+  }
+}
+
 // ---------- report ----------
 if (failures.length) {
   console.error(`\nCatalogue verification FAILED — ${failures.length} distinct problem(s):\n`);
