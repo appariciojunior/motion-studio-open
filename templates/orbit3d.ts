@@ -338,15 +338,35 @@ const ringStream: Template = {
 //  own values were read straight out of its editor, and the conversions below
 //  are the only judgement in the port. Stated so they can be argued with:
 //
-//    Gap -> Card Size    Its Orbit presets ship no card-size control at all;
-//                        Gap alone sizes them, and `cardSize` is a constant 100
-//                        across all 21. So Gap IS the complement of our share-
-//                        of-slot: Card Size = 100 - Gap. Its densest presets use
-//                        a negative Gap, which is why our range now runs past
-//                        100 into deliberate overlap.
-//    Diameter -> Ring Offset   Absolute px there, a share of the short canvas
-//                        edge here, taken against its 1080 stage: 60 -> 6%,
-//                        150 -> 14%, 500 -> 46%.
+//    Gap -> Card Size    Card Size = 100/(1 + Gap/100), because Gap is a share
+//                        of the CARD, not of the slot. Measured by sweeping it
+//                        on their Pure 04 and reading the drawn bounding box:
+//                        at Gap 0..75 the box HEIGHT went 14 -> 8, a factor of
+//                        0.571 against 1/(1+75/100) = 0.571 exactly. The first
+//                        pass used 100 - Gap, which agrees near zero and is
+//                        badly wrong at the ends — 37 instead of 61 at their
+//                        widest gap, and 150 instead of 200 at their tightest.
+//    Ring size           Sweeping Count 6..24 moved the box width 74 -> 76, and
+//                        Gap 0..75 moved it 77 -> 74. Neither grows the ring:
+//                        it is fixed by the canvas and those two only decide how
+//                        much of a slot a card fills — which is our model too.
+//                        But the SCALE was never ported. Their ring sits near
+//                        0.21 of the stage's short edge and our family default
+//                        is 0.3515, so all 21 shipped half again too big. Hence
+//                        ringSizePct 55 rather than the family's 94.
+//    Diameter -> Ring Offset   The one control that does grow the ring: box
+//                        width 76 -> 103 -> 129 for Diameter 0 -> 200 -> 400,
+//                        i.e. it adds Diameter/2 to the radius. Taken here
+//                        against their 1280 stage short edge, not the 1080
+//                        assumed on the first pass.
+//    Surface Wrap -> Card Bend   Not a free amount: the card curves to follow
+//                        the ring's own circle. Wrap narrowed the box to 0.952
+//                        of Flat, and for cards on a ring that ratio is
+//                        cos(alpha/2), giving alpha = 35.8 degrees against the
+//                        34.8 their count and gap imply. So the sag is
+//                        determined — bend = tan(alpha/4)/2 with
+//                        alpha = (TAU/count)*cardShare — which is 3 to 7.5
+//                        across these presets, not the flat 10 first shipped.
 //    Perspective         Same SENSE as ours, larger meaning more distortion, and
 //                        mapped as 40·px/2000. Measured, after this shipped
 //                        inverted once on the reasonable-sounding assumption
@@ -392,102 +412,102 @@ export const orbit3dVariants: Template[] = [
 
   // Pure — cards wrapped around a drum, facing outward along the ring.
   variant(ringStream, 'orbit-3d-04', 'Ring Pure 01', {
-    count: 18, cardSizePct: 65, cardBend: 10, facing: 'ring', fade: 30,
+    count: 18, ringSizePct: 55, cardSizePct: 74, cardBend: 3, facing: 'ring', fade: 30,
     tiltX: -10, ringYaw: -10, ringRoll: 50, perspective: 6, camDistance: 1, speed: 0.3, direction: 'reverse', cornerRadius: 10,
   }, { id: 'linear' }),
   variant(ringStream, 'orbit-3d-05', 'Ring Pure 02', {
-    count: 9, cardSizePct: 85, cardBend: 10, facing: 'ring', fade: 15,
+    count: 9, ringSizePct: 55, cardSizePct: 87, cardBend: 7.5, facing: 'ring', fade: 15,
     tiltX: -10, ringYaw: -10, ringRoll: 50, perspective: 10, camDistance: 1.33, speed: 0.2, direction: 'reverse', cornerRadius: 10,
   }, { id: 'linear' }),
   variant(ringStream, 'orbit-3d-06', 'Ring Pure 03', {
-    count: 9, cardSizePct: 85, cardBend: 10, facing: 'ring', fade: 15,
+    count: 9, ringSizePct: 55, cardSizePct: 87, cardBend: 7.5, facing: 'ring', fade: 15,
     tiltX: -7, perspective: 10, camDistance: 1.33, speed: 0.3, direction: 'reverse', cornerRadius: 10,
   }, { id: 'custom', bezier: [0.85, 0.15, 0.15, 0.85] }),
   variant(ringStream, 'orbit-3d-07', 'Ring Pure 04', {
-    count: 18, cardSizePct: 85, cardBend: 10, facing: 'ring', fade: 15,
+    count: 18, ringSizePct: 55, cardSizePct: 87, cardBend: 4, facing: 'ring', fade: 15,
     tiltX: 0, perspective: 10, camDistance: 1, speed: 0.2, direction: 'reverse', cornerRadius: 10,
   }, { id: 'custom', bezier: [0.8, 0, 0.2, 1] }),
   variant(ringStream, 'orbit-3d-08', 'Ring Pure 05', {
-    count: 12, cardSizePct: 85, cardBend: 10, facing: 'ring', fade: 15, ringOffset: 6,
+    count: 12, ringSizePct: 55, cardSizePct: 87, cardBend: 5.5, facing: 'ring', fade: 15, ringOffset: 5,
     tiltX: 0, perspective: 10, camDistance: 1, speed: 0.2, direction: 'reverse', cornerRadius: 10,
   }, { id: 'custom', bezier: [0.8, 0, 0.2, 1] }),
   // A drum rolled upright: Ring Roll -90 stands it on end and Card Rotation 90
   // turns each card to match, which is the vertical conveyor of the reference.
   variant(ringStream, 'orbit-3d-09', 'Ring Pure 06', {
-    count: 18, cardSizePct: 100, cardBend: 10, facing: 'ring', fade: 15, ringOffset: 6,
+    count: 18, ringSizePct: 55, cardSizePct: 100, cardBend: 4.5, facing: 'ring', fade: 15, ringOffset: 5,
     cardRotation: 90, ringRoll: -90, tiltX: 0, cornerRadius: 0,
     perspective: 6, camDistance: 1.54, speed: 0.2, direction: 'forward',
   }, { id: 'linear' }),
 
   // Carousel — the same ring with the cards kept square to the camera.
   variant(ringStream, 'orbit-3d-10', 'Ring Carousel 01', {
-    count: 18, cardSizePct: 65, cardBend: 0, facing: 'camera', fade: 30,
+    count: 18, ringSizePct: 55, cardSizePct: 74, cardBend: 0, facing: 'camera', fade: 30,
     tiltX: -10, ringYaw: -10, ringRoll: 50, perspective: 6, camDistance: 1, speed: 0.3, direction: 'reverse', cornerRadius: 10,
   }, { id: 'linear' }),
   variant(ringStream, 'orbit-3d-11', 'Ring Carousel 02', {
-    count: 9, cardSizePct: 85, cardBend: 0, facing: 'camera', fade: 15,
+    count: 9, ringSizePct: 55, cardSizePct: 87, cardBend: 0, facing: 'camera', fade: 15,
     tiltX: -10, ringYaw: -10, ringRoll: 50, perspective: 10, camDistance: 1.33, speed: 0.3, direction: 'reverse', cornerRadius: 10,
   }, { id: 'linear' }),
   variant(ringStream, 'orbit-3d-12', 'Ring Carousel 03', {
-    count: 9, cardSizePct: 85, cardBend: 0, facing: 'camera', fade: 15, scaleContrast: 50,
+    count: 9, ringSizePct: 55, cardSizePct: 87, cardBend: 0, facing: 'camera', fade: 15, scaleContrast: 50,
     tiltX: 0, ringRoll: 56, perspective: 10, camDistance: 2, speed: 0.4, direction: 'reverse', cornerRadius: 10, hold: 13,
   }, { id: 'custom', bezier: [0.8, 0, 0.2, 1] }),
   // Overlapping by half a card, stood upright, and pushed hard on depth — the
   // reference's densest Orbit preset and the one our old 100% ceiling could
   // not have expressed at all.
   variant(ringStream, 'orbit-3d-13', 'Ring Carousel 04', {
-    count: 20, cardSizePct: 150, cardBend: 0, facing: 'camera', fade: 15, scaleContrast: 200,
+    count: 20, ringSizePct: 55, cardSizePct: 200, cardBend: 0, facing: 'camera', fade: 15, scaleContrast: 200,
     tiltX: 0, ringRoll: 90, perspective: 15, camDistance: 2.44, speed: 0.2, direction: 'reverse', cornerRadius: 10, hold: 20,
   }, { id: 'custom', bezier: [0.8, 0, 0.2, 1] }),
   variant(ringStream, 'orbit-3d-14', 'Ring Carousel 05', {
-    count: 9, cardSizePct: 115, cardBend: 0, facing: 'camera', fade: 15, scaleContrast: 200,
+    count: 9, ringSizePct: 55, cardSizePct: 118, cardBend: 0, facing: 'camera', fade: 15, scaleContrast: 200,
     tiltX: 0, perspective: 0, camDistance: 4, speed: 0.5, direction: 'reverse', cornerRadius: 10, hold: 20,
   }, { id: 'custom', bezier: [0.8, 0, 0.2, 1] }),
 
   // Lightroom — an airy ring seen almost edge-on, fading on alpha rather than
   // darkening, with the far arc turned so its pictures never read mirrored.
   variant(ringStream, 'orbit-3d-15', 'Ring Lightroom 01', {
-    count: 10, cardSizePct: 94, cardBend: 10, facing: 'ring', fade: 0, fadeMode: 'alpha', flip: 'yes',
+    count: 10, ringSizePct: 55, cardSizePct: 94, cardBend: 7.5, facing: 'ring', fade: 0, fadeMode: 'alpha', flip: 'yes',
     tiltX: 0, perspective: 32, camDistance: 1, speed: 0.3, direction: 'reverse', cornerRadius: 10,
   }, { id: 'linear' }),
   variant(ringStream, 'orbit-3d-16', 'Ring Lightroom 02', {
-    count: 10, cardSizePct: 94, cardBend: 0, facing: 'ring', fade: 0, fadeMode: 'alpha', flip: 'yes',
+    count: 10, ringSizePct: 55, cardSizePct: 94, cardBend: 0, facing: 'ring', fade: 0, fadeMode: 'alpha', flip: 'yes',
     cardRotation: -90, ringRoll: 90, tiltX: 0, perspective: 30, camDistance: 0.91, speed: 0.3, direction: 'reverse', cornerRadius: 10,
   }, { id: 'linear' }),
   variant(ringStream, 'orbit-3d-17', 'Ring Lightroom 03', {
-    count: 10, cardSizePct: 94, cardBend: 0, facing: 'ring', fade: 0, fadeMode: 'alpha', flip: 'yes',
+    count: 10, ringSizePct: 55, cardSizePct: 94, cardBend: 0, facing: 'ring', fade: 0, fadeMode: 'alpha', flip: 'yes',
     cardRotation: -90, ringRoll: 51, tiltX: 0, perspective: 30, camDistance: 0.95, speed: 0.3, direction: 'reverse', cornerRadius: 10,
   }, { id: 'custom', bezier: [0.85, 0.15, 0.15, 0.85] }),
   variant(ringStream, 'orbit-3d-18', 'Ring Lightroom 04', {
-    count: 9, cardSizePct: 37, cardBend: 0, facing: 'ring', fade: 0, fadeMode: 'alpha', flip: 'yes',
-    backface: 'hide', ringOffset: 14, cardRotation: -90, ringRoll: 90, tiltX: 0,
+    count: 9, ringSizePct: 55, cardSizePct: 61, cardBend: 0, facing: 'ring', fade: 0, fadeMode: 'alpha', flip: 'yes',
+    backface: 'hide', ringOffset: 12, cardRotation: -90, ringRoll: 90, tiltX: 0,
     perspective: 15, camDistance: 1, speed: 0.4, direction: 'reverse', cornerRadius: 10, hold: 36,
   }, { id: 'custom', bezier: [0.85, 0.15, 0.15, 0.85] }),
   variant(ringStream, 'orbit-3d-19', 'Ring Lightroom 05', {
-    count: 24, cardSizePct: 100, cardBend: 0, facing: 'ring', fade: 0, fadeMode: 'alpha', flip: 'yes',
-    ringOffset: 46, tiltX: 0, cornerRadius: 0, perspective: 40, camDistance: 4, speed: 0.2, direction: 'reverse',
+    count: 24, ringSizePct: 55, cardSizePct: 100, cardBend: 0, facing: 'ring', fade: 0, fadeMode: 'alpha', flip: 'yes',
+    ringOffset: 39, tiltX: 0, cornerRadius: 0, perspective: 40, camDistance: 4, speed: 0.2, direction: 'reverse',
   }, { id: 'linear' }),
 
   // Bloom — the ring turned toward the camera until it reads as a circle in
   // the frame rather than a wheel in depth.
   variant(ringStream, 'orbit-3d-20', 'Ring Bloom 01', {
-    count: 12, cardSizePct: 82, cardBend: 0, facing: 'ring', fade: 25, cardTilt: 15,
+    count: 12, ringSizePct: 55, cardSizePct: 85, cardBend: 0, facing: 'ring', fade: 25, cardTilt: 15,
     tiltX: 0, perspective: 12, camDistance: 1.17, speed: 0.3, direction: 'reverse', cornerRadius: 10,
   }, { id: 'custom', bezier: [0.8, 0, 0.2, 1] }),
   variant(ringStream, 'orbit-3d-21', 'Ring Bloom 02', {
-    count: 12, cardSizePct: 100, cardBend: 0, facing: 'camera', fade: 0, fadeMode: 'alpha', scaleContrast: 200,
+    count: 12, ringSizePct: 55, cardSizePct: 100, cardBend: 0, facing: 'camera', fade: 0, fadeMode: 'alpha', scaleContrast: 200,
     tiltX: 0, ringYaw: 85, ringRoll: 90, perspective: 40, camDistance: 2.5, speed: 0.6, direction: 'reverse', cornerRadius: 10,
   }, { id: 'linear' }),
   variant(ringStream, 'orbit-3d-22', 'Ring Bloom 03', {
-    count: 12, cardSizePct: 100, cardBend: 0, facing: 'camera', fade: 0, fadeMode: 'alpha', scaleContrast: 200,
+    count: 12, ringSizePct: 55, cardSizePct: 100, cardBend: 0, facing: 'camera', fade: 0, fadeMode: 'alpha', scaleContrast: 200,
     tiltX: 24, ringYaw: 75, ringRoll: 90, perspective: 40, camDistance: 2.5, speed: 0.6, direction: 'reverse', cornerRadius: 10,
   }, { id: 'linear' }),
   variant(ringStream, 'orbit-3d-23', 'Ring Bloom 04', {
-    count: 12, cardSizePct: 100, cardBend: 0, facing: 'camera', fade: 0, fadeMode: 'alpha', cardTilt: -44,
+    count: 12, ringSizePct: 55, cardSizePct: 100, cardBend: 0, facing: 'camera', fade: 0, fadeMode: 'alpha', cardTilt: -44,
     tiltX: 97, ringYaw: -40, perspective: 40, camDistance: 1.82, speed: 0.6, direction: 'reverse', cornerRadius: 10,
   }, { id: 'linear' }),
   variant(ringStream, 'orbit-3d-24', 'Ring Bloom 05', {
-    count: 16, cardSizePct: 51, cardBend: 0, facing: 'ring', fade: 0, fadeMode: 'alpha',
+    count: 16, ringSizePct: 55, cardSizePct: 67, cardBend: 0, facing: 'ring', fade: 0, fadeMode: 'alpha',
     tiltX: 90, perspective: 12, camDistance: 0.84, speed: 0.5, direction: 'reverse', cornerRadius: 10,
   }, { id: 'linear' }),
 ];
