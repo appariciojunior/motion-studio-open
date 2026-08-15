@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useSceneStore } from '@/store/useSceneStore';
 import { catalogTemplateList, templateList, templateGroups, getTemplate } from '@/templates';
+import type { Template } from '@/lib/types';
 import TemplateThumb from './TemplateThumb';
 import { ControlRow } from './Controls';
 import { useMobileInteractions } from './MobileInteractions';
@@ -12,6 +13,72 @@ const Chevron = ({ dir = 'right' }: { dir?: 'right' | 'left' }) => (
     <path d="M4.5 2.5L8 6l-3.5 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
   </svg>
 );
+
+const Heart = ({ filled, size = 12 }: { filled: boolean; size?: number }) => (
+  <svg width={size} height={size} viewBox="-1 -1 18 18" fill={filled ? 'currentColor' : 'none'} aria-hidden="true">
+    <path
+      d="M8 1.314C12.438-3.248 23.534 4.735 8 15-7.534 4.736 3.562-3.248 8 1.314z"
+      stroke="currentColor" strokeWidth={filled ? 0 : 1.6} strokeLinejoin="round"
+    />
+  </svg>
+);
+
+// Favourites resolve through the CATALOGUE, not the full registry: a template
+// withheld from every picker must stay withheld even if it was hearted before
+// it was hidden. See HIDDEN_CATALOG_GROUPS in templates/index.ts.
+const catalogById = new Map(catalogTemplateList.map((t) => [t.meta.id, t]));
+
+// The favourites shelf shares the accordion's open/closed state, so opening it
+// collapses whichever family was open — one panel at a time, as before.
+const FAVORITES_GROUP = 'Favorites';
+
+// One card, used by the favourites shelf, the search results and the group
+// accordion alike. It is a div rather than a button because it now nests one:
+// a button inside a button is invalid markup and React will not hydrate it.
+function TemplateCard({
+  template,
+  active,
+  favorite,
+  autoPreview,
+  onPick,
+  onToggleFavorite,
+}: {
+  template: Template;
+  active: boolean;
+  favorite: boolean;
+  autoPreview?: boolean;
+  onPick: (id: string) => void;
+  onToggleFavorite: (id: string) => void;
+}) {
+  const { id, name, isNew } = template.meta;
+  return (
+    <div
+      className={`tpl-card ${active ? 'active' : ''}`}
+      role="button"
+      tabIndex={0}
+      onClick={() => onPick(id)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onPick(id);
+        }
+      }}
+    >
+      <button
+        className={`icon-btn tpl-fav ${favorite ? 'on' : ''}`}
+        aria-pressed={favorite}
+        aria-label={favorite ? `Remove ${name} from favorites` : `Add ${name} to favorites`}
+        title={favorite ? 'Remove from favorites' : 'Add to favorites'}
+        onClick={(e) => { e.stopPropagation(); onToggleFavorite(id); }}
+      >
+        <Heart filled={favorite} size={14} />
+      </button>
+      <TemplateThumb template={template} autoPreview={autoPreview} />
+      {isNew && <span className="tpl-new">NEW</span>}
+      <span className="tpl-card-label">{name}</span>
+    </div>
+  );
+}
 
 // `controlsInline` adds a third drill level — Group ▸ Template ▸ Sliders —
 // used by board mode, which has no middle column to show a template's own
@@ -37,6 +104,9 @@ export default function TemplatesCard({
   const saveCustomPreset = useSceneStore((s) => s.saveCustomPreset);
   const applyCustomPreset = useSceneStore((s) => s.applyCustomPreset);
   const deleteCustomPreset = useSceneStore((s) => s.deleteCustomPreset);
+  const favoriteTemplateIds = useSceneStore((s) => s.favoriteTemplateIds);
+  const loadFavorites = useSceneStore((s) => s.loadFavorites);
+  const toggleFavorite = useSceneStore((s) => s.toggleFavorite);
   const [tab, setTab] = useState<'templates' | 'custom'>('templates');
   const [openGroup, setOpenGroup] = useState<string | null>(null);
   // board mode: the selected template's sliders are open in the left bar.
@@ -49,6 +119,10 @@ export default function TemplatesCard({
   useEffect(() => {
     if (customPresetsEnabled) loadCustomPresets();
   }, [customPresetsEnabled, loadCustomPresets]);
+
+  // Favourites are part of the catalogue, not the preset library, so they load
+  // on every surface that shows templates — mobile included.
+  useEffect(() => { loadFavorites(); }, [loadFavorites]);
 
   // Mobile deliberately exposes only the template catalogue. Keeping this as
   // a derived value prevents custom state from leaking in if the prop changes.
@@ -81,6 +155,15 @@ export default function TemplatesCard({
   const matches = catalogTemplateList.filter(
     (t) => t.meta.name.toLowerCase().includes(q) || t.meta.group.toLowerCase().includes(q)
   );
+
+  const isFavorite = (id: string) => favoriteTemplateIds.includes(id);
+  // Kept in heart order (oldest first), and silently skipping ids the current
+  // catalogue no longer publishes rather than dropping them from storage — a
+  // family that comes back from hiding should bring its hearts with it.
+  const favorites = favoriteTemplateIds
+    .map((id) => catalogById.get(id))
+    .filter((t): t is Template => Boolean(t));
+  const favoritesOpen = openGroup === FAVORITES_GROUP;
   return (
     <section className="card templates">
       <div className="tpl-head">
@@ -141,15 +224,14 @@ export default function TemplatesCard({
           // flat results across all groups while searching
           <div className="tpl-grid">
             {matches.map((t) => (
-              <button
+              <TemplateCard
                 key={t.meta.id}
-                className={`tpl-card ${activeTemplateId === t.meta.id ? 'active' : ''}`}
-                onClick={() => pick(t.meta.id)}
-              >
-                <TemplateThumb template={t} />
-                {t.meta.isNew && <span className="tpl-new">NEW</span>}
-                <span className="tpl-card-label">{t.meta.name}</span>
-              </button>
+                template={t}
+                active={activeTemplateId === t.meta.id}
+                favorite={isFavorite(t.meta.id)}
+                onPick={pick}
+                onToggleFavorite={toggleFavorite}
+              />
             ))}
           </div>
         ) : controlsInline && showControls ? (
@@ -178,6 +260,45 @@ export default function TemplatesCard({
         ) : (
           // Accordion: keep catalogue context while showing one group's models.
           <>
+            {/* Favourites ride above the families, right under the search, so
+                the shelf the user built is the first thing the catalogue
+                offers. It stays visible when empty — that row is how the
+                heart on a card is discovered in the first place. */}
+            <div className={`tpl-accordion tpl-accordion-fav ${favoritesOpen ? 'open' : ''}`}>
+              <button
+                className={`tpl-item ${favoritesOpen ? 'active' : ''}`}
+                onClick={() => setOpenGroup(favoritesOpen ? null : FAVORITES_GROUP)}
+                aria-expanded={favoritesOpen}
+                aria-controls="template-group-favorites"
+              >
+                <span className="tpl-fav-ico"><Heart filled={favorites.length > 0} /></span>
+                <span className="tpl-name">{FAVORITES_GROUP}</span>
+                {favorites.length > 0 && <span className="tpl-fav-count">{favorites.length}</span>}
+                <span className="tpl-accordion-chevron"><Chevron /></span>
+              </button>
+              {favoritesOpen && (
+                favorites.length === 0 ? (
+                  <div id="template-group-favorites" className="tpl-fav-empty">
+                    Tap the heart on any template to keep it here.
+                  </div>
+                ) : (
+                  <div id="template-group-favorites" className="tpl-grid tpl-grid-accordion">
+                    {favorites.map((t) => (
+                      <TemplateCard
+                        key={t.meta.id}
+                        template={t}
+                        active={activeTemplateId === t.meta.id}
+                        favorite
+                        autoPreview={mobile}
+                        onPick={pick}
+                        onToggleFavorite={toggleFavorite}
+                      />
+                    ))}
+                  </div>
+                )
+              )}
+            </div>
+
             {templateGroups.map(({ group: name, items }) => {
               const activeHere = items.some((t) => t.meta.id === activeTemplateId);
               const isOpen = openGroup === name;
@@ -199,15 +320,15 @@ export default function TemplatesCard({
                   {isOpen && (
                     <div id={panelId} className="tpl-grid tpl-grid-accordion">
                       {items.map((t) => (
-                        <button
+                        <TemplateCard
                           key={t.meta.id}
-                          className={`tpl-card ${activeTemplateId === t.meta.id ? 'active' : ''}`}
-                          onClick={() => pick(t.meta.id)}
-                        >
-                          <TemplateThumb template={t} autoPreview={mobile} />
-                          {t.meta.isNew && <span className="tpl-new">NEW</span>}
-                          <span className="tpl-card-label">{t.meta.name}</span>
-                        </button>
+                          template={t}
+                          active={activeTemplateId === t.meta.id}
+                          favorite={isFavorite(t.meta.id)}
+                          autoPreview={mobile}
+                          onPick={pick}
+                          onToggleFavorite={toggleFavorite}
+                        />
                       ))}
                     </div>
                   )}
