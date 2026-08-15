@@ -29,8 +29,26 @@ repo and `npm run dev` to export.
 ```bash
 npm install
 npm run dev          # → http://localhost:3000
-brew install ffmpeg  # required only for MP4/GIF export
+brew install ffmpeg  # required only for the server-side export route
 ```
+
+### The server export route is off by default
+
+`/api/export` needs a writable filesystem and a native ffmpeg, so on a serverless
+host it fails at the first `mkdir` and never produced anything — while still
+answering anonymous requests and reporting internal paths back. It is therefore
+disabled unless a deployment opts in:
+
+```bash
+echo "ENABLE_EXPORT_API=1" >> .env.local   # local development
+```
+
+Before enabling it on anything reachable from the internet, note what it does
+not have: no authentication, no rate limit, no cap on concurrent ffmpeg
+processes, and no body-size limit on the frame upload — App Router route
+handlers have no default, unlike the old 1 MB in Pages Router. It also feeds
+uploaded bytes straight to the ffmpeg demuxer. Put it behind auth and a queue
+first, and run ffmpeg as an unprivileged user with CPU and memory limits.
 
 ## Architecture
 
