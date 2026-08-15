@@ -75,6 +75,13 @@ function persistPresets(list: CustomPreset[]) {
   try { localStorage.setItem(PRESETS_KEY, JSON.stringify(list)); } catch { /* storage full/blocked */ }
 }
 
+// Hearted templates, in the order they were favourited. Stored as ids rather
+// than templates so a catalogue edit can never resurrect a stale copy of one.
+const FAVORITES_KEY = 'motion-favorite-templates';
+function persistFavorites(ids: string[]) {
+  try { localStorage.setItem(FAVORITES_KEY, JSON.stringify(ids)); } catch { /* storage full/blocked */ }
+}
+
 export interface SceneState {
   // ---- motion tracks: stacked motion layers, drawn in array order ----
   // The source of truth for what animates. See lib/tracks.ts.
@@ -119,6 +126,9 @@ export interface SceneState {
 
   // custom presets (saved template snapshots)
   customPresets: CustomPreset[];
+
+  // template ids the user hearted, oldest first
+  favoriteTemplateIds: string[];
 
   // ---- actions ----
   // These four act on the ACTIVE track (and mirror to the legacy fields), so
@@ -171,6 +181,9 @@ export interface SceneState {
   saveCustomPreset: (name: string) => void;
   applyCustomPreset: (id: string) => void;
   deleteCustomPreset: (id: string) => void;
+
+  loadFavorites: () => void;
+  toggleFavorite: (templateId: string) => void;
 
   addEffect: (effectId: string, values: Record<string, any>) => void;
   removeEffect: (instanceId: string) => void;
@@ -254,8 +267,9 @@ const initDims = dimsFor('3:4');
  * create()) because "new project" has to restore exactly this — one definition,
  * so the app's defaults and a new project's defaults can never disagree.
  *
- * Deliberately excludes `customPresets`: saved presets are a user-wide library,
- * not per-project, so creating a project must not wipe them.
+ * Deliberately excludes `customPresets` and `favoriteTemplateIds`: saved presets
+ * and hearted templates are a user-wide library, not per-project, so creating a
+ * project must not wipe them.
  */
 function initialSceneState() {
   const tracks = [makeTrack(INITIAL_TEMPLATE, 'Layer 1')];
@@ -288,6 +302,7 @@ function initialSceneState() {
 export const useSceneStore = create<SceneState>((set, get) => ({
   ...initialSceneState(),
   customPresets: [],
+  favoriteTemplateIds: [],
 
   setValue: (key, val) =>
     set((s) => withTrack(s, s.activeTrackId, { values: { ...s.values, [key]: val } })),
@@ -659,6 +674,31 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       const next = s.customPresets.filter((c) => c.id !== id);
       persistPresets(next);
       return { customPresets: next };
+    }),
+
+  // Same client-only lazy read as the presets above: localStorage is absent
+  // during SSR, and seeding at create() time would desync the first render.
+  loadFavorites: () =>
+    set(() => {
+      if (typeof window === 'undefined') return {};
+      try {
+        const raw = localStorage.getItem(FAVORITES_KEY);
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        // Storage is user-editable and survives across app versions, so accept
+        // only what this build can actually render back.
+        if (!Array.isArray(parsed)) return {};
+        return { favoriteTemplateIds: parsed.filter((id): id is string => typeof id === 'string') };
+      } catch { return {}; }
+    }),
+  toggleFavorite: (templateId) =>
+    set((s) => {
+      const on = s.favoriteTemplateIds.includes(templateId);
+      const next = on
+        ? s.favoriteTemplateIds.filter((id) => id !== templateId)
+        : [...s.favoriteTemplateIds, templateId];
+      persistFavorites(next);
+      return { favoriteTemplateIds: next };
     }),
 
   addEffect: (effectId, values) =>
