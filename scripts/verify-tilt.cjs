@@ -9,7 +9,8 @@ Module._resolveFilename = function (request, parent, isMain, options) {
   return originalResolve.call(this, request, parent, isMain, options);
 };
 
-const { templateList, catalogTemplateList, templateGroups, getTemplate, defaultsFor, layerCountFor } = require('../templates');
+const { templateList, catalogTemplateList, templateGroups, getTemplate, defaultsFor, easingFor, layerCountFor } = require('../templates');
+const { resolveEasing } = require('../lib/easing');
 const { tiltPointCanvas, tiltNormalCanvas } = require('../lib/tilt3d');
 
 let assertions = 0;
@@ -272,6 +273,48 @@ for (const template of templateList.filter((item) => relevantGroups.has(item.met
       }
       assert(dead === 0, `${id} ${control.label} is inert for ${dead}/${steps} of its range`);
     }
+    // The three motion modes must stay distinguishable.
+    //
+    // The ring advances a slot per step, shaped by the curve and optionally
+    // held. Those settings sit in two different places — the curve on
+    // meta.defaultEasing, the hold on a control — and a `variant` that drops
+    // either one leaves a preset that still renders, still loops, still passes
+    // every geometric check, and simply moves like all the others. That has
+    // already happened twice in this family with transform3d and layerCount.
+    //
+    // Measured per frame as how far one card travels:
+    //   linear, no hold   peak/mean 1.00, no still frames — a constant spin
+    //   shaped, no hold   peak/mean 4.30, half the frames near still
+    //   shaped + hold     peak/mean 5.44 and up
+    {
+      const rate = (id) => {
+        const template = getTemplate(id);
+        const values = defaultsFor(id);
+        const ease = resolveEasing(easingFor(id));
+        const motionCtx = {
+          fps: 30, width: 810, height: 1080, duration: 8, totalFrames: 240, ease,
+          easedPhase: (p) => Math.floor(p) + ease(p - Math.floor(p)), cardAspect: 4 / 5,
+        };
+        const steps = [];
+        for (let f = 0; f < 240; f++) {
+          const a = template.transform3d(f, 0, values.count, values, motionCtx);
+          const b = template.transform3d(f + 1, 0, values.count, values, motionCtx);
+          steps.push(Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z));
+        }
+        const peak = Math.max(...steps);
+        const mean = steps.reduce((x, y) => x + y, 0) / steps.length;
+        return { ratio: peak / Math.max(mean, 1e-6), still: steps.filter((d) => d < peak * 0.12).length };
+      };
+      const spin = rate('orbit-3d-04');
+      assert(spin.ratio < 1.05 && spin.still === 0,
+        `Ring Pure 01 should spin at a constant rate, got peak/mean ${spin.ratio.toFixed(2)} with ${spin.still} still frames`);
+      for (const [id, name] of [['orbit-3d-07', 'Ring Pure 04'], ['orbit-3d-12', 'Ring Carousel 03'], ['orbit-3d-18', 'Ring Lightroom 04']]) {
+        const stepped = rate(id);
+        assert(stepped.ratio > 2 && stepped.still > 240 * 0.25,
+          `${name} should step rather than spin, got peak/mean ${stepped.ratio.toFixed(2)} with ${stepped.still} still frames`);
+      }
+    }
+
     // And the shipped defaults must not overlap: a card has to fit its slot.
     const count = base.count;
     const metrics = tpl.transform3d(0, 0, count, base, ringCtx);

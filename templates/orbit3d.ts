@@ -1,5 +1,5 @@
-import type { Template } from '@/lib/types';
-import { TAU, clamp, loopCycles, smooth } from '@/lib/motion';
+import type { Template, TransformCtx } from '@/lib/types';
+import { TAU, clamp, loopCycles, smooth, stepHold } from '@/lib/motion';
 import {
   DEG,
   depthDim,
@@ -113,29 +113,52 @@ function ringMetrics(v: Record<string, any>, count: number, ctx: { width: number
   };
 }
 
-// A continuously turning ring must NOT route its angle through ctx.easedPhase.
+// The ring advances ONE SLOT PER STEP, each step shaped by the scene curve and
+// optionally held at the end of it. All three of the reference's behaviours are
+// this one expression:
 //
-// easedPhase is floor(p) + ease(frac(p)): it shapes every UNIT STEP of the
-// phase. That is exactly right for a conveyor that advances one slot at a time —
-// a ticker, a deck — where each step should accelerate and settle. A ring is the
-// opposite case: its period is `count`, so an ease-in-out curve makes it
-// accelerate and decelerate once PER CARD, twelve times per revolution at the
-// default count. Measured with the shipped `flow` curve, the instantaneous
-// angular velocity swung 23.5x between its slowest and fastest frame; with a
-// linear phase the same ring holds a flat rate. That lurch is what reads as
-// stiff next to a smoothly spinning reference.
+//   linear curve, no hold    indistinguishable from a constant spin, because a
+//                            linear shape makes floor(p)+shape(frac(p)) == p
+//   shaped curve, no hold    accelerates and settles once per card
+//   shaped curve + hold      steps to the next card and waits
 //
-// It also made `velocity` lie. That vector is derived from cycles/duration —
-// the AVERAGE rate — and is handed to the finish pass for motion blur, so under
-// an eased phase the blur was being told a speed up to 23x off from the truth.
-// On a linear phase the average IS the instantaneous rate, and it becomes exact.
+// This corrects an earlier reading of my own. Measuring the shipped `flow`
+// curve here showed instantaneous angular velocity swinging 23.5x between its
+// slowest and fastest frame, and I concluded a turning ring must never route
+// through a per-step shape at all. The measurement was right and the conclusion
+// was too broad: what it actually establishes is that this family's DEFAULT
+// curve has to be linear. Photographing the reference settles the rest — its
+// Pure 02 (linear, no pause) changes by an identical amount between every
+// sample, while its Pure 04 (natural, no pause) dips to zero on a regular
+// beat. The lurch is a deliberate option there, not an accident.
 //
-// The seam is unaffected either way: loopCycles returns a whole multiple of
-// `count`, so at frame totalFrames the angle has advanced by a multiple of TAU.
-function ringPhase(frame: number, v: Record<string, any>, count: number, ctx: { duration: number; totalFrames: number }) {
+// `hold` is the share of each step spent stationary. The reference states the
+// same thing as an Action time plus a Pause time, and the two agree exactly:
+// (Action + Pause) x count equals the clip length on both of its stepped
+// presets, so hold = Pause / (Action + Pause).
+//
+// The seam survives all of it: loopCycles returns a whole multiple of `count`,
+// and stepHold preserves floor(p), so at frame totalFrames the angle has still
+// advanced by a whole multiple of TAU.
+function ringPhaseAt(frame: number, v: Record<string, any>, count: number, ctx: TransformCtx) {
   const dir = v.direction === 'reverse' ? -1 : 1;
   const cycles = loopCycles(v.speed, ctx.duration, count);
-  return { dir, cycles, phase: (frame / ctx.totalFrames) * cycles * dir };
+  const raw = (frame / ctx.totalFrames) * cycles * dir;
+  const hold = clamp(num(v.hold) / 100, 0, 0.9);
+  return stepHold(raw, hold, ctx.ease);
+}
+
+function ringPhase(frame: number, v: Record<string, any>, count: number, ctx: TransformCtx) {
+  const dir = v.direction === 'reverse' ? -1 : 1;
+  const cycles = loopCycles(v.speed, ctx.duration, count);
+  const phase = ringPhaseAt(frame, v, count, ctx);
+  // Differenced rather than derived from cycles/duration. That average is only
+  // the true rate while the phase is linear; the moment a curve or a hold
+  // shapes the step it stops being, and this number is handed to the finish
+  // pass as motion blur — so a held card would be blurred as if it were still
+  // travelling. One extra phase evaluation buys an exact answer in every mode.
+  const slotsPerSecond = (ringPhaseAt(frame + 1, v, count, ctx) - phase) * ctx.fps;
+  return { dir, cycles, phase, slotsPerSecond };
 }
 
 const ringStream: Template = {
@@ -177,7 +200,12 @@ const ringStream: Template = {
     { key: 'ringYaw', label: 'Ring Yaw', type: 'slider', min: -90, max: 90, step: 1, default: 0, section: 'Depth', unit: '°', description: 'Turns the ring toward or away from the camera — at ±90 you look straight through it.' },
     { key: 'ringRoll', label: 'Ring Roll', type: 'slider', min: -180, max: 180, step: 1, default: 0, section: 'Depth', unit: '°', description: 'Spins the ring in the frame. At ±90 a horizontal drum becomes a vertical column.' },
     { key: 'perspective', label: 'Perspective', type: 'slider', min: 0, max: 40, step: 1, default: 18, section: 'Depth', unit: '%' },
-    { key: 'camDistance', label: 'Camera Distance', type: 'slider', min: 0.5, max: 2.5, step: 0.05, default: 1, section: 'Depth', unit: '×', precision: 2,
+    // 0.25 to 4, because that is the span the reference actually uses. It says
+    // the same thing as a Zoom percentage, and the two are reciprocal —
+    // measured on three presets, Zoom% = 247/distance x 100, so its 400% is
+    // 0.25 here and its 25% is 4. At the old 0.5..2.5 both ends of its range
+    // clamped, which is why three of the ported presets came out framed wrong.
+    { key: 'camDistance', label: 'Camera Distance', type: 'slider', min: 0.25, max: 4, step: 0.05, default: 1, section: 'Depth', unit: '×', precision: 2,
       description: 'Moves the camera itself closer or further, at the same Perspective — a different move than widening the lens.' },
     { key: 'facing', label: 'Facing', type: 'pills', options: ['camera','ring'], default: 'ring', section: 'Depth' },
     { key: 'scaleContrast', label: 'Depth Contrast', type: 'slider', min: 0, max: 200, step: 1, default: 0, section: 'Depth', unit: '%', description: 'Exaggerates how much bigger a near card reads than a far one.' },
@@ -197,13 +225,17 @@ const ringStream: Template = {
     { key: 'pulse', label: 'Bloom', type: 'slider', min: 0, max: 35, step: 1, default: 15, section: 'Motion', unit: '%', visibleWhen: { key: 'style', equals: 'bloom' } },
     { key: 'curve', label: 'Curve', type: 'slider', min: -100, max: 100, step: 1, default: 0, section: 'Depth', unit: '%', visibleWhen: { key: 'style', equals: 'bloom' } },
     { key: 'speed', label: 'Speed', type: 'slider', min: 0, max: 2, step: 0.1, default: 0.3, section: 'Motion', unit: '×', precision: 1 },
+    // The reference states this as an Action time plus a Pause time in seconds;
+    // as a share of the step it survives a change of clip length, which those
+    // two do not. 0 is a ring that never stops.
+    { key: 'hold', label: 'Hold', type: 'slider', min: 0, max: 60, step: 1, default: 0, section: 'Motion', unit: '%', description: 'How much of each card-to-card step is spent stopped. Pairs with a shaped curve to make the ring index rather than spin.' },
     { key: 'offset', label: 'Offset', type: 'xypad', default: { x: 0, y: 0 }, section: 'Layout' },
   ],
 
   camera: (v) => ({ fov: 15 + clamp(v.perspective / 40, 0, 1) * 14, distance: v.camDistance }),
 
   transform3d: (frame, index, count, v, ctx) => {
-    const { dir, cycles, phase } = ringPhase(frame, v, count, ctx);
+    const { dir, phase, slotsPerSecond } = ringPhase(frame, v, count, ctx);
     const a = TAU * ((index - phase) / count);
     const metrics = ringMetrics(v, count, ctx);
     const pulse = v.style === 'bloom' ? 1 + (v.pulse / 100) * Math.sin((phase / count) * TAU) : 1;
@@ -237,7 +269,7 @@ const ringStream: Template = {
     const qCard = quaternionFromEuler(num(v.cardTilt) * DEG, 0, num(v.cardRotation) * DEG + lean);
     const quaternion = multiplyQuaternion(qOrient, qCard);
     const shading = cardShading(v, normal.z);
-    const angularRate = (cycles / Math.max(0.001, ctx.duration)) * TAU / count * dir;
+    const angularRate = (slotsPerSecond * TAU) / count;
     return {
       x: point.x + v.offset.x,
       y: point.y + v.offset.y,
@@ -325,10 +357,21 @@ const ringStream: Template = {
 //                        past our ceiling — our Perspective tops out at a 29°
 //                        field of view, so Ring Lightroom 01 lands flatter here
 //                        than there even at 40.
-//    Zoom -> Camera Distance   Divided by their 247, which is the value their
-//                        untouched presets sit at, then clamped to our range.
-//                        Two presets (61.75 and 988) clamp; they are framed by
-//                        Ring Size instead.
+//    Zoom -> Camera Distance   Their Zoom is a percentage and the two are
+//                        reciprocal — Zoom% = 247/distance x 100, checked on
+//                        four presets and exact on all four. That relation is
+//                        true INSIDE their rig and does not transfer at the
+//                        extremes: ours multiplies the fov's fit distance,
+//                        theirs is a number in their own world, and the two
+//                        only agree near their default. Faithfully converting
+//                        their Lightroom 04 to 0.25 put our camera inside its
+//                        own ring and filled the frame with a single card,
+//                        where theirs shows a sparse vertical column. So the
+//                        near-1 presets take the conversion and the extremes
+//                        are framed against photographs of their stage — not
+//                        their thumbnails, which are landscape while our stage
+//                        is 4:5, a mismatch that made a correct conversion
+//                        look wrong.
 //    Loop length -> Speed      Theirs sets clip length for a fixed rotation;
 //                        ours sets rate. speed = 0.3 · 20 / loopDuration,
 //                        rounded to the slider's 0.1 step.
@@ -350,101 +393,101 @@ export const orbit3dVariants: Template[] = [
   // Pure — cards wrapped around a drum, facing outward along the ring.
   variant(ringStream, 'orbit-3d-04', 'Ring Pure 01', {
     count: 18, cardSizePct: 65, cardBend: 10, facing: 'ring', fade: 30,
-    tiltX: -10, ringYaw: -10, ringRoll: 50, perspective: 6, camDistance: 1, speed: 0.3, direction: 'reverse',
-  }),
+    tiltX: -10, ringYaw: -10, ringRoll: 50, perspective: 6, camDistance: 1, speed: 0.3, direction: 'reverse', cornerRadius: 10,
+  }, { id: 'linear' }),
   variant(ringStream, 'orbit-3d-05', 'Ring Pure 02', {
     count: 9, cardSizePct: 85, cardBend: 10, facing: 'ring', fade: 15,
-    tiltX: -10, ringYaw: -10, ringRoll: 50, perspective: 10, camDistance: 1.33, speed: 0.2, direction: 'reverse',
-  }),
+    tiltX: -10, ringYaw: -10, ringRoll: 50, perspective: 10, camDistance: 1.33, speed: 0.2, direction: 'reverse', cornerRadius: 10,
+  }, { id: 'linear' }),
   variant(ringStream, 'orbit-3d-06', 'Ring Pure 03', {
     count: 9, cardSizePct: 85, cardBend: 10, facing: 'ring', fade: 15,
-    tiltX: -7, perspective: 10, camDistance: 1.33, speed: 0.3, direction: 'reverse',
-  }),
+    tiltX: -7, perspective: 10, camDistance: 1.33, speed: 0.3, direction: 'reverse', cornerRadius: 10,
+  }, { id: 'custom', bezier: [0.85, 0.15, 0.15, 0.85] }),
   variant(ringStream, 'orbit-3d-07', 'Ring Pure 04', {
     count: 18, cardSizePct: 85, cardBend: 10, facing: 'ring', fade: 15,
-    tiltX: 0, perspective: 10, camDistance: 1, speed: 0.2, direction: 'reverse',
-  }),
+    tiltX: 0, perspective: 10, camDistance: 1, speed: 0.2, direction: 'reverse', cornerRadius: 10,
+  }, { id: 'custom', bezier: [0.8, 0, 0.2, 1] }),
   variant(ringStream, 'orbit-3d-08', 'Ring Pure 05', {
     count: 12, cardSizePct: 85, cardBend: 10, facing: 'ring', fade: 15, ringOffset: 6,
-    tiltX: 0, perspective: 10, camDistance: 1, speed: 0.2, direction: 'reverse',
-  }),
+    tiltX: 0, perspective: 10, camDistance: 1, speed: 0.2, direction: 'reverse', cornerRadius: 10,
+  }, { id: 'custom', bezier: [0.8, 0, 0.2, 1] }),
   // A drum rolled upright: Ring Roll -90 stands it on end and Card Rotation 90
   // turns each card to match, which is the vertical conveyor of the reference.
   variant(ringStream, 'orbit-3d-09', 'Ring Pure 06', {
     count: 18, cardSizePct: 100, cardBend: 10, facing: 'ring', fade: 15, ringOffset: 6,
     cardRotation: 90, ringRoll: -90, tiltX: 0, cornerRadius: 0,
     perspective: 6, camDistance: 1.54, speed: 0.2, direction: 'forward',
-  }),
+  }, { id: 'linear' }),
 
   // Carousel — the same ring with the cards kept square to the camera.
   variant(ringStream, 'orbit-3d-10', 'Ring Carousel 01', {
     count: 18, cardSizePct: 65, cardBend: 0, facing: 'camera', fade: 30,
-    tiltX: -10, ringYaw: -10, ringRoll: 50, perspective: 6, camDistance: 1, speed: 0.3, direction: 'reverse',
-  }),
+    tiltX: -10, ringYaw: -10, ringRoll: 50, perspective: 6, camDistance: 1, speed: 0.3, direction: 'reverse', cornerRadius: 10,
+  }, { id: 'linear' }),
   variant(ringStream, 'orbit-3d-11', 'Ring Carousel 02', {
     count: 9, cardSizePct: 85, cardBend: 0, facing: 'camera', fade: 15,
-    tiltX: -10, ringYaw: -10, ringRoll: 50, perspective: 10, camDistance: 1.33, speed: 0.3, direction: 'reverse',
-  }),
+    tiltX: -10, ringYaw: -10, ringRoll: 50, perspective: 10, camDistance: 1.33, speed: 0.3, direction: 'reverse', cornerRadius: 10,
+  }, { id: 'linear' }),
   variant(ringStream, 'orbit-3d-12', 'Ring Carousel 03', {
     count: 9, cardSizePct: 85, cardBend: 0, facing: 'camera', fade: 15, scaleContrast: 50,
-    tiltX: 0, ringRoll: 56, perspective: 10, camDistance: 2, speed: 0.4, direction: 'reverse',
-  }),
+    tiltX: 0, ringRoll: 56, perspective: 10, camDistance: 2, speed: 0.4, direction: 'reverse', cornerRadius: 10, hold: 13,
+  }, { id: 'custom', bezier: [0.8, 0, 0.2, 1] }),
   // Overlapping by half a card, stood upright, and pushed hard on depth — the
   // reference's densest Orbit preset and the one our old 100% ceiling could
   // not have expressed at all.
   variant(ringStream, 'orbit-3d-13', 'Ring Carousel 04', {
     count: 20, cardSizePct: 150, cardBend: 0, facing: 'camera', fade: 15, scaleContrast: 200,
-    tiltX: 0, ringRoll: 90, perspective: 15, camDistance: 2.44, speed: 0.2, direction: 'reverse',
-  }),
+    tiltX: 0, ringRoll: 90, perspective: 15, camDistance: 2.44, speed: 0.2, direction: 'reverse', cornerRadius: 10, hold: 20,
+  }, { id: 'custom', bezier: [0.8, 0, 0.2, 1] }),
   variant(ringStream, 'orbit-3d-14', 'Ring Carousel 05', {
     count: 9, cardSizePct: 115, cardBend: 0, facing: 'camera', fade: 15, scaleContrast: 200,
-    tiltX: 0, perspective: 0, camDistance: 2.5, speed: 0.5, direction: 'reverse',
-  }),
+    tiltX: 0, perspective: 0, camDistance: 4, speed: 0.5, direction: 'reverse', cornerRadius: 10, hold: 20,
+  }, { id: 'custom', bezier: [0.8, 0, 0.2, 1] }),
 
   // Lightroom — an airy ring seen almost edge-on, fading on alpha rather than
   // darkening, with the far arc turned so its pictures never read mirrored.
   variant(ringStream, 'orbit-3d-15', 'Ring Lightroom 01', {
     count: 10, cardSizePct: 94, cardBend: 10, facing: 'ring', fade: 0, fadeMode: 'alpha', flip: 'yes',
-    tiltX: 0, perspective: 32, camDistance: 1, speed: 0.3, direction: 'reverse',
-  }),
+    tiltX: 0, perspective: 32, camDistance: 1, speed: 0.3, direction: 'reverse', cornerRadius: 10,
+  }, { id: 'linear' }),
   variant(ringStream, 'orbit-3d-16', 'Ring Lightroom 02', {
     count: 10, cardSizePct: 94, cardBend: 0, facing: 'ring', fade: 0, fadeMode: 'alpha', flip: 'yes',
-    cardRotation: -90, ringRoll: 90, tiltX: 0, perspective: 30, camDistance: 0.91, speed: 0.3, direction: 'reverse',
-  }),
+    cardRotation: -90, ringRoll: 90, tiltX: 0, perspective: 30, camDistance: 0.91, speed: 0.3, direction: 'reverse', cornerRadius: 10,
+  }, { id: 'linear' }),
   variant(ringStream, 'orbit-3d-17', 'Ring Lightroom 03', {
     count: 10, cardSizePct: 94, cardBend: 0, facing: 'ring', fade: 0, fadeMode: 'alpha', flip: 'yes',
-    cardRotation: -90, ringRoll: 51, tiltX: 0, perspective: 30, camDistance: 0.95, speed: 0.3, direction: 'reverse',
-  }),
+    cardRotation: -90, ringRoll: 51, tiltX: 0, perspective: 30, camDistance: 0.95, speed: 0.3, direction: 'reverse', cornerRadius: 10,
+  }, { id: 'custom', bezier: [0.85, 0.15, 0.15, 0.85] }),
   variant(ringStream, 'orbit-3d-18', 'Ring Lightroom 04', {
     count: 9, cardSizePct: 37, cardBend: 0, facing: 'ring', fade: 0, fadeMode: 'alpha', flip: 'yes',
     backface: 'hide', ringOffset: 14, cardRotation: -90, ringRoll: 90, tiltX: 0,
-    perspective: 15, camDistance: 0.5, speed: 0.4, direction: 'reverse',
-  }),
+    perspective: 15, camDistance: 1, speed: 0.4, direction: 'reverse', cornerRadius: 10, hold: 36,
+  }, { id: 'custom', bezier: [0.85, 0.15, 0.15, 0.85] }),
   variant(ringStream, 'orbit-3d-19', 'Ring Lightroom 05', {
     count: 24, cardSizePct: 100, cardBend: 0, facing: 'ring', fade: 0, fadeMode: 'alpha', flip: 'yes',
-    ringOffset: 46, tiltX: 0, cornerRadius: 0, perspective: 40, camDistance: 2.5, speed: 0.2, direction: 'reverse',
-  }),
+    ringOffset: 46, tiltX: 0, cornerRadius: 0, perspective: 40, camDistance: 4, speed: 0.2, direction: 'reverse',
+  }, { id: 'linear' }),
 
   // Bloom — the ring turned toward the camera until it reads as a circle in
   // the frame rather than a wheel in depth.
   variant(ringStream, 'orbit-3d-20', 'Ring Bloom 01', {
     count: 12, cardSizePct: 82, cardBend: 0, facing: 'ring', fade: 25, cardTilt: 15,
-    tiltX: 0, perspective: 12, camDistance: 1.17, speed: 0.3, direction: 'reverse',
-  }),
+    tiltX: 0, perspective: 12, camDistance: 1.17, speed: 0.3, direction: 'reverse', cornerRadius: 10,
+  }, { id: 'custom', bezier: [0.8, 0, 0.2, 1] }),
   variant(ringStream, 'orbit-3d-21', 'Ring Bloom 02', {
     count: 12, cardSizePct: 100, cardBend: 0, facing: 'camera', fade: 0, fadeMode: 'alpha', scaleContrast: 200,
-    tiltX: 0, ringYaw: 85, ringRoll: 90, perspective: 40, camDistance: 2.5, speed: 0.6, direction: 'reverse',
-  }),
+    tiltX: 0, ringYaw: 85, ringRoll: 90, perspective: 40, camDistance: 2.5, speed: 0.6, direction: 'reverse', cornerRadius: 10,
+  }, { id: 'linear' }),
   variant(ringStream, 'orbit-3d-22', 'Ring Bloom 03', {
     count: 12, cardSizePct: 100, cardBend: 0, facing: 'camera', fade: 0, fadeMode: 'alpha', scaleContrast: 200,
-    tiltX: 24, ringYaw: 75, ringRoll: 90, perspective: 40, camDistance: 2.5, speed: 0.6, direction: 'reverse',
-  }),
+    tiltX: 24, ringYaw: 75, ringRoll: 90, perspective: 40, camDistance: 2.5, speed: 0.6, direction: 'reverse', cornerRadius: 10,
+  }, { id: 'linear' }),
   variant(ringStream, 'orbit-3d-23', 'Ring Bloom 04', {
     count: 12, cardSizePct: 100, cardBend: 0, facing: 'camera', fade: 0, fadeMode: 'alpha', cardTilt: -44,
-    tiltX: 97, ringYaw: -40, perspective: 40, camDistance: 1.82, speed: 0.6, direction: 'reverse',
-  }),
+    tiltX: 97, ringYaw: -40, perspective: 40, camDistance: 1.82, speed: 0.6, direction: 'reverse', cornerRadius: 10,
+  }, { id: 'linear' }),
   variant(ringStream, 'orbit-3d-24', 'Ring Bloom 05', {
     count: 16, cardSizePct: 51, cardBend: 0, facing: 'ring', fade: 0, fadeMode: 'alpha',
-    tiltX: 90, perspective: 12, camDistance: 0.84, speed: 0.5, direction: 'reverse',
-  }),
+    tiltX: 90, perspective: 12, camDistance: 0.84, speed: 0.5, direction: 'reverse', cornerRadius: 10,
+  }, { id: 'linear' }),
 ];
