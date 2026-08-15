@@ -16,9 +16,15 @@ export function variant(
   // every variant silently inherited the family's default and the presets all
   // moved alike.
   easing?: EasingSpec,
+  // Anything else on meta that is genuinely per-preset. `cardAspect` is the
+  // case that forced this: the reference picks a card shape per preset — square
+  // for most of its rings, portrait for some, 9:16 for one — and a shape is not
+  // a control, so without this every variant inherited the family's and the
+  // cards came out the wrong proportion in the ones that differ.
+  meta?: Partial<Template['meta']>,
 ): Template {
   return {
-    meta: { ...base.meta, id, name, ...(easing ? { defaultEasing: easing } : {}) },
+    meta: { ...base.meta, id, name, ...(easing ? { defaultEasing: easing } : {}), ...(meta ?? {}) },
     controls: base.controls.map((c) =>
       patch[c.key] !== undefined ? { ...c, default: patch[c.key] } : c
     ),
