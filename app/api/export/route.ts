@@ -10,6 +10,24 @@ export const maxDuration = 300;
 
 const EXPORTS_DIR = path.join(process.cwd(), 'public', 'exports');
 
+// This route needs two things a serverless deploy does not have: a writable
+// filesystem and a native ffmpeg. On Vercel it fails at the first mkdir —
+// /var/task is read-only — so no action here has ever completed there. What it
+// did do was answer anonymous requests, spend an invocation, write attacker
+// bytes into /tmp and report internal paths back in the error body.
+//
+// So it is off unless a deployment opts in. Local development sets
+// ENABLE_EXPORT_API=1 in .env.local; a host that really does have ffmpeg and a
+// writable disk sets it too, having read the note in the README about
+// authenticating and rate-limiting it first.
+const API_ENABLED = process.env.ENABLE_EXPORT_API === '1';
+
+// 404 with an empty body rather than 403: nothing about the disabled route,
+// including whether it exists, needs to reach the caller. Next still answers
+// 405 for a method this file does not export, so the file's presence is not
+// fully hidden — the point is that no action runs and no path leaks.
+const notDeployed = () => new NextResponse(null, { status: 404 });
+
 // sessionId/index/fps feed into filesystem paths and ffmpeg filter strings —
 // accept only the exact shapes we generate ourselves.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -37,6 +55,7 @@ function run(cmd: string, args: string[]): Promise<void> {
 // exports crawl with video cards. An intra-only proxy makes every seek decode
 // exactly one frame. Body: raw video bytes; response: { url } under /exports.
 export async function PUT(req: NextRequest) {
+  if (!API_ENABLED) return notDeployed();
   try {
     const buf = Buffer.from(await req.arrayBuffer());
     if (buf.length === 0) return NextResponse.json({ error: 'empty body' }, { status: 400 });
@@ -67,6 +86,7 @@ export async function PUT(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  if (!API_ENABLED) return notDeployed();
   let body: any;
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'bad json' }, { status: 400 }); }
   const { action } = body;
