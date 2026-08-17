@@ -9,7 +9,8 @@ Module._resolveFilename = function (request, parent, isMain, options) {
   return originalResolve.call(this, request, parent, isMain, options);
 };
 
-const { templateList, catalogTemplateList, templateGroups, getTemplate, defaultsFor, layerCountFor } = require('../templates');
+const { templateList, catalogTemplateList, templateGroups, getTemplate, defaultsFor, easingFor, layerCountFor } = require('../templates');
+const { resolveEasing } = require('../lib/easing');
 const { tiltPointCanvas, tiltNormalCanvas } = require('../lib/tilt3d');
 
 let assertions = 0;
@@ -215,6 +216,112 @@ for (const template of templateList.filter((item) => relevantGroups.has(item.met
       `Card Bend +${sag} widened the card to ${pos.maxAbsX * 2}`);
     assert(Math.abs(neg.maxAbsX - 0.5) < 1e-6,
       `Card Bend -${sag} widened the card to ${neg.maxAbsX * 2}`);
+  }
+}
+
+// Every Layout slider on the Orbit ring has to move the ring.
+//
+// A ring over-determines itself: radius, count and card size are three
+// controls for two degrees of freedom, so a naive guard makes one of them
+// silently lose. Both arrangements were measured on the shipped preset and
+// both shipped a dead slider — capping the card killed Card Size above 16% of
+// its range, and growing the ring instead killed Ring Size and Ring Opening
+// outright. Card Size is now a share of its own angular slot, which removes
+// the contest; this is the assertion that keeps it removed.
+//
+// Deliberately narrow. The same sweep across the whole catalogue accuses 577
+// sliders, almost all falsely: it reads only transform/transform3d at frame 0,
+// so a control the RENDERER reads (Corner Radius), one camera() reads (Camera
+// FOV), or one that only shows over time (Speed) looks inert to it. A sound
+// catalogue-wide version would have to cover those three surfaces too.
+{
+  const ringCtx = {
+    fps: 30, width: 810, height: 1080, duration: 6, totalFrames: 180,
+    ease: (t) => t, easedPhase: (p) => p, cardAspect: 4 / 5,
+  };
+  // Position and size are not the whole pose. Card Rotation only turns the
+  // card in place, so a signature of x/y/z/scale reported it as inert when it
+  // was working — the summary was incomplete, not the control. Orientation
+  // counts, so the quaternion is in.
+  const poseSignature = (tpl, values) => {
+    const count = values.count;
+    const out = [];
+    for (let i = 0; i < count; i++) {
+      const p = tpl.transform3d(0, i, count, values, ringCtx);
+      const q = p.quaternion || { x: 0, y: 0, z: 0, w: 1 };
+      out.push([p.x, p.y, p.z, p.scale, q.x, q.y, q.z, q.w].map((n) => n.toFixed(4)).join(','));
+    }
+    return out.join('|');
+  };
+  for (const id of ['orbit-3d-01', 'orbit-3d-02', 'orbit-3d-03']) {
+    const tpl = getTemplate(id);
+    const base = defaultsFor(id);
+    for (const control of tpl.controls) {
+      if (control.type !== 'slider' || control.section !== 'Layout') continue;
+      // Sweep each control in the style that actually shows it — Ring Width is
+      // showcase-only, so on a stream preset it is hidden, not broken.
+      const shown = control.visibleWhen
+        ? { ...base, [control.visibleWhen.key]: control.visibleWhen.equals }
+        : base;
+      let dead = 0, steps = 0;
+      let previous = poseSignature(tpl, { ...shown, [control.key]: control.min });
+      for (let x = control.min + control.step; x <= control.max + 1e-9; x += control.step) {
+        const next = poseSignature(tpl, { ...shown, [control.key]: x });
+        steps++;
+        if (next === previous) dead++;
+        previous = next;
+      }
+      assert(dead === 0, `${id} ${control.label} is inert for ${dead}/${steps} of its range`);
+    }
+    // The three motion modes must stay distinguishable.
+    //
+    // The ring advances a slot per step, shaped by the curve and optionally
+    // held. Those settings sit in two different places — the curve on
+    // meta.defaultEasing, the hold on a control — and a `variant` that drops
+    // either one leaves a preset that still renders, still loops, still passes
+    // every geometric check, and simply moves like all the others. That has
+    // already happened twice in this family with transform3d and layerCount.
+    //
+    // Measured per frame as how far one card travels:
+    //   linear, no hold   peak/mean 1.00, no still frames — a constant spin
+    //   shaped, no hold   peak/mean 4.30, half the frames near still
+    //   shaped + hold     peak/mean 5.44 and up
+    {
+      const rate = (id) => {
+        const template = getTemplate(id);
+        const values = defaultsFor(id);
+        const ease = resolveEasing(easingFor(id));
+        const motionCtx = {
+          fps: 30, width: 810, height: 1080, duration: 8, totalFrames: 240, ease,
+          easedPhase: (p) => Math.floor(p) + ease(p - Math.floor(p)), cardAspect: 4 / 5,
+        };
+        const steps = [];
+        for (let f = 0; f < 240; f++) {
+          const a = template.transform3d(f, 0, values.count, values, motionCtx);
+          const b = template.transform3d(f + 1, 0, values.count, values, motionCtx);
+          steps.push(Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z));
+        }
+        const peak = Math.max(...steps);
+        const mean = steps.reduce((x, y) => x + y, 0) / steps.length;
+        return { ratio: peak / Math.max(mean, 1e-6), still: steps.filter((d) => d < peak * 0.12).length };
+      };
+      const spin = rate('orbit-3d-04');
+      assert(spin.ratio < 1.05 && spin.still === 0,
+        `Ring Pure 01 should spin at a constant rate, got peak/mean ${spin.ratio.toFixed(2)} with ${spin.still} still frames`);
+      for (const [id, name] of [['orbit-3d-07', 'Ring Pure 04'], ['orbit-3d-12', 'Ring Carousel 03'], ['orbit-3d-18', 'Ring Lightroom 04']]) {
+        const stepped = rate(id);
+        assert(stepped.ratio > 2 && stepped.still > 240 * 0.25,
+          `${name} should step rather than spin, got peak/mean ${stepped.ratio.toFixed(2)} with ${stepped.still} still frames`);
+      }
+    }
+
+    // And the shipped defaults must not overlap: a card has to fit its slot.
+    const count = base.count;
+    const metrics = tpl.transform3d(0, 0, count, base, ringCtx);
+    const radius = Math.hypot(metrics.x, metrics.y, metrics.z);
+    const slot = (Math.PI * 2 * radius) / count;
+    assert(metrics.scale * 340 < slot,
+      `${id} cards are ${metrics.scale * 340} wide in a ${slot} slot — they collide`);
   }
 }
 
