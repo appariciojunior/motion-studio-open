@@ -1,50 +1,96 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useUIStore } from '@/store/useUIStore';
 
-const SEEN_KEY = 'motion-tour-seen';
 const WELCOME_SEEN_KEY = 'motion-welcome-seen';
 
 type Step = { title: string; body: string; selector: string };
+type TourId = 'library' | 'mockup';
+
+interface Tour {
+  seenKey: string;
+  nav: 'library' | 'mockup';
+  path: string;
+  steps: Step[];
+}
 
 // Mirrors app.arqe.ai's first-run spotlight tour, retargeted at this editor's
-// real panels: rail -> templates -> controls -> canvas/assets -> projects ->
-// export. WelcomeDialog already covers the "welcome" beat, so this starts
-// straight at the tools.
-const STEPS: Step[] = [
-  {
-    title: 'Your tools',
-    body: 'Switch between sections here: Projects, Library, Mockup and the experimental modes.',
-    selector: '.rail',
+// own panels. Each section that gets its own walkthrough is one entry here —
+// same engine (measure/placeCard/render), different copy and trigger.
+const TOURS: Record<TourId, Tour> = {
+  // Rail -> templates -> controls -> canvas/assets -> projects -> export.
+  // WelcomeDialog already covers the "welcome" beat, so this starts straight
+  // at the tools.
+  library: {
+    seenKey: 'motion-tour-seen',
+    nav: 'library',
+    path: '/library',
+    steps: [
+      {
+        title: 'Your tools',
+        body: 'Switch between sections here: Projects, Library, Mockup and the experimental modes.',
+        selector: '.rail',
+      },
+      {
+        title: 'Pick a template',
+        body: 'Search or scroll the library to choose a template as your starting point.',
+        selector: '.card.templates',
+      },
+      {
+        title: 'Customise',
+        body: 'Adjust any value, pick an easing and preview everything live.',
+        selector: '.controls',
+      },
+      {
+        title: 'Canvas & content',
+        body: 'Set the canvas size, the background and the logo, and drop in your own images and videos.',
+        selector: '.right',
+      },
+      {
+        title: 'Save your work',
+        body: 'Made changes? Save them to a project — come back here whenever you want to resume.',
+        selector: 'a[href="/projects"]',
+      },
+      {
+        title: 'Export',
+        body: "When you're ready, render your animation as a video or GIF.",
+        selector: '.export-btn',
+      },
+    ],
   },
-  {
-    title: 'Pick a template',
-    body: 'Search or scroll the library to choose a template as your starting point.',
-    selector: '.card.templates',
+  // Devices -> pose/animate -> canvas & background -> export. The rail is
+  // already covered by the library tour, so this stays focused on what's
+  // actually new here.
+  mockup: {
+    seenKey: 'motion-mockup-tour-seen',
+    nav: 'mockup',
+    path: '/mockup',
+    steps: [
+      {
+        title: 'Choose a device',
+        body: 'Pick a real device mesh — phone, tablet or laptop — to mock your content on.',
+        selector: '.card.templates',
+      },
+      {
+        title: 'Pose it',
+        body: "Drop in your screen content, then adjust the device's angle, colour and animation.",
+        selector: '.controls',
+      },
+      {
+        title: 'Canvas & background',
+        body: 'Set the canvas size and the scene behind the device.',
+        selector: '.right',
+      },
+      {
+        title: 'Export',
+        body: "When you're ready, render the mockup as a video or GIF.",
+        selector: '.export-btn',
+      },
+    ],
   },
-  {
-    title: 'Customise',
-    body: 'Adjust any value, pick an easing and preview everything live.',
-    selector: '.controls',
-  },
-  {
-    title: 'Canvas & content',
-    body: 'Set the canvas size, the background and the logo, and drop in your own images and videos.',
-    selector: '.right',
-  },
-  {
-    title: 'Save your work',
-    body: 'Made changes? Save them to a project — come back here whenever you want to resume.',
-    selector: 'a[href="/projects"]',
-  },
-  {
-    title: 'Export',
-    body: "When you're ready, render your animation as a video or GIF.",
-    selector: '.export-btn',
-  },
-];
+};
 
 type Rect = { top: number; left: number; width: number; height: number };
 
@@ -56,18 +102,19 @@ function measure(selector: string): Rect | null {
   return { top: r.top, left: r.left, width: r.width, height: r.height };
 }
 
-function seen(): boolean {
-  try { return !!localStorage.getItem(SEEN_KEY); } catch { return true; }
+function tourSeen(tourId: TourId): boolean {
+  try { return !!localStorage.getItem(TOURS[tourId].seenKey); } catch { return true; }
 }
 
-function markSeen() {
-  try { localStorage.setItem(SEEN_KEY, '1'); } catch { /* storage blocked */ }
+function markSeen(tourId: TourId) {
+  try { localStorage.setItem(TOURS[tourId].seenKey, '1'); } catch { /* storage blocked */ }
 }
 
-// WelcomeDialog gates first entry, so a brand-new visitor must not see the
+// WelcomeDialog gates first entry, so a brand-new visitor must not see a
 // tour's scrim stacked behind it — only a returning visitor (who already
-// closed Welcome in an earlier session) can auto-start on mount. First-timers
-// get the tour from the 'motion-welcome-done' event once they actually agree.
+// closed Welcome in an earlier session) can auto-start one on mount. A
+// first-timer gets the library tour from the 'motion-welcome-done' event
+// once they actually agree, and the mockup tour once they later visit it.
 function welcomeSeen(): boolean {
   try { return !!localStorage.getItem(WELCOME_SEEN_KEY); } catch { return true; }
 }
@@ -134,60 +181,79 @@ function placeCard(rect: Rect | null, viewportW: number, viewportH: number) {
 }
 
 export default function AppTour() {
-  const [open, setOpen] = useState(false);
+  const [activeTour, setActiveTour] = useState<TourId | null>(null);
   const [step, setStep] = useState(0);
   const [rect, setRect] = useState<Rect | null>(null);
   const router = useRouter();
+  const pathname = usePathname();
   const prevPanels = useRef<{ tplCollapsed: boolean; leftCollapsed: boolean; rightCollapsed: boolean } | null>(null);
 
-  const start = () => {
+  const start = (tourId: TourId) => {
+    const tour = TOURS[tourId];
     // Marked the moment it opens, not when it's dismissed — so an interrupted
     // tour (closed tab, mid-way navigation) never re-triggers on the next visit.
-    markSeen();
+    markSeen(tourId);
     const ui = useUIStore.getState();
     prevPanels.current = { tplCollapsed: ui.tplCollapsed, leftCollapsed: ui.leftCollapsed, rightCollapsed: ui.rightCollapsed };
-    // Every step targets a panel that only exists expanded, in the library
-    // section — force both so the spotlight always finds its target.
-    useUIStore.setState({ tplCollapsed: false, leftCollapsed: false, rightCollapsed: false, nav: 'library' });
-    router.push('/library');
+    // Every step targets a panel that only exists expanded, in that section —
+    // force both so the spotlight always finds its target.
+    useUIStore.setState({ tplCollapsed: false, leftCollapsed: false, rightCollapsed: false, nav: tour.nav });
+    router.push(tour.path);
     setRect(null);
     setStep(0);
-    setOpen(true);
+    setActiveTour(tourId);
   };
 
+  // Library tour: first-run, gated by the welcome dialog.
   useEffect(() => {
-    if (!seen() && welcomeSeen()) start();
-    const onWelcomeDone = () => { if (!seen()) start(); };
+    if (!tourSeen('library') && welcomeSeen()) start('library');
+    const onWelcomeDone = () => { if (!tourSeen('library')) start('library'); };
     window.addEventListener('motion-welcome-done', onWelcomeDone);
     return () => window.removeEventListener('motion-welcome-done', onWelcomeDone);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Mockup tour: first time the user actually opens the Mockup section,
+  // whenever that happens to be — not gated to the very first session like
+  // the library tour is. Skipped while another tour is already on screen.
+  useEffect(() => {
+    if (activeTour) return;
+    if (!pathname?.startsWith('/mockup')) return;
+    if (tourSeen('mockup') || !welcomeSeen()) return;
+    start('mockup');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname, activeTour]);
+
   useLayoutEffect(() => {
-    if (!open) return;
-    const selector = STEPS[step].selector;
+    if (!activeTour) return;
+    const selector = TOURS[activeTour].steps[step].selector;
     setRect(measure(selector));
     // The route push / panel expand from start() (or a step change) can land
-    // its DOM a frame or two late — re-measure across a couple of frames
-    // rather than trusting the first synchronous read.
-    const raf1 = requestAnimationFrame(() => {
-      setRect(measure(selector));
-      requestAnimationFrame(() => setRect(measure(selector)));
-    });
+    // its DOM a frame or two late — re-measure a few times rather than
+    // trusting the first synchronous read. Timeouts, not just rAF: a
+    // backgrounded/occluded tab throttles rAF to near-never, and a step that
+    // just navigated (the mockup tour's first step, right after start()'s
+    // router.push) needs a measurement that still lands in that case.
+    const raf1 = requestAnimationFrame(() => setRect(measure(selector)));
+    const t1 = setTimeout(() => setRect(measure(selector)), 50);
+    const t2 = setTimeout(() => setRect(measure(selector)), 200);
     const onResize = () => setRect(measure(selector));
     window.addEventListener('resize', onResize);
     return () => {
       cancelAnimationFrame(raf1);
+      clearTimeout(t1);
+      clearTimeout(t2);
       window.removeEventListener('resize', onResize);
     };
-  }, [open, step]);
+  }, [activeTour, step]);
 
-  const close = () => setOpen(false);
+  const close = () => setActiveTour(null);
 
-  if (!open) return null;
+  if (!activeTour) return null;
 
-  const current = STEPS[step];
-  const isLast = step === STEPS.length - 1;
+  const tour = TOURS[activeTour];
+  const current = tour.steps[step];
+  const isLast = step === tour.steps.length - 1;
   const viewportW = typeof window !== 'undefined' ? window.innerWidth : 1280;
   const viewportH = typeof window !== 'undefined' ? window.innerHeight : 800;
   const { top: cardTop, left: cardLeft } = placeCard(rect, viewportW, viewportH);
@@ -216,7 +282,7 @@ export default function AppTour() {
       )}
 
       <div className="tour-card" style={{ width: CARD_W, transform: `translate(${cardLeft}px, ${cardTop}px)` }}>
-        <span className="tour-step">Step {step + 1} of {STEPS.length}</span>
+        <span className="tour-step">Step {step + 1} of {tour.steps.length}</span>
         <span className="tour-title">{current.title}</span>
         <p className="tour-body">{current.body}</p>
         <div className="tour-actions">
