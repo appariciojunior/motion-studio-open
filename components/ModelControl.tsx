@@ -70,19 +70,28 @@ export default function ModelControl() {
         />
 
 
-        <div className="mc-field-label">Model</div>
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".glb,.gltf,model/gltf-binary"
-          style={{ display: 'none' }}
-          onChange={(e) => onFile(e.target.files?.[0])}
-        />
-        <button className="btn full" onClick={() => fileRef.current?.click()}>
-          {model.name ? `↑ ${model.name}` : 'Upload .glb…'}
-        </button>
-        {model.url && (
-          <button className="mc-reset-model" onClick={() => setModelUrl(null, null)}>Use default model</button>
+        {/* Mockup takes its model from the device picker in the left column, so
+            this block can only ever break that mode: an arbitrary .glb has no
+            "Screen" mesh to composite onto — ScreenContent hides itself for one
+            — and "Use default model" clears the selected device outright. In 3D
+            it is the opposite: bringing your own .glb is the point there. */}
+        {effectId !== 'mockup' && (
+          <>
+            <div className="mc-field-label">Model</div>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".glb,.gltf,model/gltf-binary"
+              style={{ display: 'none' }}
+              onChange={(e) => onFile(e.target.files?.[0])}
+            />
+            <button className="btn full" onClick={() => fileRef.current?.click()}>
+              {model.name ? `↑ ${model.name}` : 'Upload .glb…'}
+            </button>
+            {model.url && (
+              <button className="mc-reset-model" onClick={() => setModelUrl(null, null)}>Use default model</button>
+            )}
+          </>
         )}
       </div>
     </>
