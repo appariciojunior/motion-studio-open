@@ -28,13 +28,44 @@ const pick = (value: any, fallback: string) => (typeof value === 'string' ? valu
 function ringRig(v: Record<string, any>) {
   return { pitch: num(v.tiltX), yaw: num(v.ringYaw), roll: num(v.ringRoll) };
 }
+
+// Roll goes LAST, not first.
+//
+// tiltPointCanvas applies Ry(yaw)*Rx(pitch)*Rz(roll) in a single call, which
+// puts roll innermost. That is the wrong order for a ring, and it only shows
+// when two axes are non-zero at once — which is exactly why sweeping each axis
+// on its own looked correct.
+//
+// A ring lies in the xz plane, so yaw is its OWN axis and has to be invisible.
+// With roll applied first the ring has left that plane by the time yaw acts, so
+// yaw starts prising the ellipse open: the reference's Pure 01 is a single-file
+// arc and ours came out a fat bracelet showing its near and far sides at once,
+// on identical nominal angles. Sweeping tiltX from -10 to 0 barely moved it,
+// which is what pointed at the order rather than at the values.
+//
+// Rolling last preserves the property: yaw stays the ring's own axis, pitch
+// alone decides how edge-on it reads, and roll then turns the finished
+// silhouette in the picture plane. Built from three calls because
+// tiltPointCanvas takes a whole rig at once and other families depend on its
+// internal order.
+function rigPoint(point: { x: number; y: number; z: number }, rig: { pitch: number; yaw: number; roll: number }) {
+  return tiltPointCanvas(
+    tiltPointCanvas(tiltPointCanvas(point, { yaw: rig.yaw }), { pitch: rig.pitch }),
+    { roll: rig.roll },
+  );
+}
+function rigNormal(normal: { x: number; y: number; z: number }, rig: { pitch: number; yaw: number; roll: number }) {
+  return tiltNormalCanvas(rigPoint(normal, rig), {});
+}
+// Same order as rigPoint, or the card faces drift off the plane their own
+// centres sit on.
 function rigQuaternion(rig: { pitch: number; yaw: number; roll: number }) {
   return multiplyQuaternion(
     multiplyQuaternion(
-      quaternionFromEuler(0, rig.yaw * DEG, 0),
+      quaternionFromEuler(0, 0, rig.roll * DEG),
       quaternionFromEuler(rig.pitch * DEG, 0, 0),
     ),
-    quaternionFromEuler(0, 0, rig.roll * DEG),
+    quaternionFromEuler(0, rig.yaw * DEG, 0),
   );
 }
 
@@ -255,8 +286,8 @@ const ringStream: Template = {
     const curveY = v.style === 'bloom' ? (1 - Math.cos(a)) * metrics.radius * (v.curve / 100) * 0.28 : 0;
     const base = { x: Math.sin(a) * width, y: curveY, z: Math.cos(a) * depth };
     const rig = ringRig(v);
-    const point = tiltPointCanvas(base, rig);
-    const normal = tiltNormalCanvas({ x: Math.sin(a), y: 0, z: Math.cos(a) }, rig);
+    const point = rigPoint(base, rig);
+    const normal = rigNormal({ x: Math.sin(a), y: 0, z: Math.cos(a) }, rig);
     const depthN = clamp((normal.z + 1) / 2, 0, 1);
     const lean = velocityLean(dir * v.speed, 1, 3) * DEG;
     // Half a turn more for a card that has turned away, so its front comes back
@@ -319,8 +350,8 @@ const ringStream: Template = {
     const metrics = ringMetrics(v, count, ctx);
     const base = { x: Math.sin(a) * metrics.radius, y: 0, z: Math.cos(a) * metrics.radius };
     const rig = ringRig(v);
-    const p = tiltPointCanvas(base, rig);
-    const normal = tiltNormalCanvas({ x: Math.sin(a), y: 0, z: Math.cos(a) }, rig);
+    const p = rigPoint(base, rig);
+    const normal = rigNormal({ x: Math.sin(a), y: 0, z: Math.cos(a) }, rig);
     const depthN = clamp((normal.z + 1) / 2, 0, 1);
     const shading = cardShading(v, normal.z);
     return {
