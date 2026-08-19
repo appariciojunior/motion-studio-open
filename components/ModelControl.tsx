@@ -4,19 +4,20 @@ import { useRef } from 'react';
 import * as THREE from 'three';
 import { use3DStore, defaultModelFor } from '@/store/use3DStore';
 import { ControlRow } from './Controls';
+import RotationBall from './RotationBall';
 import type { ControlDef } from '@/lib/types';
 
 const scaleDef: ControlDef = { key: 'scale', label: 'Scale', type: 'slider', min: 0.1, max: 4, step: 0.05, default: 1 };
 const offXDef: ControlDef = { key: 'offsetX', label: 'Offset X', type: 'slider', min: -2, max: 2, step: 0.02, default: 0 };
 const offYDef: ControlDef = { key: 'offsetY', label: 'Offset Y', type: 'slider', min: -2, max: 2, step: 0.02, default: 0 };
 const offZDef: ControlDef = { key: 'offsetZ', label: 'Position Z', type: 'slider', min: -2, max: 2, step: 0.02, default: 0 };
-const rotXDef: ControlDef = { key: 'rotX', label: 'X Rotation', type: 'slider', min: -180, max: 180, step: 1, default: 0, unit: '°' };
-const rotYDef: ControlDef = { key: 'rotY', label: 'Y Rotation', type: 'slider', min: -180, max: 180, step: 1, default: 0, unit: '°' };
-const rotZDef: ControlDef = { key: 'rotZ', label: 'Z Rotation', type: 'slider', min: -180, max: 180, step: 1, default: 0, unit: '°' };
-
 // MODEL CONTROL — top block of the right sidebar in 3D mode. Transforms the 3D
 // object (center / scale / rotate) and uploads a .glb to run the effect on.
-const rotPadDef: ControlDef = { key: 'rotationPad', label: 'Rotate', type: 'xypad', max: 180, default: { x: 0, y: 0 } };
+//
+// Rotation used to be three sliders plus an xypad that could only reach two of
+// the three axes. RotationBall carries all three, with typable degrees, so the
+// sliders and the pad would now be a third and fourth way to set the same
+// numbers.
 
 export default function ModelControl() {
   const effectId = use3DStore((s) => s.effectId);
@@ -51,28 +52,22 @@ export default function ModelControl() {
         <ControlRow def={offYDef} value={model.offsetY} onChange={(v) => setModelOffset(model.offsetX, v)} />
 
         {effectId === 'mockup' && (
-          <>
-            <ControlRow def={offZDef} value={model.offsetZ} onChange={(v) => setModelDepth(Number(v))} />
-            <ControlRow def={rotXDef} value={THREE.MathUtils.radToDeg(model.rotX)} onChange={(v) => setModelRotation(THREE.MathUtils.degToRad(Number(v)), model.rotY, model.rotZ)} />
-            <ControlRow def={rotYDef} value={THREE.MathUtils.radToDeg(model.rotY)} onChange={(v) => setModelRotation(model.rotX, THREE.MathUtils.degToRad(Number(v)), model.rotZ)} />
-            <ControlRow def={rotZDef} value={THREE.MathUtils.radToDeg(model.rotZ)} onChange={(v) => setModelRotation(model.rotX, model.rotY, THREE.MathUtils.degToRad(Number(v)))} />
-          </>
+          <ControlRow def={offZDef} value={model.offsetZ} onChange={(v) => setModelDepth(Number(v))} />
         )}
 
-        <div className="mc-rotation-pad">
-          <ControlRow
-            def={rotPadDef}
-            value={{
-              x: Math.round(THREE.MathUtils.radToDeg(model.rotY)),
-              y: Math.round(THREE.MathUtils.radToDeg(model.rotX)),
-            }}
-            onChange={(v) => setModelRotation(
-              THREE.MathUtils.degToRad(Number(v.y)),
-              THREE.MathUtils.degToRad(Number(v.x)),
-              model.rotZ,
-            )}
-          />
-        </div>
+        <div className="mc-field-label">Rotate</div>
+        <RotationBall
+          value={{
+            x: Math.round(THREE.MathUtils.radToDeg(model.rotX)),
+            y: Math.round(THREE.MathUtils.radToDeg(model.rotY)),
+            z: Math.round(THREE.MathUtils.radToDeg(model.rotZ)),
+          }}
+          onChange={(r) => setModelRotation(
+            THREE.MathUtils.degToRad(r.x),
+            THREE.MathUtils.degToRad(r.y),
+            THREE.MathUtils.degToRad(r.z),
+          )}
+        />
 
 
         <div className="mc-field-label">Model</div>
