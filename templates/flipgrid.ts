@@ -5,7 +5,13 @@ import { variant } from './variant';
 const BASE = 340;
 
 // ============================================================
-//  FLIP — a grid of tiles turning on their own axis
+//  RIPPLE — a grid of tiles turning on their own axis
+//
+//  Was this codebase's "Flip" until 2026-08-19: measured against arqé's real
+//  Flip (a split-flap board, see templates/flip.ts) and found to be a
+//  different mechanic entirely — a tile here never changes image, it only
+//  turns in place. Renamed rather than deleted: it is a complete, working
+//  effect in its own right, just not a port of anything called Flip.
 //
 //  Each tile turns about its centre line, staggered so the grid ripples rather
 //  than flipping as a block. The turn is a cosine on `scaleX` (or `scaleY`),
@@ -21,7 +27,7 @@ const BASE = 340;
 // ============================================================
 
 const flipgrid: Template = {
-  meta: { id: 'flip-01', name: 'Flip 01', group: 'Flip', isNew: true, defaultEasing: { id: 'smooth' }, repeatAssets: true },
+  meta: { id: 'ripple-01', name: 'Ripple 01', group: 'Ripple', isNew: true, defaultEasing: { id: 'smooth' }, repeatAssets: true },
 
   controls: [
     { key: 'axis',         label: 'Flip Axis',     type: 'pills',  options: ['y','x'],          default: 'y' }, // y = turns left/right
@@ -101,12 +107,12 @@ const flipgrid: Template = {
   },
 };
 
-export const flipVariants: Template[] = [
+export const rippleVariants: Template[] = [
   flipgrid,
-  variant(flipgrid, 'flip-02', 'Flip 02', {
+  variant(flipgrid, 'ripple-02', 'Ripple 02', {
     axis: 'x', cols: 6, count: 24, cardSize: 120, gapX: 135, gapY: 150, order: 'row', stagger: 0.9, edgeFade: 85, speed: 0.3,
   }),
-  variant(flipgrid, 'flip-03', 'Flip 03', {
+  variant(flipgrid, 'ripple-03', 'Ripple 03', {
     cols: 2, count: 4, cardSize: 300, gapX: 330, gapY: 360, order: 'index', stagger: 0.25, lift: 22, speed: 0.6,
   }),
 ];

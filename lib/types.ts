@@ -20,7 +20,7 @@ export interface ControlDef {
   options?: string[];          // pills / select / toggle
   default: number | string | boolean | { x: number; y: number };
   section?: 'Layout' | 'Motion' | 'Depth' | 'Finish';
-  unit?: '°' | '%' | 'px' | '×' | '';
+  unit?: '°' | '%' | 'px' | '×' | 's' | '';
   description?: string;
   precision?: number;
   visibleWhen?: { key: string; equals?: any; not?: any };
@@ -50,6 +50,18 @@ export interface LayerTransform {
   // build a real wipe: translating a full-frame card slides it, and scaling
   // one distorts it. Omitted means the whole card.
   clip?: { x0: number; y0: number; x1: number; y1: number };
+  // Narrow one edge of the card against its opposite one. This is the
+  // PROJECTIVE half of a 3D fold: the edge that has turned away from the camera
+  // reads shorter, and no affine transform can say so — scale, skew and
+  // rotation all keep opposite edges parallel and equal in length. A pose that
+  // sets this is drawn through a perspective mesh instead of a plain sprite, so
+  // reach for it only when a card is genuinely tilting out of the plane;
+  // everything else stays on the cheaper sprite path.
+  //
+  // `edge` is the edge that shrinks, named in the card's OWN space (before
+  // rotation). `ratio` is its length as a fraction of the opposite edge: 1 is
+  // untapered, 0.75 is a quarter narrower. `clip` is ignored while tapered.
+  taper?: { edge: 'top' | 'bottom' | 'left' | 'right'; ratio: number };
   depth: number;     // sort order; higher = drawn on top / nearer
 }
 
