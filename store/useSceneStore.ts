@@ -75,6 +75,13 @@ function persistPresets(list: CustomPreset[]) {
   try { localStorage.setItem(PRESETS_KEY, JSON.stringify(list)); } catch { /* storage full/blocked */ }
 }
 
+// Hearted templates, in the order they were favourited. Stored as ids rather
+// than templates so a catalogue edit can never resurrect a stale copy of one.
+const FAVORITES_KEY = 'motion-favorite-templates';
+function persistFavorites(ids: string[]) {
+  try { localStorage.setItem(FAVORITES_KEY, JSON.stringify(ids)); } catch { /* storage full/blocked */ }
+}
+
 export interface SceneState {
   // ---- motion tracks: stacked motion layers, drawn in array order ----
   // The source of truth for what animates. See lib/tracks.ts.
@@ -119,6 +126,9 @@ export interface SceneState {
 
   // custom presets (saved template snapshots)
   customPresets: CustomPreset[];
+
+  // template ids the user hearted, oldest first
+  favoriteTemplateIds: string[];
 
   // ---- actions ----
   // These four act on the ACTIVE track (and mirror to the legacy fields), so
@@ -171,6 +181,9 @@ export interface SceneState {
   saveCustomPreset: (name: string) => void;
   applyCustomPreset: (id: string) => void;
   deleteCustomPreset: (id: string) => void;
+
+  loadFavorites: () => void;
+  toggleFavorite: (templateId: string) => void;
 
   addEffect: (effectId: string, values: Record<string, any>) => void;
   removeEffect: (instanceId: string) => void;
@@ -254,8 +267,9 @@ const initDims = dimsFor('3:4');
  * create()) because "new project" has to restore exactly this — one definition,
  * so the app's defaults and a new project's defaults can never disagree.
  *
- * Deliberately excludes `customPresets`: saved presets are a user-wide library,
- * not per-project, so creating a project must not wipe them.
+ * Deliberately excludes `customPresets` and `favoriteTemplateIds`: saved presets
+ * and hearted templates are a user-wide library, not per-project, so creating a
+ * project must not wipe them.
  */
 function initialSceneState() {
   const tracks = [makeTrack(INITIAL_TEMPLATE, 'Layer 1')];
@@ -288,6 +302,7 @@ function initialSceneState() {
 export const useSceneStore = create<SceneState>((set, get) => ({
   ...initialSceneState(),
   customPresets: [],
+  favoriteTemplateIds: [],
 
   setValue: (key, val) =>
     set((s) => withTrack(s, s.activeTrackId, { values: { ...s.values, [key]: val } })),
@@ -309,13 +324,33 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         : id === 'spinner-06' ? 80
         : id.startsWith('hinge-') ? (id === 'hinge-05' ? 15 : 12)
         : id === 'fan-01' ? 24 : 18;
+      // Flicker/Pulse 03-12 (`flicker-r01..r10`) each bake a cards/sec `speed`
+      // computed from the reference's own clip length (see templates/flicker.ts
+      // refFlicker). That rate only lands on the intended lap count when the
+      // scene duration matches the length it was measured at — left at
+      // whatever duration the previous template used, most of them drift off
+      // their authored cadence, and the short ones (3-4s) can end up repeating
+      // extra laps in a still-short clip and read as "too fast". Pin it, same
+      // as Spinner/Sticker/Poster do above.
+      const isPulseRefPreset = id.startsWith('flicker-r');
+      const pulseDuration = id === 'flicker-r02' ? 4 : id === 'flicker-r10' ? 3
+        : (id === 'flicker-r06' || id === 'flicker-r07' || id === 'flicker-r08' || id === 'flicker-r09') ? 8
+        : 6; // flicker-r01, r03, r04, r05
+      // Flip advances one card every `stepTime` seconds, but `loopCycles` snaps
+      // the clip to a whole number of passes through the pool — so the authored
+      // 2s step only survives when the clip is a multiple of count * stepTime.
+      // At the app's default 8s, all six presets would silently run their step
+      // in 1.33s instead. The reference's own clip is 12s for exactly this
+      // reason (6 cards x 2s), so pin it, as Pulse above does.
+      const isFlipPreset = group === 'Flip';
       const referenceCanvas = (isSpinnerPreset || isStickerPreset || isPosterPreset) ? dimsFor('4:5') : null;
       return {
         ...withTrack(s, s.activeTrackId, { templateId: id, values: defaultsFor(id), easing: easingFor(id) }),
         // These reconstructed families have an intrinsic source ratio, just as
         // their reference presets do. Users can still change it afterwards.
         cardShape: group === 'Spinner' ? '4:3' : isStickerPreset ? '1:1' : isPosterPreset ? '4:5' : s.cardShape,
-        duration: isSpinnerPreset ? spinnerDuration : isStickerPreset ? stickerDuration : isPosterPreset ? posterDuration : s.duration,
+        duration: isSpinnerPreset ? spinnerDuration : isStickerPreset ? stickerDuration : isPosterPreset ? posterDuration
+          : isPulseRefPreset ? pulseDuration : isFlipPreset ? 12 : s.duration,
         ...((isSpinnerPreset || isStickerPreset || isPosterPreset) && !s.background.userSet ? {
           background: { ...s.background, source: 'color' as const, color: '#FFFFFF', gradient: false },
         } : {}),
@@ -659,6 +694,31 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       const next = s.customPresets.filter((c) => c.id !== id);
       persistPresets(next);
       return { customPresets: next };
+    }),
+
+  // Same client-only lazy read as the presets above: localStorage is absent
+  // during SSR, and seeding at create() time would desync the first render.
+  loadFavorites: () =>
+    set(() => {
+      if (typeof window === 'undefined') return {};
+      try {
+        const raw = localStorage.getItem(FAVORITES_KEY);
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        // Storage is user-editable and survives across app versions, so accept
+        // only what this build can actually render back.
+        if (!Array.isArray(parsed)) return {};
+        return { favoriteTemplateIds: parsed.filter((id): id is string => typeof id === 'string') };
+      } catch { return {}; }
+    }),
+  toggleFavorite: (templateId) =>
+    set((s) => {
+      const on = s.favoriteTemplateIds.includes(templateId);
+      const next = on
+        ? s.favoriteTemplateIds.filter((id) => id !== templateId)
+        : [...s.favoriteTemplateIds, templateId];
+      persistFavorites(next);
+      return { favoriteTemplateIds: next };
     }),
 
   addEffect: (effectId, values) =>

@@ -539,10 +539,23 @@ export function initMockup(
   // rather than letting a PBR glass layer relight it. Pulling only this surface
   // forward in depth reproduces that composition without touching any light,
   // exposure, finish material, roughness or environment parameter.
+  //
+  // The offset is units-only, deliberately. glPolygonOffset biases depth by
+  // `factor * m + units * r`, where m is the polygon's maximum depth slope in
+  // window space. A factor pulls the surface forward in proportion to how
+  // steeply it is tilted away from the camera, so a value tuned to look right
+  // head-on grows without bound as the device turns: past a certain rotation
+  // the display wins the depth test against the bezel and the near shell,
+  // appears to detach from the body, and shows the inside of the case through
+  // it. Head-on it looked correct, which is why it survived — the fault only
+  // exists at an angle, and rotation used to be hard to reach.
+  //
+  // With factor 0 the bias is a constant few depth units: still enough to beat
+  // the coplanar z-fighting this exists for, and now the same at every angle.
   function configureScreenComposite(mat: THREE.MeshBasicMaterial) {
     mat.polygonOffset = true;
-    mat.polygonOffsetFactor = -4;
-    mat.polygonOffsetUnits = -4;
+    mat.polygonOffsetFactor = 0;
+    mat.polygonOffsetUnits = -2;
     mat.depthTest = true;
     mat.depthWrite = true;
     if (screenMesh) screenMesh.renderOrder = 1000;

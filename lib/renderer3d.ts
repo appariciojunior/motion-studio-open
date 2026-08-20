@@ -6,7 +6,8 @@ import { resolveEasing } from '@/lib/easing';
 import { assetIndexForSlot, clamp, lerp } from '@/lib/motion';
 import { loadImage } from '@/lib/textureLoad';
 import { cardAspectFor, coverCrop, cropKey } from '@/lib/crop';
-import { advanceVideoForExport, createCardVideo, isVideoSource, prepareVideoForSequentialExport } from '@/lib/videoTexture';
+import { advanceVideoForExport, createCardVideo, isVideoSource, prepareVideoForSequentialExport, useVideoProxies } from '@/lib/videoTexture';
+import { BASE_PATH, IS_STATIC_EXPORT } from '@/lib/paths';
 import type { IRenderer } from '@/lib/rendererTypes';
 import type { CameraPose, LayerTransform3D } from '@/lib/types';
 import { resolveTrackTime, trackAssetIndices, type MotionTrack } from '@/lib/tracks';
@@ -263,6 +264,7 @@ export class SceneRenderer3D implements IRenderer {
   private croppedCache = new Map<string, THREE.Texture>(); // cover-crop clones (repeat/offset) of cached bases
   private videoEls = new Map<string, HTMLVideoElement>();   // live <video> per url, for playback + cleanup
   private exportVideoFrames = new Map<string, { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D; texture: THREE.CanvasTexture }>();
+  private restoreVideoSources: (() => void) | null = null; // undo the export proxy swap
   private placeholders = new Map<number, THREE.CanvasTexture>();
   private cornerMaps = new Map<string, THREE.CanvasTexture>();
   private gradientTex: THREE.CanvasTexture | null = null;
@@ -1150,6 +1152,9 @@ export class SceneRenderer3D implements IRenderer {
   // ---- video export sync ---- (see the Pixi renderer for the rationale)
   async beginVideoExport() {
     if (this.videoEls.size === 0) return;
+    if (!IS_STATIC_EXPORT) {
+      this.restoreVideoSources = await useVideoProxies(this.videoEls, BASE_PATH);
+    }
     await Promise.all([...this.videoEls.values()].map(prepareVideoForSequentialExport));
     this.videoEls.forEach((video, url) => {
       if (!video.videoWidth || !video.videoHeight) return;
@@ -1170,6 +1175,8 @@ export class SceneRenderer3D implements IRenderer {
   }
 
   endVideoExport() {
+    this.restoreVideoSources?.();
+    this.restoreVideoSources = null;
     this.croppedCache.forEach((tex) => tex.dispose());
     this.croppedCache.clear();
     this.exportVideoFrames.forEach(({ texture }) => texture.dispose());

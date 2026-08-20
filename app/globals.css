@@ -317,6 +317,10 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
   display: flex; flex-direction: column; gap: 8px; padding: 8px;
   background: var(--card-soft); border: 1px solid var(--line);
   transition: border-color var(--t-fast), background var(--t-fast);
+  /* A template card carries a favourite button, so it is a role=button div
+     rather than a <button> — a nested button is invalid markup. That costs the
+     native affordance, which this restores. */
+  cursor: pointer;
 }
 /* NEW next to a family name in the collapsed accordion list, so the marker is
    visible without opening a group. .tpl-name is flex:1, which would shove the
@@ -343,6 +347,51 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
 .tpl-card:hover { border-color: var(--handle); }
 .tpl-card.active { border-color: var(--fg); }
 .tpl-card.active .tpl-card-label { color: var(--fg); }
+
+/* Favourite heart, mirrored across the thumbnail from the NEW badge so the two
+   markers never overlap. Same z-index of 2: .tpl-thumb isolates its own
+   stacking context, so the renderer's depth numbers cannot climb over either. */
+.tpl-fav {
+  position: absolute; top: 12px; left: 12px; z-index: 2;
+  width: 16px; height: 16px; color: var(--fg-faint);
+  opacity: 0; transition: opacity var(--t-fast), color var(--t-fast);
+  /* No chip behind it — the heart sits straight on the thumbnail, so the shape
+     itself is the whole control. The thumbnail is a live preview of arbitrary
+     cards, so a hairline of the page background keeps the outline readable
+     wherever a card happens to pass under it. */
+  filter: drop-shadow(0 0 1px var(--card));
+}
+/* Hidden until the card is reached — except once it is on, when the heart IS
+   the state and has to stay readable in the grid. */
+.tpl-card:hover .tpl-fav,
+.tpl-card:focus-within .tpl-fav,
+.tpl-fav.on { opacity: 1; }
+.tpl-fav:hover { color: var(--fg); }
+/* "On" speaks the same language as every other selected thing here — the active
+   card border, the segmented thumb, the NEW badge: --fg, not a colour. This
+   palette has no accent, so a red heart would be the only hue in the UI. */
+.tpl-fav.on { color: var(--fg); }
+/* Touch has no hover to reveal it. */
+@media (hover: none) {
+  .tpl-fav { opacity: 1; }
+}
+
+/* Favourites shelf — the accordion row pinned above the families. */
+.tpl-fav-ico { width: 12px; height: 12px; display: grid; place-items: center; color: var(--fg-muted); }
+.tpl-fav-count {
+  margin-left: 6px; margin-right: auto; flex: 0 0 auto;
+  font-size: var(--fs-micro); line-height: 1; font-variant-numeric: tabular-nums;
+  padding: 2px 5px; border-radius: var(--r-chip);
+  background: var(--card-inset); color: var(--fg-muted);
+}
+.tpl-accordion-fav:has(.tpl-fav-count) .tpl-name { flex: 0 1 auto; }
+.tpl-fav-empty {
+  padding: 10px 13px 18px; font-size: var(--fs-meta); line-height: 16.5px; color: var(--fg-faint);
+  animation: tpl-accordion-in 180ms ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tpl-fav-empty { animation: none; }
+}
 .tpl-thumb {
   position: relative; width: 100%; aspect-ratio: 3 / 4;
   background: var(--frame); overflow: hidden;
@@ -1725,27 +1774,51 @@ select.field { padding-right: 26px; }
 
 /* ---- 3D MODEL CONTROL block (right sidebar top, 3D mode) ---- */
 .mc-body { display: flex; flex-direction: column; gap: 12px; }
-.mc-rotation-pad,
-.mc-rotation-pad .ctl-input,
-.mc-rotation-pad .xypad-wrap { width: 100%; }
-.mc-rotation-pad .xypad-wrap {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 7px;
+/* Rotation trackball — the three model rotations in one control.
+   Circles here are the shape of the instrument, not a departure from the square
+   corners: an angle has no edges to square off. Everything else obeys the
+   tokens, and no colour is introduced. */
+.rb-row { display: flex; align-items: center; gap: 10px; }
+.rb-fields { display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto; }
+.rb-field { display: flex; align-items: center; gap: 6px; }
+.rb-axis {
+  width: 10px; flex: 0 0 auto;
+  font-size: var(--fs-meta); color: var(--fg-faint); text-align: center;
 }
-.mc-rotation-pad .xypad {
-  width: 100%;
-  height: auto;
-  aspect-ratio: 16 / 9;
-  min-height: 132px;
+.rb-field input {
+  width: 46px; height: 26px; padding: 0 6px;
+  background: var(--card-inset); border: 1px solid transparent; border-radius: var(--r-ctrl);
+  color: var(--fg-value); font-size: var(--fs-meta); font-variant-numeric: tabular-nums;
+  text-align: center; -moz-appearance: textfield; appearance: textfield;
+  transition: border-color var(--t-fast);
 }
-.mc-rotation-pad .xypad-dot {
-  width: 14px;
-  height: 14px;
-  border: 3px solid var(--card);
-  box-shadow: 0 0 0 1px var(--handle);
+.rb-field input::-webkit-outer-spin-button,
+.rb-field input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.rb-field input:focus-visible { border-color: var(--fg); outline: none; }
+
+.rb-ball { flex: 0 0 auto; touch-action: none; cursor: grab; }
+.rb-ball.dragging { cursor: grabbing; }
+.rb-ring { fill: none; stroke: var(--line); stroke-width: 1.5; }
+.rb-disc { fill: var(--card-inset); stroke: var(--line); stroke-width: 1; transition: fill var(--t-fast); }
+.rb-disc.on { fill: var(--card-thumb); }
+/* Wireframe: the near half solid, the far half dimmed. That contrast is the
+   only depth cue an orthographic projection gets — without it the three circles
+   read as a flat spirograph rather than a sphere being turned. */
+.rb-wire-front { fill: none; stroke: var(--fg-muted); stroke-width: 1.2; }
+.rb-wire-back { fill: none; stroke: var(--line); stroke-width: 1; }
+/* Where the model's +Z points; drawn only while it faces the viewer. */
+.rb-face { fill: var(--fg); }
+/* The ring handle reads as the lighter of the two, so the disc dot stays the
+   thing the eye lands on — X and Y are what most poses actually move. */
+.rb-handle { fill: var(--handle); transition: fill var(--t-fast); }
+.rb-handle.on,
+.rb-ball:hover .rb-handle { fill: var(--fg); }
+.rb-reset { flex: 0 0 auto; padding: 0 12px; }
+.rb-reset:disabled { opacity: 0.4; cursor: default; }
+@media (prefers-reduced-motion: reduce) {
+  .rb-disc, .rb-handle, .rb-field input { transition: none; }
 }
-.mc-rotation-pad .xypad-vals { text-align: center; }
+
 .mc-reset-model { background: none; border: 0; color: var(--fg-muted); font-size: var(--fs-label); cursor: pointer; padding: 0; text-align: left; }
 .mc-reset-model:hover { color: var(--fg); }
 

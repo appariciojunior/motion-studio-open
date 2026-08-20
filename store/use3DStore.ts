@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { idbDelete, idbGet, idbPut } from '@/lib/assetDb';
 
 // Model transform — cross-effect (applies to the 3D object itself, not the
 // ASCII look). The effect reads this live and drives a pivot around the model.
@@ -43,7 +44,10 @@ export interface ThreeDState {
   // Keyed by screen SLOT ('phone' | 'laptop' | 'tablet' | 'display'), not by
   // device: one phone screenshot then serves every phone, and switching device
   // keeps the right artwork on screen instead of clearing it.
-  screenMedia: Record<string, { url: string; kind: 'image' | 'video' } | null>;
+  // `id` is what survives a save: a blob: url is dead on the next load, so the
+  // bytes go to IndexedDB under this id and the url is rebuilt from them (the
+  // same contract useSceneStore uses for uploaded assets).
+  screenMedia: Record<string, ScreenMedia | null>;
   // How that media is laid into the device's screen. `width` is the one a site
   // screenshot needs — fit the full width and let the tall page overflow, then
   // scroll it with screenOffsetY — which a plain centre-crop `cover` can't do.
@@ -72,8 +76,14 @@ export interface ThreeDState {
   setMockupSpeed: (v: number) => void;
   setMockupEasing: (v: 'preset' | 'smooth' | 'linear') => void;
   setMockupMotionStrength: (v: number) => void;
-  setScreenMedia: (slot: string, media: { url: string; kind: 'image' | 'video' } | null) => void;
+  // Pass `blob` when the media came from a file picker; its bytes are stashed so
+  // the project can restore the url after a reload.
+  setScreenMedia: (slot: string, media: ScreenMediaInput | null) => void;
   clearScreenMedia: () => void;
+  // Apply a persisted 3D slice (see lib/three3dPersist).
+  hydrate3D: (partial: Partial<ThreeDState>) => void;
+  // Rebuild screen-media urls from IndexedDB after hydrate3D.
+  rehydrateScreenMedia: () => Promise<void>;
   setScreenFit: (fit: 'cover' | 'width' | 'contain') => void;
   setScreenZoom: (v: number) => void;
   setScreenOffset: (x: number, y: number) => void;
@@ -98,6 +108,19 @@ export interface ThreeDState {
 // A part's fill: solid, or a two-colour gradient (linear along Y bottom→top,
 // or radial centre→edge). c1 = start/centre, c2 = end/edge.
 export interface FillSpec { type: 'solid' | 'linear' | 'radial'; c1: string; c2: string; }
+
+// Artwork on a device's screen. `url` is live-session only — a blob: string is
+// dead after a reload — so `id` keys the bytes in IndexedDB and the url is
+// rebuilt from them when a project opens.
+export interface ScreenMedia { id: string; url: string; kind: 'image' | 'video' }
+export type ScreenMediaInput = Omit<ScreenMedia, 'id'> & { id?: string; blob?: Blob };
+
+// Counter-based rather than random: Math.random is unavailable in the template
+// verification harness, and ids only need to be unique within this origin's
+// IndexedDB. The timestamp prefix keeps them unique across sessions, where a
+// bare counter would restart at 1 and collide with a saved project's rows.
+let _screenIdc = 0;
+const nid = (prefix: string) => `${prefix}_${Date.now().toString(36)}_${++_screenIdc}`;
 
 const DEF_FILL: FillSpec = { type: 'solid', c1: '#cccccc', c2: '#ffffff' };
 
@@ -233,8 +256,54 @@ export const use3DStore = create<ThreeDState>((set) => ({
   setMockupSpeed: (v) => set({ mockupSpeed: v }),
   setMockupEasing: (v) => set({ mockupEasing: v }),
   setMockupMotionStrength: (v) => set({ mockupMotionStrength: v }),
-  setScreenMedia: (slot, media) => set((s) => ({ screenMedia: { ...s.screenMedia, [slot]: media } })),
-  clearScreenMedia: () => set({ screenMedia: {} }),
+  setScreenMedia: (slot, media) => {
+    const prev = use3DStore.getState().screenMedia[slot];
+    if (media === null) {
+      // Drop the replaced bytes: nothing references them once the slot is empty,
+      // and IndexedDB has no eviction of its own.
+      if (prev?.id) idbDelete(prev.id).catch(() => {});
+      set((s) => ({ screenMedia: { ...s.screenMedia, [slot]: null } }));
+      return;
+    }
+    // Reuse the slot's existing id when replacing, so a project that already
+    // points at it keeps resolving instead of orphaning a row per swap.
+    const id = media.id ?? prev?.id ?? nid('screen');
+    if (media.blob) idbPut(id, media.blob).catch(() => { /* quota — this one won't persist */ });
+    set((s) => ({ screenMedia: { ...s.screenMedia, [slot]: { id, url: media.url, kind: media.kind } } }));
+  },
+  clearScreenMedia: () => {
+    for (const m of Object.values(use3DStore.getState().screenMedia)) {
+      if (m?.id) idbDelete(m.id).catch(() => {});
+    }
+    set({ screenMedia: {} });
+  },
+
+  // Applied when a project opens. `parts` and `selectedPart` are deliberately
+  // not restored: the effect reports its own colourable groups on load, and a
+  // click-selection is session state, not a document.
+  hydrate3D: (partial) => set((s) => ({ ...s, ...partial, parts: [], selectedPart: null })),
+
+  // Screen media saves an id, never a blob: url. Rebuild the urls from the
+  // stored bytes; a slot whose bytes are gone (quota eviction, cleared storage)
+  // keeps an empty url, which the compositor treats as "no media" rather than
+  // failing to load.
+  rehydrateScreenMedia: async () => {
+    const entries = Object.entries(use3DStore.getState().screenMedia)
+      .filter((e): e is [string, ScreenMedia] => !!e[1]?.id && !e[1]!.url);
+    if (entries.length === 0) return;
+    const resolved = await Promise.all(entries.map(async ([slot, m]) => {
+      const blob = await idbGet(m.id).catch(() => undefined);
+      return [slot, blob ? URL.createObjectURL(blob) : ''] as const;
+    }));
+    set((s) => {
+      const next = { ...s.screenMedia };
+      for (const [slot, url] of resolved) {
+        const m = next[slot];
+        if (m && url) next[slot] = { ...m, url };
+      }
+      return { screenMedia: next };
+    });
+  },
   // Switching to `width` also jumps to the top of the page: fitting a tall site
   // screenshot by width and then leaving it centred hides the header, which is
   // the one part that shot is usually chosen for.
