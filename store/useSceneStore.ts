@@ -319,11 +319,20 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       const posterDuration = id === 'poster-04' || id === 'poster-05' ? 13
         : id === 'poster-06' ? 22 : 21;
       const stickerDuration = id === 'stickers-01' ? 36 : 13;
-      const spinnerDuration = id === 'spinner-03' || id === 'spinner-05' ? 64
+      // The reference authors a Duration per spinner preset, and what that
+      // really pins is the SECONDS PER CARD: its belt advances one slot per
+      // step, so the cadence is duration/count and the same 18s clip is a third
+      // slower on a 6-card belt than on a 9-card one. These are its authored
+      // numbers — 2s per card everywhere except the Hinge subfamily, which runs
+      // 1.33s (1s at count 12, 1.25s on Hinge 05).
+      const spinnerDuration = id === 'spinner-06' ? 80
+        : id === 'spinner-03' || id === 'spinner-05' ? 64
         : id === 'spinner-04' ? 36
-        : id === 'spinner-06' ? 80
-        : id.startsWith('hinge-') ? (id === 'hinge-05' ? 15 : 12)
-        : id === 'fan-01' ? 24 : 18;
+        : id === 'fan-01' ? 24
+        : id === 'fan-03' ? 18
+        : id === 'hinge-05' ? 15
+        // Hinge 01-04 at count 9/12, and Spinner 01/02 + Fan 02 at count 6.
+        : 12;
       // Flicker/Pulse 03-12 (`flicker-r01..r10`) each bake a cards/sec `speed`
       // computed from the reference's own clip length (see templates/flicker.ts
       // refFlicker). That rate only lands on the intended lap count when the
@@ -348,7 +357,12 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         ...withTrack(s, s.activeTrackId, { templateId: id, values: defaultsFor(id), easing: easingFor(id) }),
         // These reconstructed families have an intrinsic source ratio, just as
         // their reference presets do. Users can still change it afterwards.
-        cardShape: group === 'Spinner' ? '4:3' : isStickerPreset ? '1:1' : isPosterPreset ? '4:5' : s.cardShape,
+        // Spinner takes 'auto' rather than one ratio for the whole family: the
+        // reference authors the card shape PER PRESET — square for Spinner 01-05
+        // and every Hinge, 4:3 for Spinner 06, 4:5 for all three Fans — and
+        // 'auto' is what defers to each template's own declared cardAspect.
+        // Pinning the family to 4:3 made every square preset a wide slab.
+        cardShape: group === 'Spinner' ? 'auto' : isStickerPreset ? '1:1' : isPosterPreset ? '4:5' : s.cardShape,
         duration: isSpinnerPreset ? spinnerDuration : isStickerPreset ? stickerDuration : isPosterPreset ? posterDuration
           : isPulseRefPreset ? pulseDuration : isFlipPreset ? 12 : s.duration,
         ...((isSpinnerPreset || isStickerPreset || isPosterPreset) && !s.background.userSet ? {

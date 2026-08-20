@@ -683,6 +683,282 @@ for (const id of ['wipe-01', 'wipe-02', 'wipe-03']) {
   check(worst === 0, t.meta.name, `drifted from the transform it shipped with by ${worst.toExponential(1)} on a portrait canvas`);
 }
 
+// ============================================================
+//  Spinner — the reference's Spinner / Hinge / Fan
+//
+//  Not fitted: READ. scripts/_scene_spinner.cjs installs three's devtools hook
+//  before the reference's page loads, wraps its renderer's render() to catch the
+//  camera, and walks the live scene for every card's world matrix. The tables
+//  below are those captures verbatim — a camera (fov, z, near, far) and four
+//  cards' full world matrices per preset — converted to this app's px by nothing
+//  more than the unit scale.
+//
+//  This is the check that can see what a picture cannot. Sweeping the
+//  reference's Perspective from 125 to 2000 moves its measured bounding box by
+//  under half a percent, because the cards that balloon under a wide lens are
+//  the ones passing edge-on and an edge-on card rasterizes to nothing — so a
+//  camera can be wrong by a factor of six and still photograph correctly. Two
+//  pixel probes disagreed with the arithmetic here and the scene graph settled
+//  it.
+//
+//  What each row pins down that a looser check would miss:
+//    Spinner 01  the belt's radius is HALF the card plus the orbit radius
+//                (300 + 35), and each card's own turn equals its ring angle
+//    Spinner 03  the rig is a THREE Euler XYZ on a group above the cards, so
+//                with three axes live (-60/60/90) the order is not negotiable
+//    Hinge 01    hinge offsets the card along its own normal — the centre orbits
+//                hypot(300, 282) + 35, not 300 + 35
+//    Fan 03      the vertical fold's opposite handedness, a 4:5 card (the aspect
+//                moves the WIDTH only), and Offset panning the CAMERA by a share
+//                of the frame's half-HEIGHT on both axes
+// ============================================================
+const SPINNER_SCENES = [
+  {
+    name: 'Spinner 01', count: 9, aspect: 1,
+    values: { count: 9, axis: 'horizontal', hinge: 0, diameter: 70, zoom: 85, perspective: 125 },
+    camera: { fov: 32.6674, z: 7045.361, x: 0, y: 0, near: 70.454, far: 9595.4 },
+    spin: 1.32063,
+    cards: [
+      [1, 0, 0, 0, 0, 0.248, 0.969, 0, 0, -0.969, 0.248, 0, 0, 82.934, 324.572, 1],
+      [1, 0, 0, 0, 0, -0.433, 0.901, 0, 0, -0.901, -0.433, 0, 0, -145.1, 301.945, 1],
+      [1, 0, 0, 0, 0, -0.911, 0.412, 0, 0, -0.412, -0.911, 0, 0, -305.24, 138.035, 1],
+      [1, 0, 0, 0, 0, -0.963, -0.27, 0, 0, 0.27, -0.963, 0, 0, -322.554, -90.464, 1],
+    ],
+  },
+  {
+    name: 'Spinner 03', count: 32, aspect: 1,
+    values: { count: 32, axis: 'vertical', hinge: 0, diameter: 500, zoom: 50, perspective: 1500, rotateX: -60, rotateY: 60, rotateZ: 90 },
+    camera: { fov: 137.2401, z: 1374.136, x: 0, y: 0, near: 13.741, far: 4784.1 },
+    spin: 0.35507,
+    cards: [
+      [-0.301, 0.318, -0.899, 0, -0.5, 0.75, 0.433, 0, 0.812, 0.58, -0.067, 0, -165.591, 175.051, -494.405, 1],
+      [-0.454, 0.199, -0.869, 0, -0.5, 0.75, 0.433, 0, 0.738, 0.631, -0.241, 0, -249.538, 109.472, -477.752, 1],
+      [-0.589, 0.072, -0.805, 0, -0.5, 0.75, 0.433, 0, 0.635, 0.657, -0.406, 0, -323.894, 39.686, -442.739, 1],
+      [-0.701, -0.058, -0.71, 0, -0.5, 0.75, 0.433, 0, 0.508, 0.659, -0.555, 0, -385.804, -31.625, -390.711, 1],
+    ],
+  },
+  {
+    name: 'Hinge 01', count: 9, aspect: 1,
+    values: { count: 9, axis: 'horizontal', hinge: 282, diameter: 70, zoom: 75, perspective: 125, rotateX: -45, rotateY: -45 },
+    camera: { fov: 32.6674, z: 7984.742, x: 0, y: 0, near: 79.847, far: 11662.7 },
+    spin: 2.18166,
+    cards: [
+      [0.707, 0.5, 0.5, 0, -0.579, 0.004, 0.815, 0, 0.406, -0.866, 0.292, 0, -64.444, -263.676, 354.813, 1],
+      [0.707, 0.5, 0.5, 0, -0.183, -0.554, 0.812, 0, 0.683, -0.666, -0.3, 0, 149.412, -383.969, 172.669, 1],
+      [0.707, 0.5, 0.5, 0, 0.299, -0.852, 0.43, 0, 0.641, -0.154, -0.752, 0, 293.356, -324.598, -90.269, 1],
+      [0.707, 0.5, 0.5, 0, 0.641, -0.752, -0.154, 0, 0.299, 0.43, -0.852, 0, 300.035, -113.345, -310.969, 1],
+    ],
+  },
+  {
+    name: 'Fan 03', count: 9, aspect: 4 / 5,
+    values: { count: 9, axis: 'vertical', hinge: 0, diameter: 440, zoom: 127, perspective: 1000, rotateX: -26, rotateY: 120, offsetX: 34, offsetY: 5, fade: 13, backface: 'hide' },
+    camera: { fov: 120, z: 797.834, x: 469.843, y: 69.094, near: 7.978, far: 4087.8 },
+    spin: 1.71042,
+    cards: [
+      [-0.788, 0.27, 0.553, 0, 0, 0.899, -0.438, 0, -0.616, -0.345, -0.708, 0, -362.485, 124.149, 254.542, 1],
+      [-0.208, 0.429, 0.879, 0, 0, 0.899, -0.438, 0, -0.978, -0.091, -0.187, 0, -95.639, 197.244, 404.41, 1],
+      [0.469, 0.387, 0.794, 0, 0, 0.899, -0.438, 0, -0.883, 0.206, 0.422, 0, 215.957, 178.047, 365.05, 1],
+      [0.927, 0.164, 0.337, 0, 0, 0.899, -0.438, 0, -0.375, 0.406, 0.833, 0, 426.505, 75.54, 154.879, 1],
+    ],
+  },
+];
+
+// The reference's own frame half-height at z=0 is planeSize/200 * distance, and
+// our Zoom is that distance as a percentage of its default 585 — so one
+// reference unit is this many px. Derived here independently of the template so
+// a change to either side has to be argued, not inherited.
+const SPINNER_UNIT = (height, zoom) => height / 2 / ((600 / 200) * ((585 * 100) / zoom));
+
+{
+  const spinnerTemplate = byName('Spinner 01');
+  const H = 1080, W = 810;
+  for (const scene of SPINNER_SCENES) {
+    const t = byName(scene.name);
+    if (!t || !spinnerTemplate) continue;
+    const v = { ...defaultsFor(t.meta.id), ...scene.values };
+    const ctx = makeCtx(t.meta.id, { width: W, height: H, cardAspect: scene.aspect });
+    const k = SPINNER_UNIT(H, v.zoom);
+
+    // --- camera: four numbers, all read off the live one ---
+    const pose = t.camera(v, ctx);
+    near(pose.fov, scene.camera.fov, 0.01, scene.name, 'camera fov');
+    near(pose.position.z / k, scene.camera.z, 1.5, scene.name, 'camera z in reference units');
+    near(pose.position.x / k, scene.camera.x, 1.5, scene.name, 'camera pan x (Offset X is a share of the half-HEIGHT)');
+    near(-pose.position.y / k, scene.camera.y, 1.5, scene.name, 'camera pan y');
+    // The lookAt has to travel with the eye, or the pan turns into a tilt and
+    // the belt keystones instead of sliding.
+    near(pose.target.x / k, scene.camera.x, 1.5, scene.name, 'camera target x');
+    near(-pose.target.y / k, scene.camera.y, 1.5, scene.name, 'camera target y');
+    near(pose.near / k, scene.camera.near, 1.5, scene.name, 'camera near');
+    near(pose.far / k, scene.camera.far, 4, scene.name, 'camera far');
+
+    // --- cards: the phase is recovered from the capture, then every card's
+    // world matrix has to land on the reference's. With a linear curve the belt
+    // turns TAU per loop, so the frame that reproduces a captured spin is
+    // exact rather than searched for.
+    const frame = (ctx.totalFrames * scene.spin) / (Math.PI * 2);
+    const count = scene.count;
+    let worstPos = 0, worstRot = 0;
+    for (let i = 0; i < scene.cards.length; i++) {
+      const m = scene.cards[i];
+      const p = t.transform3d(frame, i, count, v, ctx);
+      // Our y is canvas-down and the reference's is three's y-up; the
+      // quaternion is handed over untouched, so that negation is the whole
+      // conversion — and if it were the only half applied, the columns below
+      // would be the ones to catch it.
+      worstPos = Math.max(worstPos,
+        Math.abs(p.x / k - m[12]),
+        Math.abs(-p.y / k - m[13]),
+        Math.abs(p.z / k - m[14]));
+      const q = p.quaternion;
+      const col = (bx, by, bz) => {
+        const tx = 2 * (q.y * bz - q.z * by);
+        const ty = 2 * (q.z * bx - q.x * bz);
+        const tz = 2 * (q.x * by - q.y * bx);
+        return [
+          bx + q.w * tx + (q.y * tz - q.z * ty),
+          by + q.w * ty + (q.z * tx - q.x * tz),
+          bz + q.w * tz + (q.x * ty - q.y * tx),
+        ];
+      };
+      const cols = [col(1, 0, 0), col(0, 1, 0), col(0, 0, 1)];
+      for (let c = 0; c < 3; c++) {
+        for (let r = 0; r < 3; r++) {
+          worstRot = Math.max(worstRot, Math.abs(cols[c][r] - m[c * 4 + r]));
+        }
+      }
+    }
+    // The captures carry 2 and 3 decimals; anything structural is orders of
+    // magnitude coarser than that.
+    check(worstPos < 1.2, scene.name, `card centres are ${worstPos.toFixed(2)} reference units off the live scene`);
+    check(worstRot < 0.01, scene.name, `card orientations are ${worstRot.toFixed(4)} off the live scene's world matrices`);
+  }
+
+  // The card is planeSize TALL whatever its shape — the reference's aspect only
+  // moves the width. Checked through the pose the renderer actually consumes:
+  // it normalizes a sprite's LONG edge to SPRITE_BASE, so a portrait card and a
+  // landscape one reach that height by different routes.
+  for (const aspect of [1, 4 / 5, 4 / 3]) {
+    const v = defaultsFor('spinner-01');
+    const ctx = makeCtx('spinner-01', { width: W, height: H, cardAspect: aspect });
+    const p = spinnerTemplate.transform3d(0, 0, v.count, v, ctx);
+    const long = p.scale * SPRITE_BASE;
+    const height = aspect >= 1 ? long / aspect : long;
+    const width = aspect >= 1 ? long : long * aspect;
+    near(height, 600 * SPINNER_UNIT(H, v.zoom), 0.01, `Spinner card ${aspect.toFixed(2)}`, 'card height in px');
+    near(width, 600 * aspect * SPINNER_UNIT(H, v.zoom), 0.01, `Spinner card ${aspect.toFixed(2)}`, 'card width in px');
+  }
+
+  // Every authored preset, as the reference's own table has it. Zoom is its
+  // `distance` read back as a percentage (585/distance), which is exact for all
+  // fourteen; Diameter is twice its orbitRadius, the way its own panel shows it.
+  const SPINNER_PRESETS = {
+    'Spinner 01': { count: 6, axis: 'horizontal', hinge: 0, diameter: 70, zoom: 85, perspective: 125, rotateX: 0, rotateY: 0, rotateZ: 0, offsetX: 0, offsetY: 0, motionRotation: 'static', direction: 'forward', fanRotation: 0, fade: 0 },
+    'Spinner 02': { count: 6, axis: 'horizontal', hinge: 0, diameter: 70, zoom: 85, perspective: 125, motionRotation: 'rotation' },
+    'Spinner 03': { count: 32, axis: 'vertical', hinge: 0, diameter: 500, zoom: 50, perspective: 1500, rotateX: -60, rotateY: 60, rotateZ: 90 },
+    'Spinner 04': { count: 18, axis: 'vertical', hinge: 0, diameter: 70, zoom: 85, perspective: 840, rotateX: -18, rotateY: -4, offsetY: 7 },
+    'Spinner 05': { count: 32, axis: 'horizontal', hinge: 0, diameter: 70, zoom: 85, perspective: 1000 },
+    'Spinner 06': { count: 40, axis: 'vertical', hinge: 0, diameter: 1000, zoom: 39, perspective: 125, rotateX: 20 },
+    'Hinge 01': { count: 9, axis: 'horizontal', hinge: 282, diameter: 70, zoom: 75, perspective: 125, rotateX: -45, rotateY: -45 },
+    'Hinge 02': { count: 9, axis: 'horizontal', hinge: 282, diameter: 70, zoom: 75, perspective: 125, rotateX: -45, rotateY: 0 },
+    'Hinge 03': { count: 9, axis: 'horizontal', hinge: 282, diameter: 70, zoom: 75, perspective: 125, rotateX: 0, rotateY: -30 },
+    'Hinge 04': { count: 12, axis: 'horizontal', hinge: 282, diameter: 70, zoom: 75, perspective: 1345, rotateY: -15, offsetX: -5 },
+    'Hinge 05': { count: 12, axis: 'horizontal', hinge: 280, diameter: 70, zoom: 75, perspective: 1000, rotateX: -115, rotateY: -35, rotateZ: -15 },
+    'Fan 01': { count: 12, axis: 'vertical', hinge: 75, diameter: 70, zoom: 125, perspective: 250, rotateY: -60, rotateZ: -180, offsetX: -16, fanRotation: 180, direction: 'reverse', backface: 'hide' },
+    'Fan 02': { count: 6, axis: 'horizontal', hinge: 0, diameter: 50, zoom: 180, perspective: 150, offsetY: 34 },
+    'Fan 03': { count: 9, axis: 'vertical', hinge: 0, diameter: 440, zoom: 127, perspective: 1000, rotateX: -26, rotateY: 120, offsetX: 34, offsetY: 5, fade: 13, backface: 'hide' },
+  };
+  // Its card shape is per preset too, and a shape is not a control.
+  const SPINNER_SHAPES = { 'Spinner 06': 4 / 3, 'Fan 01': 4 / 5, 'Fan 02': 4 / 5, 'Fan 03': 4 / 5 };
+  for (const [name, authored] of Object.entries(SPINNER_PRESETS)) {
+    const t = byName(name);
+    if (!t) continue;
+    const v = defaultsFor(t.meta.id);
+    for (const [key, want] of Object.entries(authored)) {
+      check(v[key] === want, name, `${key} is ${JSON.stringify(v[key])}, the reference authors ${JSON.stringify(want)}`);
+    }
+    const shape = SPINNER_SHAPES[name] ?? 1;
+    check(Math.abs((t.meta.cardAspect ?? 1) - shape) < 1e-9, name,
+      `card shape is ${t.meta.cardAspect}, the reference authors ${shape.toFixed(3)}`);
+  }
+
+  // Loop closure, on every preset: the belt turns a whole number of slots per
+  // clip, so frame 0 and frame N have to be the same picture.
+  for (const t of templateList.filter((x) => x.meta.group === 'Spinner')) {
+    const v = defaultsFor(t.meta.id);
+    const aspect = t.meta.cardAspect === 'canvas' ? W / H : (t.meta.cardAspect ?? 1);
+    const ctx = makeCtx(t.meta.id, { width: W, height: H, cardAspect: aspect });
+    check(loopDrift(t, v, ctx) < 1e-6, t.meta.name, 'does not return to frame 0 at the loop point');
+    let finite = true;
+    for (let f = 0; f <= ctx.totalFrames; f += 7) {
+      for (let i = 0; i < v.count; i++) {
+        const p = t.transform3d(f, i, v.count, v, ctx);
+        if (![p.x, p.y, p.z, p.scale, p.alpha, p.quaternion.x, p.quaternion.y, p.quaternion.z, p.quaternion.w]
+          .every((n) => Number.isFinite(n))) finite = false;
+      }
+    }
+    check(finite, t.meta.name, 'emits a non-finite pose');
+  }
+
+  // The 2D pose has to BE the projection of the 3D one.
+  //
+  // Spinner is one of the few families whose `transform` does not describe its
+  // own motion — it projects the 3D pose the stage renders, because the sprite
+  // paths (catalogue thumbnails, Board, the web export) have no camera. Nothing
+  // generic can see that projection go wrong: every suite here asks whether one
+  // context is well-formed, and both contexts stayed internally consistent
+  // while disagreeing with each other. What shipped had the card's short axis
+  // up to 90 degrees off its real direction (1.91 on a unit axis, Spinner 02 at
+  // frame 199) because the second column's angle was read off the FIRST
+  // projected axis and the orientation patched with a negative scaleY.
+  //
+  // pixi is what defines the four fields (Container._updateSkew):
+  //   (a, b) = ( cos(rotation + skewY), sin(rotation + skewY)) * scaleX
+  //   (c, d) = (-sin(rotation - skewX), cos(rotation - skewX)) * scaleY
+  // so the columns must come out along the card's own two axes, turned by its
+  // quaternion and projected. The scales carry the foreshortening, which is why
+  // the DIRECTIONS are what get compared here.
+  for (const t of templateList.filter((x) => x.meta.group === 'Spinner')) {
+    const v = defaultsFor(t.meta.id);
+    const aspect = t.meta.cardAspect === 'canvas' ? W / H : (t.meta.cardAspect ?? 1);
+    const ctx = makeCtx(t.meta.id, { width: W, height: H, cardAspect: aspect });
+    let worstAxis = 0, negativeScale = false;
+    for (let f = 0; f <= ctx.totalFrames; f += 11) {
+      for (let i = 0; i < v.count; i++) {
+        const p2 = t.transform(f, i, v.count, v, ctx);
+        const p3 = t.transform3d(f, i, v.count, v, ctx);
+        const q = p3.quaternion;
+        const axis = (bx, by, bz) => {
+          const tx = 2 * (q.y * bz - q.z * by);
+          const ty = 2 * (q.z * bx - q.x * bz);
+          const tz = 2 * (q.x * by - q.y * bx);
+          return [
+            bx + q.w * tx + (q.y * tz - q.z * ty),
+            by + q.w * ty + (q.z * tx - q.x * tz),
+          ];
+        };
+        // Canvas directions: the card's local +y points up in the reference's
+        // frame and down here, so both axes take the same negation on y.
+        const [ux, uy] = axis(1, 0, 0), [wx, wy] = axis(0, 1, 0);
+        const sx = p2.scaleX ?? 1, sy = p2.scaleY ?? 1;
+        // A card that shows its back is a skew past 90 degrees in this
+        // parameterization, never a negative scale — a negative one is what the
+        // sprite paths cannot draw (a DOM thumbnail collapses it to a hairline).
+        if (sx < 0 || sy < 0) negativeScale = true;
+        const rs = p2.rotation + (p2.skewY ?? 0), rk = p2.rotation - (p2.skewX ?? 0);
+        const dir = (x, y) => { const L = Math.hypot(x, y) || 1; return [x / L, y / L]; };
+        const [a1, b1] = dir(Math.cos(rs) * sx, Math.sin(rs) * sx);
+        const [c1, d1] = dir(-Math.sin(rk) * sy, Math.cos(rk) * sy);
+        const [a0, b0] = dir(ux, -uy), [c0, d0] = dir(wx, -wy);
+        worstAxis = Math.max(worstAxis, Math.hypot(a1 - a0, b1 - b0), Math.hypot(c1 - c0, d1 - d0));
+      }
+    }
+    check(worstAxis < 1e-9, t.meta.name,
+      `the 2D pose's axes are ${worstAxis.toFixed(4)} off the projection of its own 3D pose`);
+    check(!negativeScale, t.meta.name, 'hands a sprite path a negative scale instead of a skew past 90 degrees');
+  }
+}
+
 // ---------- report ----------
 if (failures.length) {
   console.error(`\nReference verification FAILED — ${failures.length} problem(s):\n`);
