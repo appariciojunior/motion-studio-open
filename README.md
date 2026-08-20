@@ -1,7 +1,7 @@
 # Motion Studio
 
 A **studio for quick videos, GIFs and device mockups** that runs on your own
-machine. Drop in images or video, pick one of **213 motion presets**, tweak live
+machine. Drop in images or video, pick one of **224 motion presets**, tweak live
 controls, stack motion tracks on one timeline, and export MP4 / WebM / GIF —
 encoded in the browser, no upload, no account.
 
@@ -26,7 +26,7 @@ down the WebGL context.
 
 | Route | Section | What it is |
 |---|---|---|
-| `/library` | **Library** | The motion catalogue: 213 presets, search, favourites, saved custom presets. The default landing section. |
+| `/library` | **Library** | The motion catalogue: 224 presets, search, favourites, saved custom presets. The default landing section. |
 | `/mockup` | **Mockup** | Your artwork on a real 3D device (PBR materials, studio rig, room-environment reflections), with 16 camera/lighting animations. |
 | `/projects` | **Projects** | Many named projects, each autosaved to its own storage key. |
 | `/3d` | **3D** *(experimental)* | Whole-scene stylised shaders over an uploaded `.glb` — currently the Painted Shader. |
@@ -98,10 +98,10 @@ first, and run ffmpeg as an unprivileged user with CPU and memory limits.
 
 ## Motion catalogue
 
-**213 presets in 30 families**, all in `templates/` — one file per family, each
-preset a bundle over the same pure transform (`templates/variant.ts`). 77 of them
-render through the three.js backend with real perspective and a camera; 136
-through Pixi. (The registry holds 242: the extra 29 stay addressable for saved
+**224 presets in 30 families**, all in `templates/` — one file per family, each
+preset a bundle over the same pure transform (`templates/variant.ts`). 80 of them
+render through the three.js backend with real perspective and a camera; 144
+through Pixi. (The registry holds 253: the extra 29 stay addressable for saved
 scenes but are withheld from the pickers until their look is ready.)
 
 | Family | # | Motion |
@@ -110,10 +110,10 @@ scenes but are withheld from the pickers until their look is ready.)
 | **Spinner** | 14 | a belt of hinged paddles — Spinner, Hinge and Fan variants |
 | **Stickers** | 9 | Poster peels a finite stack sheet by sheet from a corner; Stickers scatters them |
 | **Runway** | 23 | cards glide past in a row; the featured card grows at centre |
-| **Orbit** | 6 | cards circle an ellipse, plus in-plane Spin |
+| **Orbit** | 33 | cards circle an ellipse or a real ring — a drum you can film from the inside — plus in-plane Spin |
 | **Orbit 3D** | 24 | true-3D rings: Pure, Carousel, Lightroom, Bloom, Stream, Showcase |
 | **Shuffle** | 4 | a perspective deck — the front card lifts away, followers advance |
-| **Ferris** | 6 | cards ride a rotating ring or a fan arc |
+| **Ferris** | 14 | cards ride a rotating ellipse, a wheel that keeps them upright, or the crest of a very large arc |
 | **Warp** | 4 | a starfield — cards drift out of depth toward the camera |
 | **Takeover** | 7 | full-bleed images push in from an edge, hard-covering the last |
 | **Wipe** | 4 | the image never moves; a straight edge uncovers it |
@@ -142,13 +142,17 @@ motif cycles per clip via `loopCycles()` (`lib/motion.ts`), so frame 0 ≡ frame
 `totalFrames` and exported clips never pop. Conveyors use `period = count` so
 textures land back on their own slots. Templates that are one-shot by design
 (Bounce) simply skip the helper. `meta.repeatAssets` lets high-count fields
-cycle a small image set across hundreds of layers — 136 presets use it.
+cycle a small image set across hundreds of layers — 147 presets use it.
 
 **Fidelity, not guesswork.** The families ported from reference tools were
 transcribed from measurement, not screenshots: hooking the reference's own
 canvas or scene graph, reading transform matrices, clip paths and shipped
-constants, then fitting each preset against the numbers. `npm test` re-checks 30
-of those presets against the measured geometry on every run.
+constants, then fitting each preset against the numbers. The most recent four
+families went further and were transcribed from the reference's own shipped
+modules — its formulas read as source, its preset tables executed, then every
+number checked against its live scene graph. `npm test` re-checks 30 fitted
+presets plus the authored tables of all four ported families (Spinner 14,
+Orbit 24, Arc 3, Wheel 5) on every run.
 
 ## Tracks and timeline
 
@@ -249,10 +253,10 @@ snapshots, just invariants. Current state, measured:
 
 | Suite | What it proves | Assertions |
 |---|---|---|
-| `verify-tilt` | geometry is well-formed: coplanar, finite, seam-closed | 42,665 |
-| `verify-catalogue` | every template holds in 6 canvas aspects × 7 card shapes (10,164 combinations) | 3,865,581 |
-| `verify-contexts` | every render context is complete; thumbnails stay inside budget | 14,342 |
-| `verify-reference` | 30 presets still match the measured reference geometry | 1,066 |
+| `verify-tilt` | geometry is well-formed: coplanar, finite, seam-closed | 46,220 |
+| `verify-catalogue` | every template holds in 6 canvas aspects × 7 card shapes (10,626 combinations) | 3,987,049 |
+| `verify-contexts` | every render context is complete; thumbnails stay inside budget | 14,910 |
+| `verify-reference` | the ported families still match the reference: 30 fitted presets, four authored preset tables, and six live scene captures | 1,698 |
 
 All four pass. `verify-contexts` reports one known gap: four context builders
 still omit `cardAspect`.
