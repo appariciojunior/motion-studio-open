@@ -16,9 +16,9 @@ interface Tour {
   steps: Step[];
 }
 
-// Mirrors app.arqe.ai's first-run spotlight tour, retargeted at this editor's
-// own panels. Each section that gets its own walkthrough is one entry here —
-// same engine (measure/placeCard/render), different copy and trigger.
+// Mirrors the reference editor's first-run spotlight tour, retargeted at this
+// editor's own panels. Each section that gets its own walkthrough is one entry
+// here — same engine (measure/placeCard/render), different copy and trigger.
 const TOURS: Record<TourId, Tour> = {
   // Rail -> templates -> controls -> canvas/assets -> projects -> export.
   // WelcomeDialog already covers the "welcome" beat, so this starts straight

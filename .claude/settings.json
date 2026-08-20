@@ -73,7 +73,6 @@
       "Bash(node ._verify.mjs /private/tmp/claude-503/-Users-apparicio-junior-VSCode-Motion-Tool/54a026e4-cc15-400c-8630-5104efcc58f7/scratchpad/globe.png Globe)",
       "Bash(python3 -)",
       "Bash(node ._verify.mjs /private/tmp/claude-503/-Users-apparicio-junior-VSCode-Motion-Tool/54a026e4-cc15-400c-8630-5104efcc58f7/scratchpad/globe2.png Globe)",
-      "Bash(grep -c \"Arqé\" /Users/apparicio.junior/.claude/plans/will-send-you-a-joyful-shell.md && sed -i '' 's/a competitor motion tool \\(Arqé\\)/a competitor motion tool/; s/user supplied exact Arqé schemas/user supplied exact reference-tool schemas/' /Users/apparicio.junior/.claude/plans/will-send-you-a-joyful-shell.md && grep -rnic \"arqé\" /Users/apparicio.junior/.claude/plans/will-send-you-a-joyful-shell.md; grep -rni \"arqé\" /Users/apparicio.junior/.claude 2>/dev/null | head -3)",
       "Bash(git commit -m 'image crop and focal area added *)",
       "Bash(rm -rf __TRACKED_VAR__/site)",
       "Bash(mkdir -p __TRACKED_VAR__/site/motion-studio-open)",

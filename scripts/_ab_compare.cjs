@@ -1,7 +1,7 @@
 // A/B: card silhouettes segmented out of REAL rendered pixels on both sides.
-// arqe 1080x1440 -> ours 810x1080 is a flat 0.75, and both run 30fps/360 frames,
+// the reference's 1080x1440 -> ours 810x1080 is a flat 0.75, and both run 30fps/360 frames,
 // so frame numbers correspond 1:1. Bands are [y0, y1, x0, x1].
-const ARQE = {
+const REF = {
   120: [[21,470,371,708],[495,944,371,708],[969,1418,371,708]],
   135: [[29,451,371,708],[476,925,371,708],[950,1399,371,708]],
   147: [[112,351,371,708],[376,825,371,708],[850,1299,371,708]],
@@ -23,10 +23,10 @@ const K = 0.75;
 const PHASE = { 120:'repouso', 135:'u=0.25', 147:'u=0.45 (dobra funda)', 150:'u=0.50 (de perfil)', 153:'u=0.55 (entrando)', 165:'u=0.75', 180:'repouso (+1 passo)' };
 
 let worst = 0, worstAt = '', n = 0, sum = 0;
-console.log('quadro | fase                  | n | pior desvio de borda | altura arqe->nossa');
+console.log('quadro | fase                  | n | pior desvio de borda | altura ref->nossa');
 console.log('-------|-----------------------|---|----------------------|-------------------');
-for (const f of Object.keys(ARQE)) {
-  const a = ARQE[f], o = OURS[f];
+for (const f of Object.keys(REF)) {
+  const a = REF[f], o = OURS[f];
   if (a.length !== o.length) { console.log(`f${f}: CONTAGEM DIFERE ${a.length} vs ${o.length}`); continue; }
   let worstF = 0; const hs = [];
   for (let i = 0; i < a.length; i++) {

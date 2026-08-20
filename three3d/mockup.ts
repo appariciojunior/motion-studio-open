@@ -200,7 +200,7 @@ export function initMockup(
   const rig = makeCameraRig(camera, controls);
   opts.onCamera?.(rig);
 
-  // Arqé's own tuned camera-fit size (and screen aspect/corner radius) for
+  // The reference's own tuned camera-fit size (and screen aspect/corner radius) for
   // this exact mesh, when it's one of the bundled devices — falls back to a
   // generic size/aspect for a user upload.
   const DEV = findDevice(opts.modelUrl);
@@ -229,7 +229,7 @@ export function initMockup(
   }
 
   // Render at the scene's EXPORT resolution and let CSS shrink the canvas into
-  // whatever box the stage gives it — the reference tool (Arqé) does exactly
+  // whatever box the stage gives it — the reference tool does exactly
   // this: measured there, a 1080x1440 backing store displayed in a 416x555 box,
   // a 2.6x supersample. Sizing the backing store to the element instead (the
   // obvious reading of "resize") renders 1:1 and is what left this preview soft.

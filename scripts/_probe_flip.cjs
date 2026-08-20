@@ -1,5 +1,5 @@
-// Confronts templates/flip.ts against the numbers measured off app.arqe.ai's
-// own canvas on 2026-08-19 (see the header of templates/flip.ts). Run offline:
+// Confronts templates/flip.ts against the numbers measured off the
+// reference's own canvas on 2026-08-19 (see the header of templates/flip.ts). Run offline:
 // the Browser pane starves rAF on this app, so a screenshot proves nothing.
 const path = require('path');
 const Module = require('module');
@@ -26,7 +26,7 @@ function ok(cond, label) {
   if (!cond) { failed++; console.log(`  FAIL ${label}`); }
 }
 
-// arqé runs 30fps / 12s. Feed the template the reference's own px so the poses
+// The reference runs 30fps / 12s. Feed the template its own px so the poses
 // come out directly comparable to what was measured on its 1080x1440 stage.
 const FPS = 30, DUR = 12, TOTAL = FPS * DUR;
 const ease = resolveEasing({ id: 'ease' });
@@ -51,7 +51,7 @@ const poseAt = (frame) => {
 };
 
 // ---- 1. layout at rest: three slots, centred, one pitch apart -------------
-console.log('layout at rest (arqe centres 246/720/1194 on a 1440 stage => -474/0/+474)');
+console.log('layout at rest (reference centres 246/720/1194 on a 1440 stage => -474/0/+474)');
 {
   const p = poseAt(0);
   ok(p.length === 3, 'three cards drawn at rest');
@@ -73,7 +73,7 @@ console.log('one pitch per step, and the pool wraps');
 // ---- 3. the measured fold: height of the outgoing card -------------------
 // Column 4 is what the reference's mesh hull reported, less the ~3.2px the
 // overlapping triangles add. Tolerance 1% of the card.
-console.log('outgoing fold height vs arqe (t within the step -> visible height)');
+console.log('outgoing fold height vs the reference (t within the step -> visible height)');
 const MEASURED = [
   [0.2, 668.9 - 3.2, 450 / 670], // Flip 03 rows are in 670-units; scaled below
 ];
@@ -97,7 +97,7 @@ const FLIP01 = [
     poses.sort((a, b) => a.y - b.y);
     const top = poses[0];
     const d = top.h - wantH;
-    console.log(`   u=${(step / 2).toFixed(2)}  ours ${top.h.toFixed(1)}  arqe ${wantH.toFixed(1)}  delta ${d >= 0 ? '+' : ''}${d.toFixed(1)}px (${(100 * d / 450).toFixed(2)}%)`);
+    console.log(`   u=${(step / 2).toFixed(2)}  ours ${top.h.toFixed(1)}  ref ${wantH.toFixed(1)}  delta ${d >= 0 ? '+' : ''}${d.toFixed(1)}px (${(100 * d / 450).toFixed(2)}%)`);
     near(top.h, wantH, 4.5, `fold height at step+${step.toFixed(1)}s`);
   }
 }
@@ -166,7 +166,7 @@ console.log('no NaN across directions / visible / count');
 }
 
 // ---- 8. horizontal presets size along the travel axis -------------------
-console.log('planeSize is the along-axis edge (arqe: 450 -> 450x600 horizontally)');
+console.log('planeSize is the along-axis edge (reference: 450 -> 450x600 horizontally)');
 {
   const vh = { ...v, direction: 'right' };
   const p = tpl.transform(0, 0, N, vh, ctx);

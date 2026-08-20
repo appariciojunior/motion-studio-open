@@ -69,7 +69,7 @@ export const mockupGroups: ControlGroup[] = [
   {
     title: 'Ground',
     controls: [
-      // Arqé's default shot has no ground contact shadow at all — the device
+      // The reference's default shot has no ground contact shadow at all — the device
       // floats on a plain backdrop.
       { key: 'shadowOpacity', label: 'Shadow', type: 'slider', min: 0, max: 100, step: 1, default: 0 },
     ],
