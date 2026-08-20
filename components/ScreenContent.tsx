@@ -58,7 +58,11 @@ export default function ScreenContent() {
   const onFile = (f: File | undefined) => {
     if (!f) return;
     const url = URL.createObjectURL(f);
-    setScreenMedia(slot, { url, kind: f.type.startsWith('video/') ? 'video' : 'image' });
+    // The blob is what survives: a blob: url is dead on the next load, so the
+    // bytes go to IndexedDB and the url is rebuilt from them when the project
+    // reopens. Without passing it here the slot persists an id with nothing
+    // behind it and the screen comes back empty.
+    setScreenMedia(slot, { url, kind: f.type.startsWith('video/') ? 'video' : 'image', blob: f });
   };
 
   return (

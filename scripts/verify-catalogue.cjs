@@ -269,6 +269,38 @@ for (const template of templateList.filter((t) => ['Frames', 'Grid'].includes(t.
   }
 }
 
+// ---------- the exported scene pack knows about every template ----------
+// lib/exportSources.ts is a GENERATED snapshot of the template sources the
+// export ZIP ships. Nothing errors when it falls behind: `fileForId` resolves an
+// unknown id by family prefix, so a template missing from the snapshot silently
+// exports a DIFFERENT template's code. That is how five files (flip, lattice,
+// spinner, stickers, wipeReveal) came to be absent from it for weeks while the
+// editor showed them fine. These two checks are structural, so they cost nothing
+// and cannot pass while an id has nowhere real to resolve to.
+//
+// They do NOT prove the snapshot is up to DATE — only that nothing is missing.
+// A freshness check means comparing the snapshot against the files on disk,
+// which needs the generator's own transforms (trimTypes, the @/ rewrite), so it
+// would have to export them first rather than run top to bottom.
+{
+  const fs = require('fs');
+  const { SCENE_SOURCES, TEMPLATE_MANIFEST } = require('../lib/exportSources');
+  const files = fs.readdirSync(path.join(root, 'templates'))
+    .filter((f) => f.endsWith('.ts') && f !== 'index.ts');
+  for (const f of files) {
+    check(Object.prototype.hasOwnProperty.call(SCENE_SOURCES, f), f,
+      'template file is missing from lib/exportSources.ts — run node scripts/genExportSources.mjs',
+      'export snapshot');
+  }
+  const manifestIds = new Set(Object.values(TEMPLATE_MANIFEST).flatMap((m) => m.ids));
+  for (const t of templateList) {
+    check(manifestIds.has(t.meta.id), t.meta.id,
+      'template id is absent from TEMPLATE_MANIFEST, so the export would resolve it to another file'
+      + ' — run node scripts/genExportSources.mjs',
+      'export snapshot');
+  }
+}
+
 // ---------- report ----------
 if (failures.length) {
   console.error(`\nCatalogue verification FAILED — ${failures.length} distinct problem(s):\n`);

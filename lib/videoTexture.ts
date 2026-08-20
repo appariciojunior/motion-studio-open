@@ -29,6 +29,9 @@ export function createCardVideo(url: string): HTMLVideoElement {
   return v;
 }
 
+// Consecutive seeks whose presented-frame callback never arrived, per element.
+const presentMisses = new WeakMap<HTMLVideoElement, number>();
+
 // Seek a video to `t` seconds (wrapped into its duration) and resolve once the
 // exact frame is decoded — the way Remotion waits before capturing each export
 // frame. A missing 'seeked' event is covered by requestVideoFrameCallback and a
@@ -60,6 +63,7 @@ export function seekVideoToTime(
     let framePresented = false;
     let frameCallbackId: number | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let grace: ReturnType<typeof setTimeout> | undefined;
     const finish = () => {
       if (done) return;
       done = true;
@@ -69,13 +73,33 @@ export function seekVideoToTime(
         frameCallbackId = undefined;
       }
       if (timer) clearTimeout(timer);
+      if (grace) clearTimeout(grace);
       resolve();
     };
-    // Capture only after the seek has completed and the callback registered for
-    // that seek reports a presented video frame. Registering the callback after
-    // `seeked` can miss that presentation and leave the previous GPU frame live.
+    // Prefer to capture after the callback registered for this seek reports a
+    // presented frame: registering it after `seeked` can miss that presentation
+    // and leave the previous GPU frame live. But presentation is the
+    // compositor's job, and a tab that is hidden, minimised or simply busy
+    // stops compositing — measured at 590-780 ms per frame in a non-compositing
+    // page, which is what turned an export into an apparent hang. Decoding is
+    // what the export actually depends on (both renderers snapshot the frame
+    // with drawImage, which reads the decoded picture, not the composited one),
+    // and `seeked` already guarantees that. So presentation is awaited only for
+    // a short grace period after the seek completes, then capture proceeds.
+    const PRESENT_GRACE_MS = 40;
     const maybeFinish = () => {
-      if (seekComplete && framePresented) finish();
+      if (!seekComplete) return;
+      if (framePresented) { presentMisses.set(v, 0); finish(); return; }
+      // A page that has stopped compositing never presents, and paying the
+      // grace on every frame of a long export adds up. Three misses in a row
+      // is enough to conclude this element is not being presented at all.
+      if ((presentMisses.get(v) ?? 0) >= 3) { finish(); return; }
+      if (grace === undefined) {
+        grace = setTimeout(() => {
+          presentMisses.set(v, (presentMisses.get(v) ?? 0) + 1);
+          finish();
+        }, PRESENT_GRACE_MS);
+      }
     };
     const onVideoFrame = () => {
       frameCallbackId = undefined;
@@ -158,6 +182,17 @@ export function advanceVideoForExport(
   const target = mode === 'hold'
     ? Math.min(t, Math.max(0, v.duration - 0.034))
     : t % v.duration;
+
+  // On an all-intra proxy a seek decodes exactly one frame, so the export can
+  // land on the requested time instead of approaching it. Measured at 30 fps:
+  // 16.6 ms/frame and 60/60 distinct frames, against 32.8 ms/frame for the
+  // forward-play path below. Sequential decoding is a workaround for expensive
+  // seeks — once seeks are cheap it only costs accuracy.
+  if (v.dataset.motionIntraProxy === '1') {
+    sequentialExportTime.set(v, target);
+    return seekVideoToTime(v, target, mode);
+  }
+
   const previousTarget = sequentialExportTime.get(v) ?? 0;
   const frameTolerance = 0.5 / Math.max(1, fps);
 

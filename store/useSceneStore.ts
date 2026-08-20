@@ -324,13 +324,33 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         : id === 'spinner-06' ? 80
         : id.startsWith('hinge-') ? (id === 'hinge-05' ? 15 : 12)
         : id === 'fan-01' ? 24 : 18;
+      // Flicker/Pulse 03-12 (`flicker-r01..r10`) each bake a cards/sec `speed`
+      // computed from the reference's own clip length (see templates/flicker.ts
+      // refFlicker). That rate only lands on the intended lap count when the
+      // scene duration matches the length it was measured at — left at
+      // whatever duration the previous template used, most of them drift off
+      // their authored cadence, and the short ones (3-4s) can end up repeating
+      // extra laps in a still-short clip and read as "too fast". Pin it, same
+      // as Spinner/Sticker/Poster do above.
+      const isPulseRefPreset = id.startsWith('flicker-r');
+      const pulseDuration = id === 'flicker-r02' ? 4 : id === 'flicker-r10' ? 3
+        : (id === 'flicker-r06' || id === 'flicker-r07' || id === 'flicker-r08' || id === 'flicker-r09') ? 8
+        : 6; // flicker-r01, r03, r04, r05
+      // Flip advances one card every `stepTime` seconds, but `loopCycles` snaps
+      // the clip to a whole number of passes through the pool — so the authored
+      // 2s step only survives when the clip is a multiple of count * stepTime.
+      // At the app's default 8s, all six presets would silently run their step
+      // in 1.33s instead. The reference's own clip is 12s for exactly this
+      // reason (6 cards x 2s), so pin it, as Pulse above does.
+      const isFlipPreset = group === 'Flip';
       const referenceCanvas = (isSpinnerPreset || isStickerPreset || isPosterPreset) ? dimsFor('4:5') : null;
       return {
         ...withTrack(s, s.activeTrackId, { templateId: id, values: defaultsFor(id), easing: easingFor(id) }),
         // These reconstructed families have an intrinsic source ratio, just as
         // their reference presets do. Users can still change it afterwards.
         cardShape: group === 'Spinner' ? '4:3' : isStickerPreset ? '1:1' : isPosterPreset ? '4:5' : s.cardShape,
-        duration: isSpinnerPreset ? spinnerDuration : isStickerPreset ? stickerDuration : isPosterPreset ? posterDuration : s.duration,
+        duration: isSpinnerPreset ? spinnerDuration : isStickerPreset ? stickerDuration : isPosterPreset ? posterDuration
+          : isPulseRefPreset ? pulseDuration : isFlipPreset ? 12 : s.duration,
         ...((isSpinnerPreset || isStickerPreset || isPosterPreset) && !s.background.userSet ? {
           background: { ...s.background, source: 'color' as const, color: '#FFFFFF', gradient: false },
         } : {}),

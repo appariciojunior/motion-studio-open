@@ -8,7 +8,8 @@ import { resolveEasing } from '@/lib/easing';
 import { assetIndexForSlot, clamp } from '@/lib/motion';
 import { resolveTrackTime, trackAssetIndices, type MotionTrack } from '@/lib/tracks';
 import { cardAspectFor, coverCrop, cropKey } from '@/lib/crop';
-import { advanceVideoForExport, createCardVideo, isVideoSource, prepareVideoForSequentialExport, whenVideoReady } from '@/lib/videoTexture';
+import { advanceVideoForExport, createCardVideo, isVideoSource, prepareVideoForSequentialExport, useVideoProxies, whenVideoReady } from '@/lib/videoTexture';
+import { BASE_PATH, IS_STATIC_EXPORT } from '@/lib/paths';
 
 // Reference base long-edge (px) shared with templates (carousel BASE = 340),
 // so control values read directly in on-screen pixels.
@@ -31,6 +32,29 @@ interface Slot {
   // Kept because the per-frame loop multiplies it by the pose's `dim`, and
   // would otherwise erase the placeholder's own tint.
   baseTint: number;
+  // Projective path, for poses that carry `taper` (see LayerTransform.taper).
+  // Built lazily and per slot, so a catalogue where almost nothing tapers pays
+  // nothing: the mesh only exists once a template has actually asked for one.
+  mesh?: PIXI.PerspectiveMesh;
+  meshMask?: PIXI.Graphics;
+  tapered: boolean;   // which node is currently the visible one
+  taperKey: string;   // last-applied corner set, so the geometry rebuilds only on change
+}
+
+// The card's four corners in texture space with `edge` shortened to `ratio` of
+// the edge opposite it, clockwise from top-left — the order PerspectiveMesh
+// takes. The un-narrowed edge keeps its full length, so it stays exactly where
+// the affine pose put it and only the far edge moves.
+function taperCorners(w: number, h: number, taper: NonNullable<LayerTransform['taper']>) {
+  const r = Math.max(0.02, Math.min(1, taper.ratio));
+  const hw = w / 2, hh = h / 2;
+  const ix = hw * (1 - r), iy = hh * (1 - r);
+  switch (taper.edge) {
+    case 'top':    return [-hw + ix, -hh, hw - ix, -hh, hw, hh, -hw, hh];
+    case 'bottom': return [-hw, -hh, hw, -hh, hw - ix, hh, -hw + ix, hh];
+    case 'left':   return [-hw, -hh + iy, hw, -hh, hw, hh, -hw, hh - iy];
+    default:       return [-hw, -hh, hw, -hh + iy, hw, hh - iy, -hw, hh]; // 'right'
+  }
 }
 
 // The GPU-side realization of one motion track. Each track owns its own sprite
@@ -76,6 +100,7 @@ export class SceneRenderer {
   private videoEls = new Map<string, HTMLVideoElement>();  // live <video> per url, for playback + cleanup
   private exportVideoFrames = new Map<string, { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D; texture: PIXI.Texture }>();
   private liveVideoTextures = new Map<string, PIXI.Texture>();
+  private restoreVideoSources: (() => void) | null = null; // undo the export proxy swap
   // One runtime per motion track, keyed by track id. `motion` holds their
   // containers; zIndex mirrors the store's track order.
   private trackRTs = new Map<string, TrackRT>();
@@ -251,10 +276,13 @@ export class SceneRenderer {
       label.anchor.set(0.5);
       sprite.addChild(label);
       rt.container.addChild(sprite);
-      rt.slots.push({ sprite, mask, label, texW: 480, texH: 600, maskKey: '', bindKey: '', baseTint: 0xffffff });
+      rt.slots.push({ sprite, mask, label, texW: 480, texH: 600, maskKey: '', bindKey: '', baseTint: 0xffffff, tapered: false, taperKey: '' });
     }
     while (rt.slots.length > count) {
       const slot = rt.slots.pop()!;
+      // The label may currently be parented to the mesh, so drop the mesh
+      // first and let the sprite's own destroy take whatever is still under it.
+      slot.mesh?.destroy({ children: true });
       slot.sprite.destroy({ children: true });
     }
 
@@ -306,7 +334,91 @@ export class SceneRenderer {
     this.trackRTs.forEach((rt) => { rt.assetSig = ''; rt.countSig = -1; });
   }
 
-  private applyMask(slot: Slot, cornerRadiusPct: number, clip?: LayerTransform['clip']) {
+  // Returns whichever node should carry this frame's pose, swapping the sprite
+  // for a perspective mesh (and back) only when the pose crosses into or out of
+  // being tapered. The label rides along so a placeholder keeps its number, and
+  // the mask cache is invalidated because the mask belongs to the other node.
+  private selectNode(
+    slot: Slot,
+    container: PIXI.Container,
+    taper: LayerTransform['taper'] | null,
+  ): PIXI.Sprite | PIXI.PerspectiveMesh {
+    if (!taper) {
+      if (slot.tapered) {
+        slot.tapered = false;
+        slot.sprite.visible = true;
+        if (slot.mesh) slot.mesh.visible = false;
+        slot.sprite.addChild(slot.label);
+        slot.maskKey = '';
+      }
+      return slot.sprite;
+    }
+    if (!slot.mesh) {
+      // 10x10 vertices is far more than this needs — the projection is smooth
+      // and a card is a few hundred px at most — while staying cheap enough to
+      // build mid-animation.
+      const mesh = new PIXI.PerspectiveMesh({
+        texture: slot.sprite.texture,
+        verticesX: 10, verticesY: 10,
+        x0: 0, y0: 0, x1: 1, y1: 0, x2: 1, y2: 1, x3: 0, y3: 1,
+      });
+      const mm = new PIXI.Graphics();
+      mesh.addChild(mm);
+      slot.mesh = mesh;
+      slot.meshMask = mm;
+      container.addChild(mesh);
+    }
+    const mesh = slot.mesh;
+    if (mesh.texture !== slot.sprite.texture) { mesh.texture = slot.sprite.texture; slot.taperKey = ''; }
+    // Keyed on the texture size too: a crop arriving late changes the corners.
+    const key = `${taper.edge}|${taper.ratio.toFixed(4)}|${slot.texW}x${slot.texH}`;
+    if (slot.taperKey !== key) {
+      slot.taperKey = key;
+      const c = taperCorners(slot.texW, slot.texH, taper);
+      mesh.setCorners(c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7]);
+    }
+    if (!slot.tapered) {
+      slot.tapered = true;
+      slot.sprite.visible = false;
+      mesh.visible = true;
+      mesh.addChild(slot.label);
+      slot.maskKey = '';
+    }
+    return mesh;
+  }
+
+  private applyMask(
+    slot: Slot,
+    cornerRadiusPct: number,
+    clip?: LayerTransform['clip'],
+    taper?: LayerTransform['taper'] | null,
+  ) {
+    if (taper) {
+      // Under a taper the card is a trapezoid, so a rectangular mask would
+      // round the wrong outline entirely. Stencil the actual quad instead.
+      // `clip` is deliberately not combined with this: nothing asks for both,
+      // and guessing at the intersection would be worse than ignoring it.
+      const frac = Math.max(0, Math.min(1, cornerRadiusPct / 100));
+      const key = `T|${frac}|${slot.taperKey}`;
+      if (slot.maskKey === key) return;
+      slot.maskKey = key;
+      const mesh = slot.mesh!, mm = slot.meshMask!;
+      if (frac === 0) { mesh.mask = null; mm.visible = false; mm.clear(); return; }
+      mesh.mask = mm;
+      mm.visible = true;
+      mm.clear();
+      const c = taperCorners(slot.texW, slot.texH, taper);
+      const r = (Math.min(slot.texW, slot.texH) / 2) * frac;
+      mm.roundShape(
+        [{ x: c[0], y: c[1] }, { x: c[2], y: c[3] }, { x: c[4], y: c[5] }, { x: c[6], y: c[7] }],
+        r,
+      ).fill(0xffffff);
+      return;
+    }
+    return this.applySpriteMask(slot, cornerRadiusPct, clip);
+  }
+
+  private applySpriteMask(slot: Slot, cornerRadiusPct: number, clip?: LayerTransform['clip']) {
     const frac = Math.max(0, Math.min(1, cornerRadiusPct / 100));
     const c = clip
       ? {
@@ -516,17 +628,22 @@ export class SceneRenderer {
         const slot = rt.slots[i];
         const t = template.transform(time.localFrame, i, count, track.values, ctx);
         const norm = SPRITE_BASE / Math.max(slot.texW, slot.texH);
-        slot.sprite.position.set(t.x, t.y);
-        slot.sprite.scale.set(norm * t.scale * (t.scaleX ?? 1), norm * t.scale * (t.scaleY ?? 1));
-        slot.sprite.rotation = t.rotation;
-        slot.sprite.alpha = t.alpha;
+        // A pose only leaves the sprite path when it is actually tilting out of
+        // plane; a ratio of 1 is the same picture a sprite already draws, and
+        // switching for it would cost a node swap every frame of a flat card.
+        const taper = t.taper && t.taper.ratio < 0.999 ? t.taper : null;
+        const node = this.selectNode(slot, rt.container, taper);
+        node.position.set(t.x, t.y);
+        node.scale.set(norm * t.scale * (t.scaleX ?? 1), norm * t.scale * (t.scaleY ?? 1));
+        node.rotation = t.rotation;
+        node.alpha = t.alpha;
         // `dim` darkens toward black rather than going see-through, so a
         // receding card occludes what is behind it instead of ghosting it.
         const dim = clamp(t.dim ?? 0, 0, 1);
-        slot.sprite.tint = dim > 0 ? scaleTint(slot.baseTint, 1 - dim) : slot.baseTint;
-        slot.sprite.skew.set(t.skewX ?? 0, t.skewY ?? 0);
-        slot.sprite.zIndex = t.depth * 1000 + i; // stable tiebreak
-        this.applyMask(slot, track.values.cornerRadius ?? 0, t.clip);
+        node.tint = dim > 0 ? scaleTint(slot.baseTint, 1 - dim) : slot.baseTint;
+        node.skew.set(t.skewX ?? 0, t.skewY ?? 0);
+        node.zIndex = t.depth * 1000 + i; // stable tiebreak
+        this.applyMask(slot, track.values.cornerRadius ?? 0, t.clip, taper);
 
         // Rank across tracks: stacking order dominates, card depth breaks ties.
         const score = order * 1e6 + t.depth;
@@ -543,6 +660,13 @@ export class SceneRenderer {
   // ---- video export sync ----
   async beginVideoExport() {
     if (this.videoEls.size === 0) return;
+    // Swap every card to its all-intra proxy first: that is what makes a
+    // per-frame seek cheap, and a cheap seek is what lets each captured frame
+    // hold the exact video time it asks for. Without it (no server / no
+    // ffmpeg) the forward-decode path below still runs, at coarser accuracy.
+    if (!IS_STATIC_EXPORT) {
+      this.restoreVideoSources = await useVideoProxies(this.videoEls, BASE_PATH);
+    }
     await Promise.all([...this.videoEls.values()].map(prepareVideoForSequentialExport));
 
     // A live VideoSource can upload an older presented frame while repeated
@@ -570,6 +694,8 @@ export class SceneRenderer {
   }
 
   endVideoExport() {
+    this.restoreVideoSources?.();
+    this.restoreVideoSources = null;
     this.liveVideoTextures.forEach((texture, url) => this.textureCache.set(url, texture));
     this.liveVideoTextures.clear();
     this.croppedCache.forEach((tex) => tex.destroy(false));

@@ -89,6 +89,8 @@ export default function EditorShell({ children }: { children?: React.ReactNode }
     useProjectStore.getState().bootstrap();
     const stopHistory = useHistoryStore.getState().start();
     const stopAutosave = startSceneAutosave();
+    // No 3D equivalent on purpose: the Mockup studio is saved from its own
+    // button (see MockupPanel), not on every store tick.
     return () => {
       stopHistory();
       stopAutosave();

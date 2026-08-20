@@ -26,3 +26,5 @@ public/demo-arqe/
 # contact sheets from scripts/shoot.cjs — generated, and rendered with whatever
 # demo set is active (may be third-party reference imagery)
 .shots/
+# scratch dir genExportSources.mjs leaves behind if esbuild fails mid-run
+.exp-*/
