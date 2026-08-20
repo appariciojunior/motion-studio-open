@@ -70,11 +70,11 @@ export default function ModelControl() {
         />
 
 
-        {/* Mockup gets its model from the device picker in the left column, so
-            this block is only ever a way to break that mode: an arbitrary .glb
-            has no "Screen" mesh to composite onto (ScreenContent hides itself
-            for one), and "Use default model" clears the device outright. 3D is
-            the opposite — bringing your own .glb is the whole point there. */}
+        {/* Mockup takes its model from the device picker in the left column, so
+            this block can only ever break that mode: an arbitrary .glb has no
+            "Screen" mesh to composite onto — ScreenContent hides itself for one
+            — and "Use default model" clears the selected device outright. In 3D
+            it is the opposite: bringing your own .glb is the point there. */}
         {effectId !== 'mockup' && (
           <>
             <div className="mc-field-label">Model</div>

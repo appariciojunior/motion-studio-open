@@ -1,191 +1,109 @@
-PolyForm Noncommercial License 1.0.0
-
-Official license terms:
-https://polyformproject.org/licenses/noncommercial/1.0.0
-
-Required Notice: Motion Studio © 2026 Motion Studio Authors and Contributors.
-
-Required Notice: Motion Studio is licensed under the PolyForm Noncommercial License 1.0.0.
-
-Required Notice: This software is provided for non-commercial use.
-
-Required Notice: Commercial use, resale, paid distribution, paid SaaS, white-label distribution, or other commercial exploitation of Motion Studio requires prior written authorization from the Motion Studio copyright holders.
-
-Required Notice: Original copyright, authorship, attribution, license notices, and applicable third-party notices must be preserved.
-
-Required Notice: Modified versions and forks must clearly acknowledge that they are based on the original Motion Studio project.
-
-Required Notice: Commercial licensing and permissions must be requested from the Motion Studio maintainers.
-
-
-MOTION STUDIO — ADDITIONAL NOTICE
-
-Motion Studio is made publicly available for learning, experimentation,
-personal projects, collaboration, modification, contribution, and other
-non-commercial purposes under the PolyForm Noncommercial License 1.0.0.
-
-You may use, study, run, modify, fork, and redistribute Motion Studio
-only as permitted by the PolyForm Noncommercial License 1.0.0.
-
-COMMERCIAL USE
-
-The standard license does not authorize commercial use of Motion Studio.
-
-If you intend to commercially exploit Motion Studio, including but not
-limited to:
-
-- selling Motion Studio;
-- selling a modified version or fork;
-- offering Motion Studio as a paid SaaS;
-- creating a paid white-label version;
-- commercially redistributing Motion Studio;
-- licensing a derivative version for payment;
-- incorporating substantial portions of Motion Studio into a commercial
-  product or service;
-- charging specifically for access to functionality substantially
-  provided by Motion Studio;
-
-you must first contact the Motion Studio copyright holders and obtain
-separate written authorization.
-
-Contacting the maintainers does not automatically grant commercial rights.
-
-Commercial authorization is valid only when expressly granted in writing
-by the applicable copyright holders.
-
-
-ATTRIBUTION
-
-Original Motion Studio attribution must be preserved.
-
-Copies, forks, modifications, and redistributions must retain all applicable:
-
-- copyright notices;
-- author notices;
-- contributor notices;
-- license notices;
-- Required Notice lines;
-- NOTICE files;
-- attribution comments;
-- third-party copyright notices;
-- third-party license notices.
-
-You may identify yourself as the author of your own modifications.
-
-You may not remove or conceal the original Motion Studio authorship or
-represent the original Motion Studio source code as your own work.
-
-Modified versions must clearly state that they are based on Motion Studio.
-
-Forks and derivative projects must not falsely represent themselves as
-the official Motion Studio project or imply endorsement by the original
-Motion Studio maintainers without authorization.
-
-
-SOURCE CODE NOTICE
-
-Where an original Motion Studio copyright or attribution notice is present
-inside a source file, that notice must be preserved.
-
-Recommended source file notice:
-
 Motion Studio
-Copyright © 2026 Motion Studio Authors and Contributors.
+Copyright (c) 2026 Motion Studio Authors and Contributors
 
-Licensed under the PolyForm Noncommercial License 1.0.0.
-Commercial use requires prior written authorization.
+Licensed under the Elastic License 2.0, reproduced verbatim below.
 
-See LICENSE for details.
+What this means in practice: anyone may use, copy, modify and distribute Motion
+Studio, including inside a for-profit company and including in production, at no
+cost. The one thing the licence withholds is offering Motion Studio to third
+parties as a hosted or managed service. That right stays with the copyright
+holders.
 
+Commercial hosting arrangements can be requested from the Motion Studio
+maintainers.
 
-THIRD-PARTY SOFTWARE
+Third-party components carry their own licences; see the NOTICE file.
 
-Motion Studio may contain software developed by third parties.
+Elastic License 2.0
 
-Third-party components remain governed by their respective licenses.
+URL: https://www.elastic.co/licensing/elastic-license
 
-The PolyForm Noncommercial License applies only to source code and
-materials that the Motion Studio copyright holders have the legal
-authority to license under these terms.
+## Acceptance
 
-Nothing in this notice replaces, removes, or restricts rights granted
-directly by third-party copyright holders.
+By using the software, you agree to all of the terms and conditions below.
 
+## Copyright License
 
-APACHE LICENSE 2.0 COMPONENTS
+The licensor grants you a non-exclusive, royalty-free, worldwide,
+non-sublicensable, non-transferable license to use, copy, distribute, make
+available, and prepare derivative works of the software, in each case subject to
+the limitations and conditions below.
 
-Any third-party files or components originally licensed under the
-Apache License, Version 2.0 remain governed by the Apache License 2.0
-where applicable.
+## Limitations
 
-Their applicable copyright, license, attribution, patent, and NOTICE
-information must be preserved according to their original license.
+You may not provide the software to third parties as a hosted or managed
+service, where the service provides users with access to any substantial set of
+the features or functionality of the software.
 
+You may not move, change, disable, or circumvent the license key functionality
+in the software, and you may not remove or obscure any functionality in the
+software that is protected by the license key.
 
-GNU AGPL v3 COMPONENTS
+You may not alter, remove, or obscure any licensing, copyright, or other notices
+of the licensor in the software. Any use of the licensor’s trademarks is subject
+to applicable law.
 
-Any third-party files or components licensed under the GNU Affero
-General Public License Version 3 remain governed by the GNU AGPL v3.
+## Patents
 
-The PolyForm Noncommercial terms do not replace or restrict the rights
-granted by the GNU AGPL for those components.
+The licensor grants you a license, under any patent claims the licensor can
+license, or becomes able to license, to make, have made, use, sell, offer for
+sale, import and have imported the software, in each case subject to the
+limitations and conditions in this license. This license does not cover any
+patent claims that you cause to be infringed by modifications or additions to
+the software. If you or your company make any written claim that the software
+infringes or contributes to infringement of any patent, your patent license for
+the software granted under these terms ends immediately. If your company makes
+such a claim, your patent license ends immediately for work on behalf of your
+company.
 
-Where applicable, AGPL copyright notices, source availability requirements,
-license notices, and other obligations must be preserved.
+## Notices
 
+You must ensure that anyone who gets a copy of any part of the software from you
+also gets a copy of these terms.
 
-OWNERSHIP
+If you modify the software, you must include in any modified copies of the
+software prominent notices stating that you have modified the software.
 
-Making the Motion Studio source code publicly accessible does not transfer
-ownership of the original Motion Studio code, branding, documentation,
-visual assets, or other copyrighted materials.
+## No Other Rights
 
-Except for third-party materials and independently copyrighted
-contributions, all rights not granted under the PolyForm Noncommercial
-License 1.0.0 remain reserved by their respective copyright holders.
+These terms do not imply any licenses other than those expressly granted in
+these terms.
 
+## Termination
 
-BRANDING
+If you use the software in violation of these terms, such use is not licensed,
+and your licenses will automatically terminate. If the licensor provides you
+with a notice of your violation, and you cease all violation of this license no
+later than 30 days after you receive that notice, your licenses will be
+reinstated retroactively. However, if you violate these terms after such
+reinstatement, any additional violation of these terms will cause your licenses
+to terminate automatically and permanently.
 
-This license does not automatically grant permission to use the
-Motion Studio name, logo, visual identity, trademarks, or other brand
-assets in a way that suggests an official partnership, endorsement,
-sponsorship, or affiliation.
+## No Liability
 
-A fork may truthfully state that it is based on Motion Studio but must
-not present itself as the official Motion Studio project without
-authorization.
+*As far as the law allows, the software comes as is, without any warranty or
+condition, and the licensor will not be liable to you for any damages arising
+out of these terms or the use or nature of the software, under any kind of
+legal claim.*
 
+## Definitions
 
-COMMERCIAL LICENSING
+The **licensor** is the entity offering these terms, and the **software** is the
+software the licensor makes available under these terms, including any portion
+of it.
 
-Organizations or individuals interested in commercial use should contact
-the Motion Studio maintainers before using the project commercially.
+**you** refers to the individual or entity agreeing to these terms.
 
-Commercial agreements may separately authorize activities such as:
+**your company** is any legal entity, sole proprietorship, or other kind of
+organization that you work for, plus all organizations that have control over,
+are under the control of, or are under common control with that
+organization. **control** means ownership of substantially all the assets of an
+entity, or the power to direct its management and policies by vote, contract, or
+otherwise. Control can be direct or indirect.
 
-- commercial distribution;
-- paid SaaS;
-- commercial integrations;
-- commercial forks;
-- enterprise use;
-- white-label versions;
-- sublicensing;
-- commercial hosting.
+**your licenses** are all the licenses granted to you for the software under
+these terms.
 
-Any commercial agreement applies only to intellectual property that
-the applicable Motion Studio copyright holders have authority to license.
+**use** means anything you do with the software requiring one of your licenses.
 
-Third-party software remains governed by its respective license.
-
-
-NO WARRANTY
-
-Motion Studio is provided subject to the warranty and liability terms
-contained in the PolyForm Noncommercial License 1.0.0 and applicable
-third-party licenses.
-
-
-LICENSE IDENTIFIER
-
-SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+**trademark** means trademarks, service marks, and similar rights.

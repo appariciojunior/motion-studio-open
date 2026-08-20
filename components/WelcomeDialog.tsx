@@ -47,8 +47,9 @@ export default function WelcomeDialog() {
             CodePen demos, React Bits, React Motion, JS motion work and others.
           </p>
           <p>
-            Use it responsibly. It is <b>not to be sold or commercialised</b>{' — '}
-            it&apos;s here for you and your company, where needed.
+            Use it freely, including at work and in production. The one thing the
+            licence holds back is <b>offering Motion Studio to other people as a
+            hosted service</b> — that stays with the maintainers.
           </p>
           <p>
             This is a <b>beta</b>: since it&apos;s still being tested, some things
@@ -66,7 +67,7 @@ export default function WelcomeDialog() {
               checked={agreed}
               onChange={(e) => setAgreed(e.target.checked)}
             />
-            I agree not to commercialise this
+            I agree not to resell this as a hosted service
           </label>
 
           {agreed && (
