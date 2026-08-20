@@ -8,9 +8,9 @@ const DEG = Math.PI / 180;
 // ============================================================
 //  FLIP — a stepped strip of cards, the one leaving folding away on its hinge
 //
-//  Reverse-engineered from app.arqe.ai's Flip 01-06 on 2026-08-19 by hooking
-//  its 2D canvas (it is not a WebGL scene) and reading the transform matrix and
-//  clip path of every draw. None of the numbers below are guesses; each is
+//  Reverse-engineered from the reference editor's Flip 01-06 on 2026-08-19 by
+//  hooking its 2D canvas (it is not a WebGL scene) and reading the transform
+//  matrix and clip path of every draw. None of the numbers below are guesses;
 //  quoted with what it was measured against.
 //
 //  It is NOT a split-flap board, which is what the name suggests and what an
@@ -186,7 +186,7 @@ const flip: Template = {
   },
 };
 
-// Flip 02-06 are arqé's own paramsPerModeBaseline values, read live on
+// Flip 02-06 are the reference's own paramsPerModeBaseline values, read live on
 // 2026-08-19. count/visible/cornerRadius/direction carry over unit for unit;
 // planeSize and gap are px on its 1080x1440 stage and cross to our 810x1080 one
 // through the same 0.75 factor templates/carousel.ts uses. Every one of the six

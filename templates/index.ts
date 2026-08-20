@@ -2,6 +2,8 @@ import type { Template } from '@/lib/types';
 import { DEFAULT_EASING, type EasingSpec } from '@/lib/easing';
 import { carousel, carouselVariants, carouselRefVariants } from './carousel';
 import { wheelVariants } from './wheel';
+import { wheelEllipseVariants } from './wheelEllipse';
+import { arcVariants } from './arc';
 import { orbitVariants } from './orbit';
 import { orbit3dVariants } from './orbit3d';
 import { spinVariants } from './spin';
@@ -68,12 +70,14 @@ export const templateList: Template[] = [
   ...stickerVariants,
   ...carouselVariants,
   ...carouselRefVariants,
+  ...arcVariants,
   ...orbitVariants,
   ...orbit3dVariants,
   ...showcaseVariants.slice(1),
   ...spinVariants,
   ...stackVariants,
   ...wheelVariants,
+  ...wheelEllipseVariants,
   ...fieldVariants,
   ...wipeVariants,
   ...wipeRevealVariants,

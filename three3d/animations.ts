@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
-// ── 3D Mockup Animation Engine (Arqé-inspired Multi-Keyframe System) ─────────
+// ── 3D Mockup Animation Engine (multi-keyframe system) ──────────────────────
 // A production-grade animation engine for 3D Device Mockups and PBR scenes.
 // Recreates the timeline, pose interpolation, Bezier easing curves, and camera
-// choreography of Arqé's 3D Mockup Studio (app.arqe.ai/mockups).
+// choreography of the reference tool's own 3D mockup studio.
 //
 // Each animation preset is defined as a sequence of MockupKeyframes across a
 // normalized 0.0 – 1.0 timeline. The solver evaluates Bezier curves and

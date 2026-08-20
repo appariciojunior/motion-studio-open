@@ -7,9 +7,9 @@ const BASE = 340;
 // ============================================================
 //  RIPPLE — a grid of tiles turning on their own axis
 //
-//  Was this codebase's "Flip" until 2026-08-19: measured against arqé's real
-//  Flip (a split-flap board, see templates/flip.ts) and found to be a
-//  different mechanic entirely — a tile here never changes image, it only
+//  Was this codebase's "Flip" until 2026-08-19: measured against the
+//  reference's real Flip (a split-flap board, see templates/flip.ts) and found
+//  to be a different mechanic entirely — a tile here never changes image, it
 //  turns in place. Renamed rather than deleted: it is a complete, working
 //  effect in its own right, just not a port of anything called Flip.
 //

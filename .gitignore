@@ -18,7 +18,7 @@ out/
 
 # reference imagery pulled from the reference tool for local visual comparison
 # only. Third-party licensed stock — never commit, never deploy.
-public/demo-arqe/
+public/demo-ref/
 
 # local env (holds the demo-set override; never commit)
 .env*.local
