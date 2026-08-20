@@ -82,6 +82,8 @@ export interface ThreeDState {
   clearScreenMedia: () => void;
   // Apply a persisted 3D slice (see lib/three3dPersist).
   hydrate3D: (partial: Partial<ThreeDState>) => void;
+  // Back to the app's own defaults — what a brand-new project starts from.
+  reset3D: () => void;
   // Rebuild screen-media urls from IndexedDB after hydrate3D.
   rehydrateScreenMedia: () => Promise<void>;
   setScreenFit: (fit: 'cover' | 'width' | 'contain') => void;
@@ -162,38 +164,58 @@ function patchModel(
   return { models: { ...s.models, [s.effectId]: { ...modelOf(s), ...patch } } };
 }
 
+// Everything in this store that is DOCUMENT rather than behaviour. Named so the
+// keys that are neither state nor document — the actions — stay out.
+type ThreeDDoc = Omit<ThreeDState, {
+  [K in keyof ThreeDState]: ThreeDState[K] extends (...args: any[]) => any ? K : never;
+}[keyof ThreeDState]>;
+
+/**
+ * The store's starting values, defined OUTSIDE create() for the same reason
+ * useSceneStore's initialSceneState() is: "new project" has to restore exactly
+ * this, and one definition is what stops the app's defaults and a new project's
+ * defaults from drifting apart. Returns a fresh object each call — `params`,
+ * `models`, `partFills` and `screenMedia` are mutable and must not be shared
+ * between projects.
+ */
+function initial3DState(): ThreeDDoc {
+  return {
+    effectId: 'cartoon',
+    // Only user overrides live here; schema defaults are merged at read time
+    // (Effect3DControls / ThreeStage3D / the effect init). Keeps loads always
+    // matching the current schema defaults — no stale one-time seed.
+    params: {},
+    models: { cartoon: { ...MODEL_DEFAULT }, mockup: { ...MOCKUP_MODEL_DEFAULT } },
+    parts: [],
+    partFills: {},
+    selectedPart: null,
+    bgFill: { type: 'linear', c1: '#fbfbfc', c2: '#e6e8eb' },   // near-white → soft light grey
+    bgTexAmount: 32,
+    bgTexScale: 4.1,
+    sunIntensity: 85,
+    sunShadow: 0,
+    sunMask: '/3d/textures/window.png',
+    sunMaskScale: 46,
+    sunMaskOffsetX: 0,
+    sunMaskOffsetY: -2,
+    mockupAnimation: 'static',
+    mockupSpeed: 1,
+    mockupEasing: 'preset',
+    mockupMotionStrength: 1,
+    screenMedia: {},
+    screenFit: 'cover',
+    screenZoom: 1,
+    screenOffsetX: 50,
+    screenOffsetY: 50,
+    statusBarMode: 'off',
+    statusBarTime: '9:41',
+    statusBarBattery: 100,
+    statusBarSignal: 4,
+  };
+}
+
 export const use3DStore = create<ThreeDState>((set) => ({
-  effectId: 'cartoon',
-  // Only user overrides live here; schema defaults are merged at read time
-  // (Effect3DControls / ThreeStage3D / the effect init). Keeps loads always
-  // matching the current schema defaults — no stale one-time seed.
-  params: {},
-  models: { cartoon: { ...MODEL_DEFAULT }, mockup: { ...MOCKUP_MODEL_DEFAULT } },
-  parts: [],
-  partFills: {},
-  selectedPart: null,
-  bgFill: { type: 'linear', c1: '#fbfbfc', c2: '#e6e8eb' },   // near-white → soft light grey
-  bgTexAmount: 32,
-  bgTexScale: 4.1,
-  sunIntensity: 85,
-  sunShadow: 0,
-  sunMask: '/3d/textures/window.png',
-  sunMaskScale: 46,
-  sunMaskOffsetX: 0,
-  sunMaskOffsetY: -2,
-  mockupAnimation: 'static',
-  mockupSpeed: 1,
-  mockupEasing: 'preset',
-  mockupMotionStrength: 1,
-  screenMedia: {},
-  screenFit: 'cover',
-  screenZoom: 1,
-  screenOffsetX: 50,
-  screenOffsetY: 50,
-  statusBarMode: 'off',
-  statusBarTime: '9:41',
-  statusBarBattery: 100,
-  statusBarSignal: 4,
+  ...initial3DState(),
   setEffect: (effectId) => set({ effectId }),
   setParam: (effectId, key, value) =>
     set((s) => ({
@@ -282,6 +304,15 @@ export const use3DStore = create<ThreeDState>((set) => ({
   // not restored: the effect reports its own colourable groups on load, and a
   // click-selection is session state, not a document.
   hydrate3D: (partial) => set((s) => ({ ...s, ...partial, parts: [], selectedPart: null })),
+
+  // Drops the IndexedDB rows this project's screens were using: a new project
+  // will never reference them again, and IndexedDB evicts nothing on its own.
+  reset3D: () => {
+    for (const m of Object.values(use3DStore.getState().screenMedia)) {
+      if (m?.id) idbDelete(m.id).catch(() => {});
+    }
+    set(() => initial3DState());
+  },
 
   // Screen media saves an id, never a blob: url. Rebuild the urls from the
   // stored bytes; a slot whose bytes are gone (quota eviction, cleared storage)

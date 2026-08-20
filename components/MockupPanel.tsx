@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { saveThreeD } from '@/lib/three3dPersist';
 import { use3DStore, defaultModelFor } from '@/store/use3DStore';
 import { DEVICES, findDevice, selectDevice } from '@/three3d/devices';
 import { MOCKUP_ANIMATIONS } from '@/three3d/animations';
@@ -22,6 +23,19 @@ export default function MockupPanel() {
 
   const activeDevice = findDevice(modelUrl);
   const [openDevice, setOpenDevice] = useState<string | null>(activeDevice?.key ?? null);
+
+  // Confirmation is transient rather than a permanent "saved" state: the studio
+  // becomes dirty again on the very next control the user touches, and a label
+  // that stayed on "Saved" would be lying by the second click.
+  const [saved, setSaved] = useState(false);
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(savedTimer.current), []);
+  const onSave = () => {
+    if (!saveThreeD()) return; // no open project, or storage refused the write
+    setSaved(true);
+    clearTimeout(savedTimer.current);
+    savedTimer.current = setTimeout(() => setSaved(false), 1600);
+  };
 
   const handleDeviceClick = (key: string) => {
     if (openDevice === key) {
@@ -81,6 +95,17 @@ export default function MockupPanel() {
             </div>
           );
         })}
+      </div>
+
+      {/* Saving the studio is explicit, the same shape as "Save as custom" in
+          the templates panel. The 2D scene autosaves because it is the timeline
+          being continuously edited; a mockup is arranged and then kept, and an
+          autosave meant a stray drag of the model quietly became the project's
+          saved state. */}
+      <div className="tpl-foot">
+        <button className="btn full" onClick={onSave} disabled={saved}>
+          {saved ? 'Saved' : 'Save mockup to project'}
+        </button>
       </div>
     </section>
   );

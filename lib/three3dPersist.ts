@@ -88,38 +88,44 @@ export function deleteProjectThreeD(projectId: string): void {
   try { localStorage.removeItem(keyFor(projectId)); } catch { /* non-fatal */ }
 }
 
-// Which project the autosave writes into. While null it holds its writes rather
-// than stamping 3D state onto whichever project happens to be open next.
+// Which project a save writes into. While null a save is a no-op rather than
+// stamping 3D state onto whichever project happens to be open next.
+//
+// Saving here is EXPLICIT, unlike the 2D scene next door, which autosaves. The
+// two are not inconsistent by accident: the 2D scene is the timeline the user is
+// continuously editing, while a mockup is a studio they arrange and then keep,
+// and an autosave on every store tick meant a stray drag of the model silently
+// became the project's new saved state. So this exposes a save the UI calls from
+// a button, and nothing writes on its own.
 let target: string | null = null;
-let lastSig = '';
+let lastSaved = '';
 
-export function setThreeDAutosaveTarget(projectId: string | null, seed?: ThreeDPartial | null): void {
+export function setThreeDSaveTarget(projectId: string | null, seed?: ThreeDPartial | null): void {
   target = projectId;
-  // Seed with what was just loaded, so opening a project doesn't immediately
-  // rewrite it.
-  lastSig = seed ? JSON.stringify(seed) : '';
+  // Seed with what was just loaded so `isThreeDDirty` starts out false: opening
+  // a project is not an edit.
+  lastSaved = seed ? JSON.stringify(seed) : '';
 }
 
-/** Write now, bypassing the throttle. Call before switching projects. */
-export function flushThreeD(): void {
-  if (!target) return;
+/** Write the current 3D state into the open project. Returns false if it could not. */
+export function saveThreeD(): boolean {
+  if (!target) return false;
   try {
     const partial = buildThreeDPartial(use3DStore.getState());
-    const sig = JSON.stringify(partial);
-    if (sig === lastSig) return;
-    lastSig = sig;
+    lastSaved = JSON.stringify(partial);
     writeProjectThreeD(target, partial);
+    return true;
   } catch {
-    /* serialize error — skip this write */
+    return false; // serialize or quota error
   }
 }
 
-export function startThreeDAutosave(): () => void {
-  let scheduled = false;
-  const flush = () => { scheduled = false; flushThreeD(); };
-  return use3DStore.subscribe(() => {
-    if (scheduled) return;
-    scheduled = true;
-    setTimeout(flush, 500);
-  });
+/** Whether the studio differs from what was last saved (or loaded). */
+export function isThreeDDirty(): boolean {
+  if (!target) return false;
+  try {
+    return JSON.stringify(buildThreeDPartial(use3DStore.getState())) !== lastSaved;
+  } catch {
+    return false;
+  }
 }
