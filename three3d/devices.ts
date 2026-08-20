@@ -1,10 +1,10 @@
 import { use3DStore } from '@/store/use3DStore';
 
 // ── Device library (Mockup mode) ────────────────────────────────────────────
-// Real device meshes + finish presets, mirrored from Arqé's own device-lab
-// registry (the same product this feature is modelled after) so picking a
-// device and a finish here behaves the same way it does there. `fitHeight` is
-// Arqé's own tuned camera-fit size for each mesh — reused verbatim so each
+// Real device meshes + finish presets, mirrored from the reference tool's own
+// device-lab registry (the product this feature is modelled after) so picking a
+// device and a finish here behaves the way it does there. `fitHeight` is the
+// reference's own tuned camera-fit size for each mesh — reused verbatim so each
 // device frames correctly on first load.
 export interface DeviceFinish { key: string; label: string; hex: string; }
 

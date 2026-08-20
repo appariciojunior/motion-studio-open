@@ -319,22 +319,111 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       const posterDuration = id === 'poster-04' || id === 'poster-05' ? 13
         : id === 'poster-06' ? 22 : 21;
       const stickerDuration = id === 'stickers-01' ? 36 : 13;
-      const spinnerDuration = id === 'spinner-03' || id === 'spinner-05' ? 64
+      // The reference authors a Duration per spinner preset, and what that
+      // really pins is the SECONDS PER CARD: its belt advances one slot per
+      // step, so the cadence is duration/count and the same 18s clip is a third
+      // slower on a 6-card belt than on a 9-card one. These are its authored
+      // numbers — 2s per card everywhere except the Hinge subfamily, which runs
+      // 1.33s (1s at count 12, 1.25s on Hinge 05).
+      const spinnerDuration = id === 'spinner-06' ? 80
+        : id === 'spinner-03' || id === 'spinner-05' ? 64
         : id === 'spinner-04' ? 36
-        : id === 'spinner-06' ? 80
-        : id.startsWith('hinge-') ? (id === 'hinge-05' ? 15 : 12)
-        : id === 'fan-01' ? 24 : 18;
-      const referenceCanvas = (isSpinnerPreset || isStickerPreset || isPosterPreset) ? dimsFor('4:5') : null;
+        : id === 'fan-01' ? 24
+        : id === 'fan-03' ? 18
+        : id === 'hinge-05' ? 15
+        // Hinge 01-04 at count 9/12, and Spinner 01/02 + Fan 02 at count 6.
+        : 12;
+      // Flicker/Pulse 03-12 (`flicker-r01..r10`) each bake a cards/sec `speed`
+      // computed from the reference's own clip length (see templates/flicker.ts
+      // refFlicker). That rate only lands on the intended lap count when the
+      // scene duration matches the length it was measured at — left at
+      // whatever duration the previous template used, most of them drift off
+      // their authored cadence, and the short ones (3-4s) can end up repeating
+      // extra laps in a still-short clip and read as "too fast". Pin it, same
+      // as Spinner/Sticker/Poster do above.
+      const isPulseRefPreset = id.startsWith('flicker-r');
+      const pulseDuration = id === 'flicker-r02' ? 4 : id === 'flicker-r10' ? 3
+        : (id === 'flicker-r06' || id === 'flicker-r07' || id === 'flicker-r08' || id === 'flicker-r09') ? 8
+        : 6; // flicker-r01, r03, r04, r05
+      // Flip advances one card every `stepTime` seconds, but `loopCycles` snaps
+      // the clip to a whole number of passes through the pool — so the authored
+      // 2s step only survives when the clip is a multiple of count * stepTime.
+      // At the app's default 8s, all six presets would silently run their step
+      // in 1.33s instead. The reference's own clip is 12s for exactly this
+      // reason (6 cards x 2s), so pin it, as Pulse above does.
+      const isFlipPreset = group === 'Flip';
+      // Orbit 3D's ported presets, same story as Spinner's: the reference
+      // authors a Duration per preset and what it pins is the SECONDS PER CARD,
+      // because its ring advances one slot per step. Left at whatever duration
+      // the previous template used, every one of them reads at the wrong
+      // cadence — and the ones that step (a curve plus a Hold) stop landing on
+      // their own beat, which is the whole character of the Carousel and
+      // Lightroom subfamilies. Its own numbers, off its preset table:
+      const ORBIT_3D_DURATION: Record<string, number> = {
+        'orbit-3d-04': 20, 'orbit-3d-05': 20, 'orbit-3d-06': 18, 'orbit-3d-07': 36,
+        'orbit-3d-08': 36, 'orbit-3d-09': 36,
+        'orbit-3d-10': 20, 'orbit-3d-11': 20, 'orbit-3d-12': 11.25, 'orbit-3d-13': 25,
+        'orbit-3d-14': 7.5,
+        'orbit-3d-15': 20, 'orbit-3d-16': 20, 'orbit-3d-17': 20, 'orbit-3d-18': 30,
+        'orbit-3d-19': 18, 'orbit-3d-20': 18, 'orbit-3d-21': 36, 'orbit-3d-22': 36,
+        'orbit-3d-23': 20, 'orbit-3d-24': 10, 'orbit-3d-25': 10, 'orbit-3d-26': 10,
+        'orbit-3d-27': 12,
+      };
+      // Its artboard is per preset too — square for five of the six Pure
+      // presets, 4:5 for the rest — and the ring is framed against the frame's
+      // half-HEIGHT, so the canvas ratio decides how much of the ring the
+      // sides show. Only the ported presets pin it; orbit-3d-01..03 are ours
+      // and leave the user's canvas alone.
+      const ORBIT_3D_SQUARE = new Set(['orbit-3d-04', 'orbit-3d-05', 'orbit-3d-07', 'orbit-3d-08', 'orbit-3d-09']);
+      const orbitDuration = ORBIT_3D_DURATION[id];
+      const isOrbit3dPreset = orbitDuration !== undefined;
+      // The Arc is the reference's other ported engine (its Wheel category, our
+      // Ferris group): a row of cards on the rim of a very large wheel. Its
+      // Pause and Stagger are authored in SECONDS against a specific clip
+      // length, so the clip is what has to be pinned — at another duration the
+      // pause eats a different share of each step and Arc 01's settle turns
+      // into a drift.
+      const ARC_DURATION: Record<string, number> = {
+        'arc-01': 4.2, 'arc-02': 13.5, 'arc-03': 13.5,
+      };
+      const arcDuration = ARC_DURATION[id];
+      const isArcPreset = arcDuration !== undefined;
+      // The reference's Wheel, same reasoning again: its ring advances one slot
+      // per step, so what its Duration pins is the seconds per card. Its own
+      // artboard for the family is 1:1 (the family default, which none of the
+      // five presets overrides).
+      const WHEEL_R_DURATION: Record<string, number> = {
+        'wheel-r01': 20, 'wheel-r02': 12, 'wheel-r03': 12, 'wheel-r04': 10, 'wheel-r05': 12,
+      };
+      const wheelRefDuration = WHEEL_R_DURATION[id];
+      const isWheelRefPreset = wheelRefDuration !== undefined;
+      const referenceAspect = (isSpinnerPreset || isStickerPreset || isPosterPreset || isArcPreset) ? '4:5'
+        : isOrbit3dPreset ? (ORBIT_3D_SQUARE.has(id) ? '1:1' : '4:5')
+        : isWheelRefPreset ? '1:1'
+        : null;
+      const referenceCanvas = referenceAspect ? dimsFor(referenceAspect) : null;
       return {
         ...withTrack(s, s.activeTrackId, { templateId: id, values: defaultsFor(id), easing: easingFor(id) }),
         // These reconstructed families have an intrinsic source ratio, just as
         // their reference presets do. Users can still change it afterwards.
-        cardShape: group === 'Spinner' ? '4:3' : isStickerPreset ? '1:1' : isPosterPreset ? '4:5' : s.cardShape,
-        duration: isSpinnerPreset ? spinnerDuration : isStickerPreset ? stickerDuration : isPosterPreset ? posterDuration : s.duration,
+        // Spinner takes 'auto' rather than one ratio for the whole family: the
+        // reference authors the card shape PER PRESET — square for Spinner 01-05
+        // and every Hinge, 4:3 for Spinner 06, 4:5 for all three Fans — and
+        // 'auto' is what defers to each template's own declared cardAspect.
+        // Pinning the family to 4:3 made every square preset a wide slab.
+        // Orbit 3D takes 'auto' for the same reason Spinner does: the reference
+        // authors the card shape per preset (square for most, 4:5 for the
+        // Lightroom drums, 9:16 for Bloom 05), and 'auto' is what defers to each
+        // template's own declared cardAspect. Any fixed shape here overrides it
+        // and every preset comes out the same proportion.
+        cardShape: group === 'Spinner' || isOrbit3dPreset || isArcPreset || isWheelRefPreset ? 'auto' : isStickerPreset ? '1:1' : isPosterPreset ? '4:5' : s.cardShape,
+        duration: isSpinnerPreset ? spinnerDuration : isStickerPreset ? stickerDuration : isPosterPreset ? posterDuration
+          : isPulseRefPreset ? pulseDuration : isFlipPreset ? 12 : isOrbit3dPreset ? orbitDuration
+          : isArcPreset ? arcDuration : isWheelRefPreset ? wheelRefDuration : s.duration,
         ...((isSpinnerPreset || isStickerPreset || isPosterPreset) && !s.background.userSet ? {
           background: { ...s.background, source: 'color' as const, color: '#FFFFFF', gradient: false },
         } : {}),
-        ...(referenceCanvas ? { aspect: '4:5', ...referenceCanvas } : {}),
+        ...(referenceCanvas && referenceAspect ? { aspect: referenceAspect, ...referenceCanvas } : {}),
         frame: 0,
       };
     }),

@@ -2,6 +2,8 @@ import type { Template } from '@/lib/types';
 import { DEFAULT_EASING, type EasingSpec } from '@/lib/easing';
 import { carousel, carouselVariants, carouselRefVariants } from './carousel';
 import { wheelVariants } from './wheel';
+import { wheelEllipseVariants } from './wheelEllipse';
+import { arcVariants } from './arc';
 import { orbitVariants } from './orbit';
 import { orbit3dVariants } from './orbit3d';
 import { spinVariants } from './spin';
@@ -32,7 +34,8 @@ import { tickerVariants } from './ticker';
 import { isometricVariants } from './isometric';
 import { coverflowVariants } from './coverflow';
 import { deckVariants } from './deck';
-import { flipVariants } from './flipgrid';
+import { rippleVariants } from './flipgrid';
+import { flipVariants } from './flip';
 import { boxVariants } from './box';
 import { surfaceVariants } from './surface';
 import { premium3dTemplates } from './premium3d';
@@ -67,12 +70,14 @@ export const templateList: Template[] = [
   ...stickerVariants,
   ...carouselVariants,
   ...carouselRefVariants,
+  ...arcVariants,
   ...orbitVariants,
   ...orbit3dVariants,
   ...showcaseVariants.slice(1),
   ...spinVariants,
   ...stackVariants,
   ...wheelVariants,
+  ...wheelEllipseVariants,
   ...fieldVariants,
   ...wipeVariants,
   ...wipeRevealVariants,
@@ -102,6 +107,7 @@ export const templateList: Template[] = [
   ...coverflowVariants,
   ...deckVariants,
   ...flipVariants,
+  ...rippleVariants,
   ...boxVariants,
 ];
 
@@ -111,7 +117,7 @@ export const templates: Record<string, Template> = Object.fromEntries(
 
 // Templates can remain addressable for persisted scenes while being withheld
 // from every picker until their visual quality is ready for the catalogue.
-const HIDDEN_CATALOG_GROUPS = new Set(['3D & Perspective', 'Flip', 'Dock', 'Editorial']);
+const HIDDEN_CATALOG_GROUPS = new Set(['3D & Perspective', 'Dock', 'Editorial', 'Ripple']);
 export const catalogTemplateList = templateList.filter(
   (t) => !t.meta.catalogHidden && !HIDDEN_CATALOG_GROUPS.has(t.meta.group)
 );

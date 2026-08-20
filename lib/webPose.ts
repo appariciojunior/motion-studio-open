@@ -69,6 +69,22 @@ export function clipPathCss(t: LayerTransform): string {
 }
 
 /** The CSS `transform` value for a pose. Order matches the sprite pipeline. */
+// KNOWN GAP: `LayerTransform.taper` is dropped here, so a card that the sprite
+// renderer draws as a trapezoid comes out as a plain squash on the Web stage and
+// in exported CSS. Flip is the only family that sets it today.
+//
+// CSS can express the shape — `perspective(Ppx) translateY(50%) rotateX(a)
+// translateY(-50%)`, hinged on the element's own edge, with the height it
+// introduces divided back out of the scale — but not from what `taper` carries.
+// The pose states the RATIO between the two edges, while CSS needs a perspective
+// distance in px plus an angle, and recovering those needs the card's own px
+// height, which this function never sees: in 'own' mode the element is whatever
+// the user's selector pointed at, at whatever size. Closing it properly means
+// the pose carrying the fold physically (hinge, angle, camera distance) and both
+// the mesh path and this one deriving their own form from it — a change to the
+// contract, not a patch here. `lib/boardCompose.ts` has the same gap plus one of
+// its own: it composes a template's motion as an affine DELTA over a board rest
+// that already owns rotateX/rotateY, so a projective term has nowhere to go.
 export function transformCss(t: LayerTransform, mode: LayoutMode): string {
   // In 'own' the element is pinned at the container's centre via left/top 50%,
   // so it has to be pulled back by half its own size before the pose applies.

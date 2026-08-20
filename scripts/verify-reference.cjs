@@ -683,6 +683,898 @@ for (const id of ['wipe-01', 'wipe-02', 'wipe-03']) {
   check(worst === 0, t.meta.name, `drifted from the transform it shipped with by ${worst.toExponential(1)} on a portrait canvas`);
 }
 
+// ============================================================
+//  Spinner — the reference's Spinner / Hinge / Fan
+//
+//  Not fitted: READ. scripts/_scene_spinner.cjs installs three's devtools hook
+//  before the reference's page loads, wraps its renderer's render() to catch the
+//  camera, and walks the live scene for every card's world matrix. The tables
+//  below are those captures verbatim — a camera (fov, z, near, far) and four
+//  cards' full world matrices per preset — converted to this app's px by nothing
+//  more than the unit scale.
+//
+//  This is the check that can see what a picture cannot. Sweeping the
+//  reference's Perspective from 125 to 2000 moves its measured bounding box by
+//  under half a percent, because the cards that balloon under a wide lens are
+//  the ones passing edge-on and an edge-on card rasterizes to nothing — so a
+//  camera can be wrong by a factor of six and still photograph correctly. Two
+//  pixel probes disagreed with the arithmetic here and the scene graph settled
+//  it.
+//
+//  What each row pins down that a looser check would miss:
+//    Spinner 01  the belt's radius is HALF the card plus the orbit radius
+//                (300 + 35), and each card's own turn equals its ring angle
+//    Spinner 03  the rig is a THREE Euler XYZ on a group above the cards, so
+//                with three axes live (-60/60/90) the order is not negotiable
+//    Hinge 01    hinge offsets the card along its own normal — the centre orbits
+//                hypot(300, 282) + 35, not 300 + 35
+//    Fan 03      the vertical fold's opposite handedness, a 4:5 card (the aspect
+//                moves the WIDTH only), and Offset panning the CAMERA by a share
+//                of the frame's half-HEIGHT on both axes
+// ============================================================
+const SPINNER_SCENES = [
+  {
+    name: 'Spinner 01', count: 9, aspect: 1,
+    values: { count: 9, axis: 'horizontal', hinge: 0, diameter: 70, zoom: 85, perspective: 125 },
+    camera: { fov: 32.6674, z: 7045.361, x: 0, y: 0, near: 70.454, far: 9595.4 },
+    spin: 1.32063,
+    cards: [
+      [1, 0, 0, 0, 0, 0.248, 0.969, 0, 0, -0.969, 0.248, 0, 0, 82.934, 324.572, 1],
+      [1, 0, 0, 0, 0, -0.433, 0.901, 0, 0, -0.901, -0.433, 0, 0, -145.1, 301.945, 1],
+      [1, 0, 0, 0, 0, -0.911, 0.412, 0, 0, -0.412, -0.911, 0, 0, -305.24, 138.035, 1],
+      [1, 0, 0, 0, 0, -0.963, -0.27, 0, 0, 0.27, -0.963, 0, 0, -322.554, -90.464, 1],
+    ],
+  },
+  {
+    name: 'Spinner 03', count: 32, aspect: 1,
+    values: { count: 32, axis: 'vertical', hinge: 0, diameter: 500, zoom: 50, perspective: 1500, rotateX: -60, rotateY: 60, rotateZ: 90 },
+    camera: { fov: 137.2401, z: 1374.136, x: 0, y: 0, near: 13.741, far: 4784.1 },
+    spin: 0.35507,
+    cards: [
+      [-0.301, 0.318, -0.899, 0, -0.5, 0.75, 0.433, 0, 0.812, 0.58, -0.067, 0, -165.591, 175.051, -494.405, 1],
+      [-0.454, 0.199, -0.869, 0, -0.5, 0.75, 0.433, 0, 0.738, 0.631, -0.241, 0, -249.538, 109.472, -477.752, 1],
+      [-0.589, 0.072, -0.805, 0, -0.5, 0.75, 0.433, 0, 0.635, 0.657, -0.406, 0, -323.894, 39.686, -442.739, 1],
+      [-0.701, -0.058, -0.71, 0, -0.5, 0.75, 0.433, 0, 0.508, 0.659, -0.555, 0, -385.804, -31.625, -390.711, 1],
+    ],
+  },
+  {
+    name: 'Hinge 01', count: 9, aspect: 1,
+    values: { count: 9, axis: 'horizontal', hinge: 282, diameter: 70, zoom: 75, perspective: 125, rotateX: -45, rotateY: -45 },
+    camera: { fov: 32.6674, z: 7984.742, x: 0, y: 0, near: 79.847, far: 11662.7 },
+    spin: 2.18166,
+    cards: [
+      [0.707, 0.5, 0.5, 0, -0.579, 0.004, 0.815, 0, 0.406, -0.866, 0.292, 0, -64.444, -263.676, 354.813, 1],
+      [0.707, 0.5, 0.5, 0, -0.183, -0.554, 0.812, 0, 0.683, -0.666, -0.3, 0, 149.412, -383.969, 172.669, 1],
+      [0.707, 0.5, 0.5, 0, 0.299, -0.852, 0.43, 0, 0.641, -0.154, -0.752, 0, 293.356, -324.598, -90.269, 1],
+      [0.707, 0.5, 0.5, 0, 0.641, -0.752, -0.154, 0, 0.299, 0.43, -0.852, 0, 300.035, -113.345, -310.969, 1],
+    ],
+  },
+  {
+    name: 'Fan 03', count: 9, aspect: 4 / 5,
+    values: { count: 9, axis: 'vertical', hinge: 0, diameter: 440, zoom: 127, perspective: 1000, rotateX: -26, rotateY: 120, offsetX: 34, offsetY: 5, fade: 13, backface: 'hide' },
+    camera: { fov: 120, z: 797.834, x: 469.843, y: 69.094, near: 7.978, far: 4087.8 },
+    spin: 1.71042,
+    cards: [
+      [-0.788, 0.27, 0.553, 0, 0, 0.899, -0.438, 0, -0.616, -0.345, -0.708, 0, -362.485, 124.149, 254.542, 1],
+      [-0.208, 0.429, 0.879, 0, 0, 0.899, -0.438, 0, -0.978, -0.091, -0.187, 0, -95.639, 197.244, 404.41, 1],
+      [0.469, 0.387, 0.794, 0, 0, 0.899, -0.438, 0, -0.883, 0.206, 0.422, 0, 215.957, 178.047, 365.05, 1],
+      [0.927, 0.164, 0.337, 0, 0, 0.899, -0.438, 0, -0.375, 0.406, 0.833, 0, 426.505, 75.54, 154.879, 1],
+    ],
+  },
+];
+
+// The reference's own frame half-height at z=0 is planeSize/200 * distance, and
+// our Zoom is that distance as a percentage of its default 585 — so one
+// reference unit is this many px. Derived here independently of the template so
+// a change to either side has to be argued, not inherited.
+const SPINNER_UNIT = (height, zoom) => height / 2 / ((600 / 200) * ((585 * 100) / zoom));
+
+{
+  const spinnerTemplate = byName('Spinner 01');
+  const H = 1080, W = 810;
+  for (const scene of SPINNER_SCENES) {
+    const t = byName(scene.name);
+    if (!t || !spinnerTemplate) continue;
+    const v = { ...defaultsFor(t.meta.id), ...scene.values };
+    const ctx = makeCtx(t.meta.id, { width: W, height: H, cardAspect: scene.aspect });
+    const k = SPINNER_UNIT(H, v.zoom);
+
+    // --- camera: four numbers, all read off the live one ---
+    const pose = t.camera(v, ctx);
+    near(pose.fov, scene.camera.fov, 0.01, scene.name, 'camera fov');
+    near(pose.position.z / k, scene.camera.z, 1.5, scene.name, 'camera z in reference units');
+    near(pose.position.x / k, scene.camera.x, 1.5, scene.name, 'camera pan x (Offset X is a share of the half-HEIGHT)');
+    near(-pose.position.y / k, scene.camera.y, 1.5, scene.name, 'camera pan y');
+    // The lookAt has to travel with the eye, or the pan turns into a tilt and
+    // the belt keystones instead of sliding.
+    near(pose.target.x / k, scene.camera.x, 1.5, scene.name, 'camera target x');
+    near(-pose.target.y / k, scene.camera.y, 1.5, scene.name, 'camera target y');
+    near(pose.near / k, scene.camera.near, 1.5, scene.name, 'camera near');
+    near(pose.far / k, scene.camera.far, 4, scene.name, 'camera far');
+
+    // --- cards: the phase is recovered from the capture, then every card's
+    // world matrix has to land on the reference's. With a linear curve the belt
+    // turns TAU per loop, so the frame that reproduces a captured spin is
+    // exact rather than searched for.
+    const frame = (ctx.totalFrames * scene.spin) / (Math.PI * 2);
+    const count = scene.count;
+    let worstPos = 0, worstRot = 0;
+    for (let i = 0; i < scene.cards.length; i++) {
+      const m = scene.cards[i];
+      const p = t.transform3d(frame, i, count, v, ctx);
+      // Our y is canvas-down and the reference's is three's y-up; the
+      // quaternion is handed over untouched, so that negation is the whole
+      // conversion — and if it were the only half applied, the columns below
+      // would be the ones to catch it.
+      worstPos = Math.max(worstPos,
+        Math.abs(p.x / k - m[12]),
+        Math.abs(-p.y / k - m[13]),
+        Math.abs(p.z / k - m[14]));
+      const q = p.quaternion;
+      const col = (bx, by, bz) => {
+        const tx = 2 * (q.y * bz - q.z * by);
+        const ty = 2 * (q.z * bx - q.x * bz);
+        const tz = 2 * (q.x * by - q.y * bx);
+        return [
+          bx + q.w * tx + (q.y * tz - q.z * ty),
+          by + q.w * ty + (q.z * tx - q.x * tz),
+          bz + q.w * tz + (q.x * ty - q.y * tx),
+        ];
+      };
+      const cols = [col(1, 0, 0), col(0, 1, 0), col(0, 0, 1)];
+      for (let c = 0; c < 3; c++) {
+        for (let r = 0; r < 3; r++) {
+          worstRot = Math.max(worstRot, Math.abs(cols[c][r] - m[c * 4 + r]));
+        }
+      }
+    }
+    // The captures carry 2 and 3 decimals; anything structural is orders of
+    // magnitude coarser than that.
+    check(worstPos < 1.2, scene.name, `card centres are ${worstPos.toFixed(2)} reference units off the live scene`);
+    check(worstRot < 0.01, scene.name, `card orientations are ${worstRot.toFixed(4)} off the live scene's world matrices`);
+  }
+
+  // The card is planeSize TALL whatever its shape — the reference's aspect only
+  // moves the width. Checked through the pose the renderer actually consumes:
+  // it normalizes a sprite's LONG edge to SPRITE_BASE, so a portrait card and a
+  // landscape one reach that height by different routes.
+  for (const aspect of [1, 4 / 5, 4 / 3]) {
+    const v = defaultsFor('spinner-01');
+    const ctx = makeCtx('spinner-01', { width: W, height: H, cardAspect: aspect });
+    const p = spinnerTemplate.transform3d(0, 0, v.count, v, ctx);
+    const long = p.scale * SPRITE_BASE;
+    const height = aspect >= 1 ? long / aspect : long;
+    const width = aspect >= 1 ? long : long * aspect;
+    near(height, 600 * SPINNER_UNIT(H, v.zoom), 0.01, `Spinner card ${aspect.toFixed(2)}`, 'card height in px');
+    near(width, 600 * aspect * SPINNER_UNIT(H, v.zoom), 0.01, `Spinner card ${aspect.toFixed(2)}`, 'card width in px');
+  }
+
+  // Every authored preset, as the reference's own table has it. Zoom is its
+  // `distance` read back as a percentage (585/distance), which is exact for all
+  // fourteen; Diameter is twice its orbitRadius, the way its own panel shows it.
+  const SPINNER_PRESETS = {
+    'Spinner 01': { count: 6, axis: 'horizontal', hinge: 0, diameter: 70, zoom: 85, perspective: 125, rotateX: 0, rotateY: 0, rotateZ: 0, offsetX: 0, offsetY: 0, motionRotation: 'static', direction: 'forward', fanRotation: 0, fade: 0 },
+    'Spinner 02': { count: 6, axis: 'horizontal', hinge: 0, diameter: 70, zoom: 85, perspective: 125, motionRotation: 'rotation' },
+    'Spinner 03': { count: 32, axis: 'vertical', hinge: 0, diameter: 500, zoom: 50, perspective: 1500, rotateX: -60, rotateY: 60, rotateZ: 90 },
+    'Spinner 04': { count: 18, axis: 'vertical', hinge: 0, diameter: 70, zoom: 85, perspective: 840, rotateX: -18, rotateY: -4, offsetY: 7 },
+    'Spinner 05': { count: 32, axis: 'horizontal', hinge: 0, diameter: 70, zoom: 85, perspective: 1000 },
+    'Spinner 06': { count: 40, axis: 'vertical', hinge: 0, diameter: 1000, zoom: 39, perspective: 125, rotateX: 20 },
+    'Hinge 01': { count: 9, axis: 'horizontal', hinge: 282, diameter: 70, zoom: 75, perspective: 125, rotateX: -45, rotateY: -45 },
+    'Hinge 02': { count: 9, axis: 'horizontal', hinge: 282, diameter: 70, zoom: 75, perspective: 125, rotateX: -45, rotateY: 0 },
+    'Hinge 03': { count: 9, axis: 'horizontal', hinge: 282, diameter: 70, zoom: 75, perspective: 125, rotateX: 0, rotateY: -30 },
+    'Hinge 04': { count: 12, axis: 'horizontal', hinge: 282, diameter: 70, zoom: 75, perspective: 1345, rotateY: -15, offsetX: -5 },
+    'Hinge 05': { count: 12, axis: 'horizontal', hinge: 280, diameter: 70, zoom: 75, perspective: 1000, rotateX: -115, rotateY: -35, rotateZ: -15 },
+    'Fan 01': { count: 12, axis: 'vertical', hinge: 75, diameter: 70, zoom: 125, perspective: 250, rotateY: -60, rotateZ: -180, offsetX: -16, fanRotation: 180, direction: 'reverse', backface: 'hide' },
+    'Fan 02': { count: 6, axis: 'horizontal', hinge: 0, diameter: 50, zoom: 180, perspective: 150, offsetY: 34 },
+    'Fan 03': { count: 9, axis: 'vertical', hinge: 0, diameter: 440, zoom: 127, perspective: 1000, rotateX: -26, rotateY: 120, offsetX: 34, offsetY: 5, fade: 13, backface: 'hide' },
+  };
+  // Its card shape is per preset too, and a shape is not a control.
+  const SPINNER_SHAPES = { 'Spinner 06': 4 / 3, 'Fan 01': 4 / 5, 'Fan 02': 4 / 5, 'Fan 03': 4 / 5 };
+  for (const [name, authored] of Object.entries(SPINNER_PRESETS)) {
+    const t = byName(name);
+    if (!t) continue;
+    const v = defaultsFor(t.meta.id);
+    for (const [key, want] of Object.entries(authored)) {
+      check(v[key] === want, name, `${key} is ${JSON.stringify(v[key])}, the reference authors ${JSON.stringify(want)}`);
+    }
+    const shape = SPINNER_SHAPES[name] ?? 1;
+    check(Math.abs((t.meta.cardAspect ?? 1) - shape) < 1e-9, name,
+      `card shape is ${t.meta.cardAspect}, the reference authors ${shape.toFixed(3)}`);
+  }
+
+  // Loop closure, on every preset: the belt turns a whole number of slots per
+  // clip, so frame 0 and frame N have to be the same picture.
+  for (const t of templateList.filter((x) => x.meta.group === 'Spinner')) {
+    const v = defaultsFor(t.meta.id);
+    const aspect = t.meta.cardAspect === 'canvas' ? W / H : (t.meta.cardAspect ?? 1);
+    const ctx = makeCtx(t.meta.id, { width: W, height: H, cardAspect: aspect });
+    check(loopDrift(t, v, ctx) < 1e-6, t.meta.name, 'does not return to frame 0 at the loop point');
+    let finite = true;
+    for (let f = 0; f <= ctx.totalFrames; f += 7) {
+      for (let i = 0; i < v.count; i++) {
+        const p = t.transform3d(f, i, v.count, v, ctx);
+        if (![p.x, p.y, p.z, p.scale, p.alpha, p.quaternion.x, p.quaternion.y, p.quaternion.z, p.quaternion.w]
+          .every((n) => Number.isFinite(n))) finite = false;
+      }
+    }
+    check(finite, t.meta.name, 'emits a non-finite pose');
+  }
+
+  // The 2D pose has to BE the projection of the 3D one.
+  //
+  // Spinner is one of the few families whose `transform` does not describe its
+  // own motion — it projects the 3D pose the stage renders, because the sprite
+  // paths (catalogue thumbnails, Board, the web export) have no camera. Nothing
+  // generic can see that projection go wrong: every suite here asks whether one
+  // context is well-formed, and both contexts stayed internally consistent
+  // while disagreeing with each other. What shipped had the card's short axis
+  // up to 90 degrees off its real direction (1.91 on a unit axis, Spinner 02 at
+  // frame 199) because the second column's angle was read off the FIRST
+  // projected axis and the orientation patched with a negative scaleY.
+  //
+  // pixi is what defines the four fields (Container._updateSkew):
+  //   (a, b) = ( cos(rotation + skewY), sin(rotation + skewY)) * scaleX
+  //   (c, d) = (-sin(rotation - skewX), cos(rotation - skewX)) * scaleY
+  // so the columns must come out along the card's own two axes, turned by its
+  // quaternion and projected. The scales carry the foreshortening, which is why
+  // the DIRECTIONS are what get compared here.
+  for (const t of templateList.filter((x) => x.meta.group === 'Spinner')) {
+    const v = defaultsFor(t.meta.id);
+    const aspect = t.meta.cardAspect === 'canvas' ? W / H : (t.meta.cardAspect ?? 1);
+    const ctx = makeCtx(t.meta.id, { width: W, height: H, cardAspect: aspect });
+    let worstAxis = 0, negativeScale = false;
+    for (let f = 0; f <= ctx.totalFrames; f += 11) {
+      for (let i = 0; i < v.count; i++) {
+        const p2 = t.transform(f, i, v.count, v, ctx);
+        const p3 = t.transform3d(f, i, v.count, v, ctx);
+        const q = p3.quaternion;
+        const axis = (bx, by, bz) => {
+          const tx = 2 * (q.y * bz - q.z * by);
+          const ty = 2 * (q.z * bx - q.x * bz);
+          const tz = 2 * (q.x * by - q.y * bx);
+          return [
+            bx + q.w * tx + (q.y * tz - q.z * ty),
+            by + q.w * ty + (q.z * tx - q.x * tz),
+          ];
+        };
+        // Canvas directions: the card's local +y points up in the reference's
+        // frame and down here, so both axes take the same negation on y.
+        const [ux, uy] = axis(1, 0, 0), [wx, wy] = axis(0, 1, 0);
+        const sx = p2.scaleX ?? 1, sy = p2.scaleY ?? 1;
+        // A card that shows its back is a skew past 90 degrees in this
+        // parameterization, never a negative scale — a negative one is what the
+        // sprite paths cannot draw (a DOM thumbnail collapses it to a hairline).
+        if (sx < 0 || sy < 0) negativeScale = true;
+        const rs = p2.rotation + (p2.skewY ?? 0), rk = p2.rotation - (p2.skewX ?? 0);
+        const dir = (x, y) => { const L = Math.hypot(x, y) || 1; return [x / L, y / L]; };
+        const [a1, b1] = dir(Math.cos(rs) * sx, Math.sin(rs) * sx);
+        const [c1, d1] = dir(-Math.sin(rk) * sy, Math.cos(rk) * sy);
+        const [a0, b0] = dir(ux, -uy), [c0, d0] = dir(wx, -wy);
+        worstAxis = Math.max(worstAxis, Math.hypot(a1 - a0, b1 - b0), Math.hypot(c1 - c0, d1 - d0));
+      }
+    }
+    check(worstAxis < 1e-9, t.meta.name,
+      `the 2D pose's axes are ${worstAxis.toFixed(4)} off the projection of its own 3D pose`);
+    check(!negativeScale, t.meta.name, 'hands a sprite path a negative scale instead of a skew past 90 degrees');
+  }
+}
+
+// ============================================================
+//  ORBIT 3D — the reference's ring, pinned against its LIVE scene graph
+//
+//  Same method as the Spinner section above, for the same reason: this family's
+//  maths was READ out of the reference's own modules (25001 ringRadius /
+//  ringSlots / ringCardScale / applyRingCamera / buildCardGeometry, 42981
+//  computeRingFrame, 34379 the stage renderer, 51437 computeViewFades) and then
+//  checked against the running page — scripts/_scene_orbit.cjs installs three's
+//  devtools hook before navigation, wraps render() to catch the camera, and
+//  reads every card's world matrix. The capture is .shots/ref-orbit-scene-live.json.
+//
+//  A pixel box could not have settled any of it. Two of its own presets
+//  (Lightroom 05 and 07) photograph completely EMPTY, and its stage's canvas
+//  cannot even be read from script — toDataURL comes back cleared, which had
+//  two more presets measuring as blank when they are not.
+//
+//  What each row pins down that a looser check would miss:
+//    Pure 01       the radius Gap does NOT move (extent / (TAU/count)), a
+//                  three-axis rig as a THREE Euler XYZ above the spin, and the
+//                  card scale as 1/(1 + gap/100)
+//    Pure 05       Diameter adds to that radius (60 -> 250.99) and grows the
+//                  card with the slot (scale 1.143, not 1/1.15)
+//    Carousel 04   a flat card spans its CHORD, so the radius uses tan and not
+//                  the arc; Gap -50 doubles the card; Billboard is parallel to
+//                  the image plane rather than aimed at the lens; and Contrast
+//                  shrinks the far cards on the mesh alone
+//    Lightroom 04  Flip is a further half turn on the card (its group carries
+//                  Ry = PI), a 4:5 card moves the WIDTH only, and the camera
+//                  ends up INSIDE the ring: z 675.6 against a radius of 803.8
+//    Bloom 01      Bloom swings the card about its lower EDGE — the pivot is
+//                  half a card inside the per-card scale, which is the only
+//                  reason its centres sit at radius 160.25 and y -1.444 rather
+//                  than at the ring's own 149.28 and 0
+//    Bloom 03      three rig axes at once AND Offset panning the camera by a
+//                  share of the frame's half-width and half-height
+// ============================================================
+const ORBIT_SCENES = [
+  {
+    name: 'Ring Pure 01', aspect: 1, spin: -2.58658, cardScale: 0.74074,
+    values: {
+      count: 18, gap: 35, diameter: 0, cardRotation: 0, cardTilt: 0, surface: 'cylinder',
+      facing: 'ring', flip: 'no', tiltX: -10, ringYaw: -10, ringRoll: 50,
+      zoom: 100, perspective: 300, offsetX: 0, offsetY: 0, scaleContrast: 0, direction: 'reverse',
+    },
+    camera: { fov: 60.3009, z: 1297.997, x: 0, y: 0, near: 12.98, far: 3016.9 },
+    cards: [
+      [-0.466, -0.42, 0.393, 0, -0.559, 0.452, -0.18, 0, -0.138, -0.41, -0.602, 0, -53.283, -158.449, -232.648, 1],
+      [-0.391, -0.255, 0.575, 0, -0.559, 0.452, -0.18, 0, -0.289, -0.529, -0.431, 0, -111.75, -204.501, -166.619, 1],
+      [-0.269, -0.059, 0.688, 0, -0.559, 0.452, -0.18, 0, -0.405, -0.584, -0.208, 0, -156.737, -225.886, -80.493, 1],
+      [-0.114, 0.145, 0.718, 0, -0.559, 0.452, -0.18, 0, -0.473, -0.569, 0.04, 0, -182.821, -220.026, 15.341, 1],
+    ],
+  },
+  {
+    name: 'Ring Pure 05', aspect: 1, spin: -1.58033, cardScale: 1.14275,
+    values: {
+      count: 12, gap: 15, diameter: 120, cardRotation: 0, cardTilt: 0, surface: 'cylinder',
+      facing: 'ring', flip: 'no', tiltX: 0, ringYaw: 0, ringRoll: 0,
+      zoom: 100, perspective: 500, offsetX: 0, offsetY: 0, scaleContrast: 0, direction: 'reverse',
+    },
+    camera: { fov: 84.59, z: 552.485, x: 0, y: 0, near: 5.525, far: 1698.4 },
+    cards: [
+      [-0.011, 0, 1.143, 0, 0, 1.143, 0, 0, -1.143, 0, -0.011, 0, -250.975, 0, -2.392, 1],
+      [0.562, 0, 0.995, 0, 0, 1.143, 0, 0, -0.995, 0, 0.562, 0, -218.546, 0, 123.416, 1],
+      [0.984, 0, 0.581, 0, 0, 1.143, 0, 0, -0.581, 0, 0.984, 0, -127.559, 0, 216.154, 1],
+      [1.143, 0, 0.011, 0, 0, 1.143, 0, 0, -0.011, 0, 1.143, 0, -2.392, 0, 250.975, 1],
+    ],
+  },
+  {
+    name: 'Ring Carousel 04', aspect: 1, spin: -2.35619, cardScale: 2,
+    values: {
+      count: 20, gap: -50, diameter: 0, cardRotation: 0, cardTilt: 0, surface: 'flat',
+      facing: 'camera', flip: 'no', tiltX: 0, ringYaw: 0, ringRoll: 90,
+      zoom: 41, perspective: 740, offsetX: 0, offsetY: 0, scaleContrast: 200, direction: 'reverse',
+    },
+    camera: { fov: 105.0526, z: 1203.047, x: 0, y: 0, near: 12.03, far: 3097.2 },
+    cards: [
+      [0.856, 0, 0, 0, 0, 0.856, 0, 0, 0, 0, 2, 0, 0, -223.225, -223.225, 1],
+      [1.027, 0, 0, 0, 0, 1.027, 0, 0, 0, 0, 2, 0, 0, -281.28, -143.319, 1],
+      [1.228, 0, 0, 0, 0, 1.228, 0, 0, 0, 0, 2, 0, 0, -311.801, -49.384, 1],
+      [1.439, 0, 0, 0, 0, 1.439, 0, 0, 0, 0, 2, 0, 0, -311.801, 49.384, 1],
+    ],
+  },
+  {
+    name: 'Ring Lightroom 04', aspect: 4 / 5, spin: -1.99666, cardScale: 2.64566,
+    values: {
+      count: 24, gap: 0, diameter: 1000, cardRotation: 0, cardTilt: 0, surface: 'flat',
+      facing: 'ring', flip: 'yes', tiltX: 0, ringYaw: 0, ringRoll: 0,
+      zoom: 25, perspective: 2000, offsetX: 0, offsetY: 0, scaleContrast: 0, direction: 'reverse',
+    },
+    camera: { fov: 147.0062, z: 675.645, x: 0, y: 0, near: 6.756, far: 2498.6 },
+    cards: [
+      [1.093, 0, -2.409, 0, 0, 2.646, 0, 0, 2.409, 0, 1.093, 0, -732.035, 0, -332.066, 1],
+      [0.432, 0, -2.61, 0, 0, 2.646, 0, 0, 2.61, 0, 0.432, 0, -793.036, 0, -131.286, 1],
+      [-0.258, 0, -2.633, 0, 0, 2.646, 0, 0, 2.633, 0, -0.258, 0, -799.994, 0, 78.44, 1],
+      [-0.931, 0, -2.476, 0, 0, 2.646, 0, 0, 2.476, 0, -0.931, 0, -752.433, 0, 282.821, 1],
+    ],
+  },
+  {
+    name: 'Ring Bloom 01', aspect: 4 / 5, spin: -3.13359, cardScale: 0.84746,
+    values: {
+      count: 12, gap: 18, diameter: 0, cardRotation: 0, cardTilt: 15, surface: 'flat',
+      facing: 'ring', flip: 'no', tiltX: 0, ringYaw: 0, ringRoll: 0,
+      zoom: 85.2, perspective: 610, offsetX: 0, offsetY: 0, scaleContrast: 0, direction: 'reverse',
+    },
+    camera: { fov: 94.9667, z: 398.953, x: 0, y: 0, near: 3.99, far: 1294.6 },
+    cards: [
+      [-0.847, 0, 0.007, 0, -0.002, 0.819, -0.219, 0, -0.007, -0.219, -0.819, 0, -1.283, -1.444, -160.244, 1],
+      [-0.731, 0, 0.43, 0, -0.111, 0.819, -0.189, 0, -0.415, -0.219, -0.706, 0, -81.233, -1.444, -138.134, 1],
+      [-0.418, 0, 0.737, 0, -0.191, 0.819, -0.108, 0, -0.712, -0.219, -0.404, 0, -139.417, -1.444, -79.011, 1],
+      [0.007, 0, 0.847, 0, -0.219, 0.819, 0.002, 0, -0.819, -0.219, 0.007, 0, -160.244, -1.444, 1.283, 1],
+    ],
+  },
+  {
+    name: 'Ring Bloom 03', aspect: 1, spin: -0.03142, cardScale: 1,
+    values: {
+      count: 12, gap: 0, diameter: 0, cardRotation: 0, cardTilt: 0, surface: 'flat',
+      facing: 'camera', flip: 'no', tiltX: 24, ringYaw: 75, ringRoll: 90,
+      zoom: 40, perspective: 2000, offsetX: 5, offsetY: 7, scaleContrast: 200, direction: 'reverse',
+    },
+    camera: { fov: 147.0062, z: 280.2, x: 47.306, y: 66.229, near: 2.802, far: 1399.8 },
+    cards: [
+      [0.825, 0, 0, 0, 0, 0.825, 0, 0, 0, 0, 1, 0, 180.155, -24.989, 41.715, 1],
+      [0.951, 0, 0, 0, 0, 0.951, 0, 0, 0, 0, 1, 0, 158.85, 63.243, 74.75, 1],
+      [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 94.981, 134.53, 87.755, 1],
+      [0.96, 0, 0, 0, 0, 0.96, 0, 0, 0, 0, 1, 0, 5.662, 169.769, 77.247, 1],
+    ],
+  },
+];
+
+// The ring's own geometry, rederived here so a change on either side has to be
+// argued rather than inherited. The card is 100 tall whatever its shape; the
+// radius is whatever makes each slot exactly one card wide — the ARC for a
+// wrapped card and the CHORD for a flat one; and the frame's half-height is
+// that radius times the reference's zoom curve, with the gap deliberately left
+// out because its applyRingCamera leaves it out too.
+const ORBIT_EXTENT = (aspect, cardRotation) => {
+  const r = (cardRotation * Math.PI) / 180;
+  return Math.abs(100 * aspect * Math.cos(r)) + Math.abs(100 * Math.sin(r));
+};
+const ORBIT_PER_UNIT = (count, surface) =>
+  (surface === 'cylinder' ? (Math.PI * 2) / count : 2 * Math.tan(Math.PI / count));
+const ORBIT_W = (v, aspect) => ORBIT_EXTENT(aspect, v.cardRotation) / ORBIT_PER_UNIT(v.count, v.surface);
+const ORBIT_ZOOM_FACTOR = (zoom) => {
+  const c = (((247 * 100) / zoom) / 1000) * 3;
+  return c <= 0.02 ? 0.35 : 1.05 + ((c - 0.02) / 0.98) * 2.15;
+};
+// The frame the viewer gets is the ARTBOARD's window onto that frame — its
+// export clones the camera and calls setViewOffset(canvasW, canvasH, board...),
+// and its stage canvas is a square sized to the browser while the artboard is a
+// smaller box inside it. Measured 0.4675 at the 1600x1000 window every probe
+// here uses. Restated independently of the template on purpose: this is the one
+// number in the port that came from a measurement.
+const ORBIT_BOARD_CROP = 0.4675;
+const ORBIT_FRAME = (v, aspect) => ORBIT_W(v, aspect) * ORBIT_ZOOM_FACTOR(v.zoom);
+const ORBIT_UNIT = (height, v, aspect) => height / 2 / (ORBIT_FRAME(v, aspect) * ORBIT_BOARD_CROP);
+
+{
+  const H = 1080, W = 810;
+  for (const scene of ORBIT_SCENES) {
+    const t = byName(scene.name);
+    if (!t) continue;
+    // Linear, no hold: the pose is a function of the ring's ANGLE, and this is
+    // the only way to solve for the frame that reproduces a captured one
+    // exactly instead of searching for it. It changes the cadence, not one
+    // number of the geometry being compared.
+    const v = { ...defaultsFor(t.meta.id), ...scene.values, hold: 0 };
+    const ctx = { ...makeCtx(t.meta.id, { width: W, height: H, cardAspect: scene.aspect }), ease: (x) => x };
+    const k = ORBIT_UNIT(H, v, scene.aspect);
+
+    // --- camera: six numbers, all read off the live one ---
+    const pose = t.camera(v, ctx);
+    // The fov we emit is the reference's NARROWED by the artboard crop: its
+    // export renders the artboard rectangle of a bigger frame
+    // (camera.setViewOffset), and the full-frame equivalent of a window is a
+    // narrower lens at the same distance — tan(fov/2) scales by the crop. Every
+    // other number below is in reference units and the crop cancels out of it.
+    const viewFov = (2 * Math.atan(ORBIT_BOARD_CROP * Math.tan((scene.camera.fov * Math.PI) / 360)) * 180) / Math.PI;
+    near(pose.fov, viewFov, 0.01, scene.name, 'camera fov, narrowed by the artboard crop');
+    near(pose.position.z / k, scene.camera.z, 1.5, scene.name, 'camera z in reference units');
+    // Offset pans by a share of the FULL frame's half-height on BOTH axes: its
+    // own x factor is the canvas aspect, and its canvas is square. Reading that
+    // as the artboard's aspect instead reported Bloom 03's correct pan as 4/3
+    // too small.
+    near(pose.position.x / k, scene.camera.x, 1.5, scene.name, 'camera pan x (a share of the FULL frame half-height)');
+    near(-pose.position.y / k, scene.camera.y, 1.5, scene.name, 'camera pan y');
+    // The lookAt has to travel with the eye, or the pan turns into a tilt.
+    near(pose.target.x / k, scene.camera.x, 1.5, scene.name, 'camera target x');
+    near(-pose.target.y / k, scene.camera.y, 1.5, scene.name, 'camera target y');
+    near(pose.near / k, scene.camera.near, 1.5, scene.name, 'camera near');
+    near(pose.far / k, scene.camera.far, 4, scene.name, 'camera far');
+
+    // --- the frame that reproduces the captured spin. With a linear curve the
+    // ring advances `slots` slots over the clip, so this is exact.
+    const slots = Math.max(1, Math.round((v.speed * ctx.duration) / v.count)) * v.count;
+    const frameForSpin = (scene.spin / ((v.direction === 'forward' ? 1 : -1) * slots * ((Math.PI * 2) / v.count))) * ctx.totalFrames;
+
+    let worstPos = 0, worstRot = 0, worstScale = 0;
+    for (let i = 0; i < scene.cards.length; i++) {
+      const m = scene.cards[i];
+      const p = t.transform3d(frameForSpin, i, v.count, v, ctx);
+      // Our y is canvas-down and the reference's is three's y-up; the
+      // quaternion is handed over untouched, so that negation is the whole
+      // conversion — and if it were the only half applied, the columns below
+      // would be the ones to catch it.
+      worstPos = Math.max(worstPos,
+        Math.abs(p.x / k - m[12]),
+        Math.abs(-p.y / k - m[13]),
+        Math.abs(p.z / k - m[14]));
+      const q = p.quaternion;
+      const col = (bx, by, bz) => {
+        const tx = 2 * (q.y * bz - q.z * by);
+        const ty = 2 * (q.z * bx - q.x * bz);
+        const tz = 2 * (q.x * by - q.y * bx);
+        return [
+          bx + q.w * tx + (q.y * tz - q.z * ty),
+          by + q.w * ty + (q.z * tx - q.x * tz),
+          bz + q.w * tz + (q.x * ty - q.y * tx),
+        ];
+      };
+      const cols = [col(1, 0, 0), col(0, 1, 0), col(0, 0, 1)];
+      for (let c = 0; c < 3; c++) {
+        // The captured matrix carries the card's SCALE as well as its turn —
+        // the ring's per-card scale on every column, and Contrast on the two
+        // in the card's own plane. Normalize to compare directions.
+        const len = Math.hypot(m[c * 4], m[c * 4 + 1], m[c * 4 + 2]) || 1;
+        for (let r = 0; r < 3; r++) {
+          worstRot = Math.max(worstRot, Math.abs(cols[c][r] - m[c * 4 + r] / len));
+        }
+      }
+      // ...and that scale is a number this port has to reproduce too: it is the
+      // gap law and the Contrast law multiplied together. The pose says it as a
+      // sprite scale, so undo the renderer's long-edge normalization.
+      const ours = (p.scale * SPRITE_BASE) / (k * Math.max(1, scene.aspect) * 100);
+      worstScale = Math.max(worstScale, Math.abs(ours - Math.hypot(m[0], m[1], m[2])));
+    }
+    // The captures carry 2 and 3 decimals; anything structural is orders of
+    // magnitude coarser than that.
+    check(worstPos < 1.2, scene.name, `card centres are ${worstPos.toFixed(2)} reference units off the live scene`);
+    check(worstRot < 0.01, scene.name, `card orientations are ${worstRot.toFixed(4)} off the live scene's world matrices`);
+    check(worstScale < 0.01, scene.name, `card scale is ${worstScale.toFixed(4)} off the live scene (ringCardScale x Contrast)`);
+  }
+
+  // Every authored preset, as the reference's own table has it
+  // (.shots/ref-orbit-presets-authored.json). Zoom is its `distance` read back
+  // as a percentage of 247, Diameter is twice its orbitRadius, and Speed is
+  // count/loopDuration — cards per second, which is what its Duration pins.
+  const ORBIT_PRESETS = {
+    'Ring Pure 01': { count: 18, gap: 35, diameter: 0, surface: 'cylinder', facing: 'ring', flip: 'no', fade: 30, fadeMode: 'solid', tiltX: -10, ringYaw: -10, ringRoll: 50, zoom: 100, perspective: 300, direction: 'reverse', speed: 0.9, hold: 0, backface: 'show', shape: 1 },
+    'Ring Pure 02': { count: 6, gap: 15, diameter: 0, surface: 'cylinder', facing: 'ring', fade: 15, tiltX: -10, ringYaw: -10, ringRoll: 50, zoom: 75, perspective: 500, speed: 0.3, shape: 1 },
+    'Ring Pure 03': { count: 9, gap: 15, surface: 'cylinder', facing: 'ring', fade: 15, tiltX: -7, offsetY: 4, zoom: 75, perspective: 500, speed: 0.5, shape: 1 },
+    'Ring Pure 04': { count: 18, gap: 15, surface: 'cylinder', facing: 'ring', fade: 15, tiltX: 0, zoom: 100, perspective: 500, speed: 0.5, shape: 1 },
+    'Ring Pure 05': { count: 12, gap: 15, diameter: 120, surface: 'cylinder', facing: 'ring', zoom: 100, perspective: 500, speed: 0.35, shape: 1 },
+    'Ring Pure 06': { count: 18, gap: 0, diameter: 120, cardRotation: 90, surface: 'cylinder', ringRoll: -90, zoom: 65, perspective: 300, direction: 'forward', cornerRadius: 0, shape: 1 },
+    'Ring Carousel 01': { count: 18, gap: 35, surface: 'flat', facing: 'camera', fade: 30, tiltX: -10, ringYaw: -10, ringRoll: 50, zoom: 100, perspective: 300, speed: 0.9, shape: 1 },
+    'Ring Carousel 02': { count: 9, gap: 15, surface: 'flat', facing: 'camera', fade: 15, zoom: 75, perspective: 500, speed: 0.45, shape: 1 },
+    'Ring Carousel 03': { count: 6, gap: 15, surface: 'flat', facing: 'camera', scaleContrast: 50, ringRoll: 56, zoom: 50, perspective: 500, speed: 0.55, hold: 13.5, shape: 1 },
+    'Ring Carousel 04': { count: 20, gap: -50, surface: 'flat', facing: 'camera', scaleContrast: 200, ringRoll: 90, zoom: 41, perspective: 740, speed: 0.8, hold: 20, shape: 1 },
+    'Ring Carousel 05': { count: 6, gap: -15, surface: 'flat', facing: 'camera', scaleContrast: 200, zoom: 25, perspective: 0, speed: 0.8, hold: 20, shape: 1 },
+    'Ring Lightroom 01': { count: 10, gap: 6, surface: 'cylinder', facing: 'ring', flip: 'yes', fade: 0, fadeMode: 'alpha', zoom: 100, perspective: 1600, speed: 0.5, shape: 1 },
+    'Ring Lightroom 02': { count: 10, gap: 6, cardRotation: -90, surface: 'flat', flip: 'yes', fadeMode: 'alpha', ringRoll: 90, zoom: 110, perspective: 1500, speed: 0.5, shape: 1 },
+    'Ring Lightroom 03': { count: 10, gap: 6, cardRotation: -90, surface: 'flat', flip: 'yes', ringRoll: 51, zoom: 105, perspective: 1500, speed: 0.5, hold: 12.5, shape: 1 },
+    'Ring Lightroom 04': { count: 24, gap: 0, diameter: 1000, surface: 'flat', flip: 'yes', fadeMode: 'alpha', zoom: 25, perspective: 2000, speed: 0.8, cornerRadius: 0, shape: 4 / 5 },
+    'Ring Lightroom 05': { count: 6, gap: 15, diameter: 120, surface: 'flat', flip: 'yes', backface: 'hide', fadeMode: 'solid', zoom: 125, perspective: 2000, speed: 0.35, direction: 'forward', shape: 4 / 5 },
+    'Ring Lightroom 06': { count: 6, gap: 15, diameter: 120, cardRotation: 90, flip: 'yes', backface: 'hide', ringRoll: -90, zoom: 125, perspective: 2000, direction: 'forward', shape: 4 / 5 },
+    'Ring Lightroom 07': { count: 12, gap: 15, diameter: 58, flip: 'no', backface: 'hide', zoom: 37, perspective: 2000, direction: 'forward', shape: 4 / 5 },
+    'Ring Lightroom 08': { count: 12, gap: 15, diameter: 58, cardRotation: -90, backface: 'hide', ringRoll: 90, zoom: 42, perspective: 2000, direction: 'forward', shape: 4 / 5 },
+    'Ring Bloom 01': { count: 12, gap: 18, cardTilt: 15, surface: 'flat', facing: 'ring', fade: 25, zoom: 85.2, perspective: 610, speed: 0.6, hold: 12.5, shape: 4 / 5 },
+    'Ring Bloom 02': { count: 12, gap: 0, facing: 'camera', fadeMode: 'alpha', scaleContrast: 200, ringYaw: 85, ringRoll: 90, offsetX: 5, zoom: 40, perspective: 2000, speed: 1.2, shape: 1 },
+    'Ring Bloom 03': { count: 12, gap: 0, facing: 'camera', scaleContrast: 200, tiltX: 24, ringYaw: 75, ringRoll: 90, offsetX: 5, offsetY: 7, zoom: 40, perspective: 2000, speed: 1.2, shape: 1 },
+    'Ring Bloom 04': { count: 12, cardTilt: -44, facing: 'camera', tiltX: 97, ringYaw: -40, ringRoll: 0, zoom: 55, perspective: 2000, speed: 1.2, shape: 1 },
+    'Ring Bloom 05': { count: 16, gap: 49, facing: 'ring', fade: 0, fadeMode: 'alpha', tiltX: 90, zoom: 119.3, perspective: 610, speed: 1.35, shape: 9 / 16 },
+  };
+  for (const [name, authored] of Object.entries(ORBIT_PRESETS)) {
+    const t = byName(name);
+    check(!!t, name, 'is missing from the catalogue');
+    if (!t) continue;
+    const v = defaultsFor(t.meta.id);
+    for (const [key, want] of Object.entries(authored)) {
+      if (key === 'shape') continue;
+      check(v[key] === want, name, `${key} is ${JSON.stringify(v[key])}, the reference authors ${JSON.stringify(want)}`);
+    }
+    // Its card shape is per preset too, and a shape is not a control.
+    check(Math.abs((t.meta.cardAspect ?? 1) - authored.shape) < 1e-9, name,
+      `card shape is ${t.meta.cardAspect}, the reference authors ${authored.shape.toFixed(4)}`);
+  }
+
+  // Loop closure and finiteness on every preset in the family: the ring turns a
+  // whole number of slots per clip, so frame 0 and frame N are the same picture.
+  const orbitFamily = templateList.filter((x) => x.meta.id.startsWith('orbit-3d-'));
+  check(orbitFamily.length === 27, 'Orbit 3D', `has ${orbitFamily.length} presets, expected 3 of ours plus the reference's 24`);
+  for (const t of orbitFamily) {
+    const v = defaultsFor(t.meta.id);
+    const aspect = t.meta.cardAspect === 'canvas' ? W / H : (t.meta.cardAspect ?? 4 / 5);
+    const ctx = makeCtx(t.meta.id, { width: W, height: H, cardAspect: aspect });
+    check(loopDrift(t, v, ctx) < 1e-6, t.meta.name, 'does not return to frame 0 at the loop point');
+    let finite = true, everVisible = false;
+    for (let f = 0; f <= ctx.totalFrames; f += 7) {
+      for (let i = 0; i < v.count; i++) {
+        const p = t.transform3d(f, i, v.count, v, ctx);
+        if (![p.x, p.y, p.z, p.scale, p.alpha, p.quaternion.x, p.quaternion.y, p.quaternion.z, p.quaternion.w]
+          .every((n) => Number.isFinite(n))) finite = false;
+        if (p.alpha > 0.02 && p.scale > 0) everVisible = true;
+      }
+    }
+    check(finite, t.meta.name, 'emits a non-finite pose');
+    // Four of the reference's own presets render EMPTY in its shipped build
+    // (Lightroom 05-08: its ringFacing culls the wrong side once Flip and
+    // Backface are both in play). Reproducing that faithfully is worth nothing,
+    // so this is the assertion that keeps them drawn.
+    check(everVisible, t.meta.name, 'draws nothing at all');
+  }
+
+  // The 2D pose has to BE the projection of the 3D one — the sprite paths
+  // (catalogue thumbnails, Board, the web export) have no camera of their own,
+  // and nothing generic can see that projection go wrong: both contexts stay
+  // internally consistent while disagreeing with each other.
+  for (const t of orbitFamily) {
+    const v = defaultsFor(t.meta.id);
+    const aspect = t.meta.cardAspect === 'canvas' ? W / H : (t.meta.cardAspect ?? 4 / 5);
+    const ctx = makeCtx(t.meta.id, { width: W, height: H, cardAspect: aspect });
+    let worstAxis = 0, negativeScale = false;
+    for (let f = 0; f <= ctx.totalFrames; f += 11) {
+      for (let i = 0; i < v.count; i++) {
+        const p2 = t.transform(f, i, v.count, v, ctx);
+        const p3 = t.transform3d(f, i, v.count, v, ctx);
+        const q = p3.quaternion;
+        const axis = (bx, by, bz) => {
+          const tx = 2 * (q.y * bz - q.z * by);
+          const ty = 2 * (q.z * bx - q.x * bz);
+          const tz = 2 * (q.x * by - q.y * bx);
+          return [
+            bx + q.w * tx + (q.y * tz - q.z * ty),
+            by + q.w * ty + (q.z * tx - q.x * tz),
+          ];
+        };
+        const [ux, uy] = axis(1, 0, 0), [wx, wy] = axis(0, 1, 0);
+        const sx = p2.scaleX ?? 1, sy = p2.scaleY ?? 1;
+        if (sx < 0 || sy < 0) negativeScale = true;
+        const rs = p2.rotation + (p2.skewY ?? 0), rk = p2.rotation - (p2.skewX ?? 0);
+        const dir = (x, y) => { const L = Math.hypot(x, y) || 1; return [x / L, y / L]; };
+        const [a1, b1] = dir(Math.cos(rs) * sx, Math.sin(rs) * sx);
+        const [c1, d1] = dir(-Math.sin(rk) * sy, Math.cos(rk) * sy);
+        const [a0, b0] = dir(ux, -uy), [c0, d0] = dir(wx, -wy);
+        worstAxis = Math.max(worstAxis, Math.hypot(a1 - a0, b1 - b0), Math.hypot(c1 - c0, d1 - d0));
+      }
+    }
+    check(worstAxis < 1e-9, t.meta.name,
+      `the 2D pose's axes are ${worstAxis.toFixed(4)} off the projection of its own 3D pose`);
+    check(!negativeScale, t.meta.name, 'hands a sprite path a negative scale instead of a skew past 90 degrees');
+  }
+}
+
+// ============================================================
+//  ARC — the reference's other ported engine, pinned against its live scene
+//
+//  Same method again (module 41034 read, then checked against the running page
+//  with scripts/_scene_orbit.cjs at MS_FAMILY=Wheel — capture in
+//  .shots/ref-scene-wheel.json). Two things separate it from the ring and both
+//  are measured rather than assumed:
+//
+//    · its canvas IS the artboard. The live camera comes back with aspect
+//      0.7995 against its 4:5 board where every ring capture came back square,
+//      so the ring's BOARD_CROP must NOT be applied here — and its stage
+//      photograph agrees (card 0.35 of the frame height, not 0.75).
+//    · its panel states the wheel as a DIAMETER, twice the radius the maths
+//      uses: 2500 on screen for the 1250 the cards actually sit on.
+//
+//  What the capture pins: 13 card meshes (its slotCount for count 9, which is
+//  what its editor forces the count to), every one of them exactly 1250.0 from
+//  the wheel's centre, and a camera at z 2264.519 with near 45.29 and far
+//  13058.1 — 0.02·z and 4·z + 4000 to the digit.
+// ============================================================
+const ARC_UNIT = (height, zoom) => height / 2 / ((350 / 200) * ((408 * 100) / zoom));
+
+{
+  const H = 1080, W = 864;             // its own 4:5 artboard
+  const ARC_ASPECT = 5 / 7;            // Custom 500x700
+  const t = byName('Arc 01');
+  if (t) {
+    const v = defaultsFor(t.meta.id);
+    const ctx = makeCtx(t.meta.id, { width: W, height: H, duration: 4.2, cardAspect: ARC_ASPECT });
+    const k = ARC_UNIT(H, v.zoom);
+    const R = v.diameter / 2;
+
+    // --- the wheel. Every card is glued to the rim, and the rim's centre sits
+    // one radius BELOW the crest — which is the whole mechanic: they ride over
+    // a hill rather than round a ring.
+    let worstRim = 0, worstTangent = 0;
+    for (let i = 0; i < v.count; i++) {
+      const p = t.transform(0, i, v.count, v, ctx);
+      const x = p.x / k, y = p.y / k;
+      worstRim = Math.max(worstRim, Math.abs(Math.hypot(x, y - R) - R));
+      // ...and each card is turned by its own angle on that rim, so it stays
+      // tangent to it. Stated as x = R·sin and y = R·(1 − cos) of the very
+      // rotation the pose carries.
+      worstTangent = Math.max(worstTangent,
+        Math.abs(x - R * Math.sin(p.rotation)),
+        Math.abs(y - R * (1 - Math.cos(p.rotation))));
+    }
+    check(worstRim < 0.5, 'Arc 01', `cards sit ${worstRim.toFixed(2)} units off the wheel's rim`);
+    check(worstTangent < 0.5, 'Arc 01', `card turn is ${worstTangent.toFixed(2)} units out of tangent with the rim`);
+
+    // --- the pitch is an ANGLE, and Gap sets the whole sweep: 55 degrees at
+    // Gap 4 walking to 105 at Gap 80, shared out between the cards. At frame 0
+    // every stagger delay is still unspent, so the angles are exactly the
+    // nominal ones and this comparison is not approximate.
+    const sweep = 55 + ((v.gap - 4) / 76) * 50;
+    const pitch = ((2 * sweep) / v.count) * (Math.PI / 180);
+    let worstPitch = 0;
+    for (let i = 0; i < v.count; i++) {
+      const p = t.transform(0, i, v.count, v, ctx);
+      worstPitch = Math.max(worstPitch, Math.abs(p.rotation - (i - (v.count - 1) / 2) * pitch));
+    }
+    check(worstPitch < 1e-9, 'Arc 01', `pitch is ${worstPitch.toFixed(6)} rad off ${(pitch * 180 / Math.PI).toFixed(3)} degrees per card`);
+
+    // The coincidence that proves the reading: at its authored Gap 20 with 8
+    // cards on a 1250 wheel the arc between neighbours is 357.4 units and the
+    // card is 500 x 5/7 = 357.1 wide. They just touch. A wrong sweep or a wrong
+    // radius would not land there.
+    near(pitch * R, 500 * ARC_ASPECT, 0.5, 'Arc 01', 'neighbours exactly one card apart at the authored Gap');
+
+    // --- the card's drawn size. The renderer normalizes a sprite's LONG edge
+    // to SPRITE_BASE, and this card is portrait, so the long edge is its height.
+    const p0 = t.transform(0, 0, v.count, v, ctx);
+    near(p0.scale * SPRITE_BASE, 500 * k, 0.01, 'Arc 01', 'card height in px');
+    // Its frame is 1.75 x distance tall whatever the lens — the same
+    // cancellation the ring and the belt have — so the card covers this much of
+    // it, which is what its stage photographs.
+    near((500 * k) / H, 0.35, 0.01, 'Arc 01', 'card as a share of the frame height');
+  }
+
+  // Every authored preset, off its own table (.shots/ref-arc-presets-authored.json).
+  // All three share one geometry and differ only in how they move.
+  const ARC_PRESETS = {
+    'Arc 01': { count: 8, gap: 20, cardSize: 500, diameter: 2500, zoom: 100, movement: 'boomerang', direction: 'forward', pause: 0.25, stagger: 0.05, staggerMode: 'pull', cornerRadius: 10 },
+    'Arc 02': { count: 8, gap: 20, cardSize: 500, diameter: 2500, zoom: 100, movement: 'normal', direction: 'forward', pause: 0.25, stagger: 0.05, staggerMode: 'pull', cornerRadius: 10 },
+    'Arc 03': { count: 8, gap: 20, cardSize: 500, diameter: 2500, zoom: 100, movement: 'normal', direction: 'forward', pause: 0, stagger: 0, staggerMode: 'pull', cornerRadius: 10 },
+  };
+  for (const [name, authored] of Object.entries(ARC_PRESETS)) {
+    const preset = byName(name);
+    check(!!preset, name, 'is missing from the catalogue');
+    if (!preset) continue;
+    const v = defaultsFor(preset.meta.id);
+    for (const [key, want] of Object.entries(authored)) {
+      check(v[key] === want, name, `${key} is ${JSON.stringify(v[key])}, the reference authors ${JSON.stringify(want)}`);
+    }
+    check(Math.abs((preset.meta.cardAspect ?? 1) - ARC_ASPECT) < 1e-9, name,
+      `card shape is ${preset.meta.cardAspect}, the reference authors 500x700`);
+  }
+
+  // Loop closure and finiteness. The boomerang closes because it swings out and
+  // all the way back; the normal mode closes because a whole number of steps
+  // brings every card back to its own start — and the wrap that makes that true
+  // is the one place this port restates the reference's model rather than
+  // copying it (its slots stand still and its textures rotate; here the cards
+  // travel and wrap).
+  for (const preset of templateList.filter((x) => x.meta.id.startsWith('arc-'))) {
+    const v = defaultsFor(preset.meta.id);
+    const duration = preset.meta.id === 'arc-01' ? 4.2 : 13.5;
+    const ctx = makeCtx(preset.meta.id, { width: W, height: H, duration, cardAspect: ARC_ASPECT });
+    check(loopDrift(preset, v, ctx) < 1e-6, preset.meta.name, 'does not return to frame 0 at the loop point');
+    let finite = true, everVisible = false;
+    for (let f = 0; f <= ctx.totalFrames; f += 5) {
+      for (let i = 0; i < v.count; i++) {
+        const p = preset.transform(f, i, v.count, v, ctx);
+        if (![p.x, p.y, p.scale, p.alpha, p.rotation].every(Number.isFinite)) finite = false;
+        if (p.alpha > 0.02 && p.scale > 0) everVisible = true;
+      }
+    }
+    check(finite, preset.meta.name, 'emits a non-finite pose');
+    check(everVisible, preset.meta.name, 'draws nothing at all');
+  }
+}
+
+// ============================================================
+//  WHEEL — the reference's third ported engine, pinned against its live scene
+//
+//  Read out of module 24248 (WHEEL_FOV, WHEEL_BANK_DEG, cameraZ, computeFrame,
+//  computeWheelContrastScales), its preset table in 478 and its stage renderer
+//  in 44392, then checked against the running page (scripts/_scene_orbit.cjs at
+//  MS_FAMILY=Wheel, capture in .shots/ref-scene-wheel.json).
+//
+//  What the capture pins, and what each row here would catch:
+//    Wheel 01  the ellipse radius is orbitRadius + HALF A CARD + Gap — its
+//              first card's frame group sits at x 387.5 for orbitRadius 350 and
+//              a 75 card, which no other reading of "radius" lands on. Its mesh
+//              is turned -PI/2 and the next by -PI/2 + one slot, which is the
+//              radial alignment. And the ring group carries axis + spin.
+//    Wheel 05  the same expression with Ellipticity 0.33 puts its frame group
+//              at (-202.792, 250.243), exactly on rx 425 / ry 284.75. Its ring
+//              group carries the axis ALONE, because `static` coupling walks
+//              the cards round a wheel that stands still — so its cards ride a
+//              FIXED ellipse, which is the assertion below and the one thing
+//              that separates a fairground wheel from a turning plate.
+//
+//  Its camera has no separate check because this family is flat: with every
+//  card at z=0 the only thing the camera decides is scale, and that is the unit
+//  scale asserted through the card's height in px.
+// ============================================================
+const WHEEL_UNIT = (height, zoom) => height / 2 / ((170 / 200) * ((631 * 100) / zoom));
+
+{
+  const H = 1080, W = 1080;            // its own artboard for this family is 1:1
+  const wheelScenes = [
+    { name: 'Wheel 01', aspect: 4 / 5, rx: 387.5, ellipticity: 0, axis: 45, radial: true },
+    { name: 'Wheel 05', aspect: 1, rx: 425, ellipticity: 0.33, axis: 37, radial: false },
+  ];
+  for (const scene of wheelScenes) {
+    const t = byName(scene.name);
+    if (!t) { check(false, scene.name, 'is missing from the catalogue'); continue; }
+    const v = defaultsFor(t.meta.id);
+    const ctx = makeCtx(t.meta.id, { width: W, height: H, cardAspect: scene.aspect });
+    const k = WHEEL_UNIT(H, v.zoom);
+    const ry = scene.rx * (1 - scene.ellipticity);
+    const axis = scene.axis * (Math.PI / 180);
+
+    // At frame 0 the spin is still zero, so the ring carries the axis alone and
+    // the cards are exactly where the ellipse puts them. Nothing approximate.
+    let worstEllipse = 0, worstTurn = 0;
+    for (let i = 0; i < v.count; i++) {
+      const p = t.transform(0, i, v.count, v, ctx);
+      // Back out of the canvas: y runs down here and up in the reference.
+      const x = p.x / k, y = -p.y / k;
+      // Un-turn the ring, then the point must sit on rx x ry.
+      const lx = x * Math.cos(-axis) - y * Math.sin(-axis);
+      const ly = x * Math.sin(-axis) + y * Math.cos(-axis);
+      worstEllipse = Math.max(worstEllipse,
+        Math.abs((lx / scene.rx) ** 2 + (ly / ry) ** 2 - 1));
+      // Radial points the card along its own spoke (turned a quarter so the
+      // card's top faces out); Normal keeps it upright whatever the ring does.
+      const spoke = (i / Math.max(3, Math.round(v.count))) * Math.PI * 2;
+      const want = scene.radial ? -(axis + spoke - Math.PI / 2) : 0;
+      worstTurn = Math.max(worstTurn, Math.abs(Math.atan2(
+        Math.sin(p.rotation - want), Math.cos(p.rotation - want))));
+    }
+    check(worstEllipse < 1e-9, scene.name,
+      `cards are ${worstEllipse.toFixed(6)} off the ellipse rx ${scene.rx} / ry ${ry.toFixed(2)}`);
+    check(worstTurn < 1e-9, scene.name,
+      `card turn is ${worstTurn.toFixed(6)} rad off its ${scene.radial ? 'radial' : 'upright'} alignment`);
+
+    // The card is `cardSize` TALL in the reference's units whatever its shape,
+    // and the frame is 170/200 x distance tall for any lens — so this one
+    // number carries the whole camera for a flat family.
+    const p0 = t.transform(0, 0, v.count, v, ctx);
+    const long = p0.scale * SPRITE_BASE;
+    const heightPx = scene.aspect >= 1 ? long / scene.aspect : long;
+    near(heightPx, v.cardSize * k, 0.01, scene.name, 'card height in px');
+  }
+
+  // `static` coupling is what makes a fairground wheel: the hub stands still
+  // and the cards walk round it, so every card stays on ONE ellipse for the
+  // whole clip. With `rotate` the ellipse itself turns and this would fail at
+  // any frame but 0 — which is exactly the confusion worth pinning.
+  {
+    const t = byName('Wheel 05');
+    if (t) {
+      const v = defaultsFor(t.meta.id);
+      const ctx = makeCtx(t.meta.id, { width: W, height: H, duration: 12, cardAspect: 1 });
+      const k = WHEEL_UNIT(H, v.zoom);
+      const rx = 425, ry = rx * (1 - 0.33), axis = 37 * (Math.PI / 180);
+      let worst = 0;
+      for (let f = 0; f <= ctx.totalFrames; f += 9) {
+        for (let i = 0; i < v.count; i++) {
+          const p = t.transform(f, i, v.count, v, ctx);
+          const x = p.x / k, y = -p.y / k;
+          const lx = x * Math.cos(-axis) - y * Math.sin(-axis);
+          const ly = x * Math.sin(-axis) + y * Math.cos(-axis);
+          worst = Math.max(worst, Math.abs((lx / rx) ** 2 + (ly / ry) ** 2 - 1));
+        }
+      }
+      check(worst < 1e-9, 'Wheel 05', `leaves its fixed ellipse by ${worst.toFixed(6)} — static coupling must walk the cards, not turn the ring`);
+    }
+  }
+
+  // Every authored preset, off its own table (module 478). Diameter is twice its
+  // orbitRadius; Speed is count/loopDuration, cards per second; Hold is its
+  // implicit pause, an eighth of a step on the presets that carry a curve.
+  const WHEEL_PRESETS = {
+    'Wheel 01': { count: 20, cardSize: 75, diameter: 700, gap: 0, ellipticity: 0, axis: 45, cardAlign: 'radial', spinCoupling: 'rotate', zoom: 100, scaleContrast: 0, direction: 'forward', speed: 1, hold: 12.5, shape: 4 / 5 },
+    'Wheel 02': { count: 24, cardSize: 60, diameter: 400, gap: 200, ellipticity: 0, axis: 45, cardAlign: 'normal', spinCoupling: 'rotate', speed: 2, hold: 0, shape: 4 / 5 },
+    'Wheel 03': { count: 12, cardSize: 170, diameter: 400, gap: 0, ellipticity: 0, axis: 45, cardAlign: 'normal', spinCoupling: 'rotate', speed: 1, hold: 12.5, shape: 1 },
+    'Wheel 04': { count: 10, cardSize: 170, diameter: 340, gap: 38, ellipticity: 0, axis: 45, cardAlign: 'radial', spinCoupling: 'rotate', speed: 1, hold: 12.5, shape: 4 / 5 },
+    'Wheel 05': { count: 12, cardSize: 200, diameter: 650, gap: 0, ellipticity: 0.33, axis: 37, cardAlign: 'normal', spinCoupling: 'static', speed: 1, hold: 0, shape: 1 },
+  };
+  for (const [name, authored] of Object.entries(WHEEL_PRESETS)) {
+    const preset = byName(name);
+    check(!!preset, name, 'is missing from the catalogue');
+    if (!preset) continue;
+    const v = defaultsFor(preset.meta.id);
+    for (const [key, want] of Object.entries(authored)) {
+      if (key === 'shape') continue;
+      check(v[key] === want, name, `${key} is ${JSON.stringify(v[key])}, the reference authors ${JSON.stringify(want)}`);
+    }
+    check(Math.abs((preset.meta.cardAspect ?? 1) - authored.shape) < 1e-9, name,
+      `card shape is ${preset.meta.cardAspect}, the reference authors ${authored.shape.toFixed(3)}`);
+  }
+
+  // Loop closure and finiteness across the family.
+  for (const preset of templateList.filter((x) => x.meta.id.startsWith('wheel-r'))) {
+    const v = defaultsFor(preset.meta.id);
+    const aspect = preset.meta.cardAspect ?? 4 / 5;
+    const ctx = makeCtx(preset.meta.id, { width: W, height: H, duration: 12, cardAspect: aspect });
+    check(loopDrift(preset, v, ctx) < 1e-6, preset.meta.name, 'does not return to frame 0 at the loop point');
+    let finite = true, everVisible = false;
+    for (let f = 0; f <= ctx.totalFrames; f += 7) {
+      for (let i = 0; i < v.count; i++) {
+        const p = preset.transform(f, i, v.count, v, ctx);
+        if (![p.x, p.y, p.scale, p.alpha, p.rotation].every(Number.isFinite)) finite = false;
+        if (p.alpha > 0.02 && p.scale > 0) everVisible = true;
+      }
+    }
+    check(finite, preset.meta.name, 'emits a non-finite pose');
+    check(everVisible, preset.meta.name, 'draws nothing at all');
+  }
+}
+
 // ---------- report ----------
 if (failures.length) {
   console.error(`\nReference verification FAILED — ${failures.length} problem(s):\n`);

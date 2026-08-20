@@ -13,7 +13,13 @@ import { execSync } from 'node:child_process';
 // "C:\C:\Users\..." and every read failed. fileURLToPath handles both platforms,
 // which is why this script had never actually run on Windows.
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
+// Newlines are normalised to LF. The snapshot below is a STRING baked into a
+// committed file, so without this the endings of whoever ran the script leak
+// into it: regenerating on Windows rewrote roughly every key with \r\n and
+// buried the handful of real changes in a 45-key diff, which is how this file
+// came to be left stale rather than kept current. The exported pack gets LF on
+// every platform now, and a regeneration diff only shows what actually moved.
+const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8').replace(/\r\n/g, '\n');
 
 // Trim the shared types to what the scene needs: drop the pixi-only Effect
 // interface and its import, so the pack has no Pixi dependency.

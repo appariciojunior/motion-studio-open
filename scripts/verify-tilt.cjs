@@ -305,10 +305,17 @@ for (const template of templateList.filter((item) => relevantGroups.has(item.met
         const mean = steps.reduce((x, y) => x + y, 0) / steps.length;
         return { ratio: peak / Math.max(mean, 1e-6), still: steps.filter((d) => d < peak * 0.12).length };
       };
-      const spin = rate('orbit-3d-04');
-      assert(spin.ratio < 1.05 && spin.still === 0,
-        `Ring Pure 01 should spin at a constant rate, got peak/mean ${spin.ratio.toFixed(2)} with ${spin.still} still frames`);
-      for (const [id, name] of [['orbit-3d-07', 'Ring Pure 04'], ['orbit-3d-12', 'Ring Carousel 03'], ['orbit-3d-18', 'Ring Lightroom 04']]) {
+      // Which preset belongs on which side of this is now read off the
+      // reference's own authored table rather than guessed from watching it.
+      // Lightroom 04 used to sit in the stepped list, on a Glide curve with a
+      // 36% hold; its authored row is Linear with pause 0, so it spins — and
+      // this assertion is the one that would have caught the old reading.
+      for (const [id, name] of [['orbit-3d-04', 'Ring Pure 01'], ['orbit-3d-18', 'Ring Lightroom 04'], ['orbit-3d-24', 'Ring Bloom 02']]) {
+        const spin = rate(id);
+        assert(spin.ratio < 1.05 && spin.still === 0,
+          `${name} should spin at a constant rate, got peak/mean ${spin.ratio.toFixed(2)} with ${spin.still} still frames`);
+      }
+      for (const [id, name] of [['orbit-3d-07', 'Ring Pure 04'], ['orbit-3d-12', 'Ring Carousel 03'], ['orbit-3d-19', 'Ring Lightroom 05'], ['orbit-3d-23', 'Ring Bloom 01']]) {
         const stepped = rate(id);
         assert(stepped.ratio > 2 && stepped.still > 240 * 0.25,
           `${name} should step rather than spin, got peak/mean ${stepped.ratio.toFixed(2)} with ${stepped.still} still frames`);

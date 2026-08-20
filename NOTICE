@@ -87,5 +87,5 @@ FONTS AND ASSETS
 ================================================================================
 
 Geist and Geist Mono are served through next/font. The bundled demo images under
-public/demo-arqe are used for preview purposes only and are not covered by this
+public/demo-ref are used for preview purposes only and are not covered by this
 project's licence.
