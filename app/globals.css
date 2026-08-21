@@ -457,9 +457,15 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
   font-size: var(--fs-ui); line-height: var(--lh-ui); color: var(--fg-value);
   font-variant-numeric: tabular-nums; padding: 2px 6px; border-radius: var(--r-seg); cursor: text;
 }
+/* the readout is a click target, so it has to look like one on hover — an
+   unmarked number reads as a label, not as something you can type into */
+.sval:hover { background: var(--card-thumb); color: var(--fg-body); }
+/* mid-drag the cursor crosses the readout; lighting it up there suggests a
+   click target that is not what the gesture is doing */
+.strack.is-dragging .sval:hover { background: none; color: var(--fg-value); }
 .sval-input {
   position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
-  width: 64px; text-align: right; background: var(--card-thumb); border: none; border-radius: var(--r-seg);
+  max-width: calc(100% - 8px); text-align: right; background: var(--card-thumb); border: none; border-radius: var(--r-seg);
   color: var(--fg-body); font-size: var(--fs-ui); padding: 2px 6px;
   font-variant-numeric: tabular-nums;
 }
@@ -518,7 +524,18 @@ select.field { padding-right: 26px; }
 .xypad-cross-h { position: absolute; top: 50%; left: 8px; right: 8px; height: 1px; background: var(--line); }
 .xypad-cross-v { position: absolute; left: 50%; top: 8px; bottom: 8px; width: 1px; background: var(--line); }
 .xypad-dot { position: absolute; width: 10px; height: 10px; border-radius: 50%; background: var(--fg-label); transform: translate(-50%, -50%); }
-.xypad-vals { color: var(--fg-faint); font-size: var(--fs-ui); font-variant-numeric: tabular-nums; }
+.xypad-vals {
+  display: flex; align-items: center; gap: 2px;
+  color: var(--fg-faint); font-size: var(--fs-ui); font-variant-numeric: tabular-nums;
+}
+.xypad-sep { color: var(--fg-faint); }
+.exact-num {
+  text-align: center; background: var(--card-inset); border: 1px solid transparent;
+  border-radius: var(--r-seg); color: var(--fg-value); font-size: var(--fs-ui); padding: 3px 4px;
+  font-variant-numeric: tabular-nums; cursor: text;
+}
+.exact-num:hover { background: var(--card-thumb); color: var(--fg-body); }
+.exact-num:focus { outline: 1px solid var(--ink); outline-offset: 1px; color: var(--fg-body); }
 
 /* upload / dropzone — Figma: flat #f3f4f6 button, 12px #6b7280 */
 .upload, .dropzone {
