@@ -341,6 +341,8 @@ function ExactNumber({ label, value, min, max, step, onCommit }: {
   );
 }
 
+const PAD_GRID = [12.5, 25, 37.5, 62.5, 75, 87.5];
+
 function XYPadControl({ def, value, onChange }: RowProps) {
   const mobile = useMobileInteractions();
   const ref = useRef<HTMLDivElement>(null);
@@ -375,8 +377,14 @@ function XYPadControl({ def, value, onChange }: RowProps) {
         onPointerCancel={() => { pressed.current = false; }}
         onLostPointerCapture={() => { pressed.current = false; }}
       >
-        <div className="xypad-cross-h" />
-        <div className="xypad-cross-v" />
+        <svg className="xypad-grid" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
+          {PAD_GRID.map((p) => <line key={`v${p}`} className="xypad-line" x1={p} y1={0} x2={p} y2={100} />)}
+          {PAD_GRID.map((p) => <line key={`h${p}`} className="xypad-line" x1={0} y1={p} x2={100} y2={p} />)}
+          <line className="xypad-mid" x1={50} y1={0} x2={50} y2={100} />
+          <line className="xypad-mid" x1={0} y1={50} x2={100} y2={50} />
+        </svg>
+        <span className="xypad-tag xypad-tag-x">X</span>
+        <span className="xypad-tag xypad-tag-y">Y</span>
         <div className="xypad-dot" style={{ left: `${dotX}%`, top: `${dotY}%` }} />
       </div>
       <div className="xypad-vals">

@@ -515,17 +515,25 @@ select.field { padding-right: 26px; }
 }
 
 /* xypad */
-.xypad-wrap { display: flex; gap: 10px; align-items: center; }
+.xypad-wrap { display: flex; flex-direction: column; gap: 8px; width: 100%; align-items: stretch; }
 .xypad {
-  position: relative; width: 112px; height: 92px;
+  position: relative; width: 100%; aspect-ratio: 1 / 1;
   background: var(--card-inset); border-radius: var(--r-ctrl);
   touch-action: none; cursor: crosshair;
 }
-.xypad-cross-h { position: absolute; top: 50%; left: 8px; right: 8px; height: 1px; background: var(--line); }
-.xypad-cross-v { position: absolute; left: 50%; top: 8px; bottom: 8px; width: 1px; background: var(--line); }
+.xypad-grid { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.xypad-line { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; opacity: 0.5; }
+.xypad-mid { stroke: var(--handle); stroke-width: 1; vector-effect: non-scaling-stroke; }
+/* which way is which, without having to nudge the dot to find out */
+.xypad-tag {
+  position: absolute; font-size: var(--fs-meta); line-height: 1; color: var(--fg-faint);
+  pointer-events: none; letter-spacing: .04em;
+}
+.xypad-tag-x { right: 5px; top: 50%; transform: translateY(-50%); }
+.xypad-tag-y { left: 50%; top: 5px; transform: translateX(-50%); }
 .xypad-dot { position: absolute; width: 10px; height: 10px; border-radius: 50%; background: var(--fg-label); transform: translate(-50%, -50%); }
 .xypad-vals {
-  display: flex; align-items: center; gap: 2px;
+  display: flex; align-items: center; justify-content: center; gap: 2px;
   color: var(--fg-faint); font-size: var(--fs-ui); font-variant-numeric: tabular-nums;
 }
 .xypad-sep { color: var(--fg-faint); }
