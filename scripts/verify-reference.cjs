@@ -43,6 +43,14 @@ const FPS = 30;
 // scaled by this to land here.
 const REF_SCALE = 0.75;
 
+// Control values are not all scalars: an xypad carries { x, y }, so identity
+// comparison would fail on two structurally equal pads. Compare by shape.
+const sameValue = (a, b) => (
+  a && b && typeof a === 'object' && typeof b === 'object'
+    ? JSON.stringify(a) === JSON.stringify(b)
+    : a === b
+);
+
 let assertions = 0;
 const failures = [];
 function near(actual, expected, tolerance, subject, what) {
@@ -751,7 +759,7 @@ const SPINNER_SCENES = [
   },
   {
     name: 'Fan 03', count: 9, aspect: 4 / 5,
-    values: { count: 9, axis: 'vertical', hinge: 0, diameter: 440, zoom: 127, perspective: 1000, rotateX: -26, rotateY: 120, offsetX: 34, offsetY: 5, fade: 13, backface: 'hide' },
+    values: { count: 9, axis: 'vertical', hinge: 0, diameter: 440, zoom: 127, perspective: 1000, rotateX: -26, rotateY: 120, offset: { x: 34, y: 5 }, fade: 13, backface: 'hide' },
     camera: { fov: 120, z: 797.834, x: 469.843, y: 69.094, near: 7.978, far: 4087.8 },
     spin: 1.71042,
     cards: [
@@ -853,20 +861,20 @@ const SPINNER_UNIT = (height, zoom) => height / 2 / ((600 / 200) * ((585 * 100) 
   // `distance` read back as a percentage (585/distance), which is exact for all
   // fourteen; Diameter is twice its orbitRadius, the way its own panel shows it.
   const SPINNER_PRESETS = {
-    'Spinner 01': { count: 6, axis: 'horizontal', hinge: 0, diameter: 70, zoom: 85, perspective: 125, rotateX: 0, rotateY: 0, rotateZ: 0, offsetX: 0, offsetY: 0, motionRotation: 'static', direction: 'forward', fanRotation: 0, fade: 0 },
+    'Spinner 01': { count: 6, axis: 'horizontal', hinge: 0, diameter: 70, zoom: 85, perspective: 125, rotateX: 0, rotateY: 0, rotateZ: 0, offset: { x: 0, y: 0 }, motionRotation: 'static', direction: 'forward', fanRotation: 0, fade: 0 },
     'Spinner 02': { count: 6, axis: 'horizontal', hinge: 0, diameter: 70, zoom: 85, perspective: 125, motionRotation: 'rotation' },
     'Spinner 03': { count: 32, axis: 'vertical', hinge: 0, diameter: 500, zoom: 50, perspective: 1500, rotateX: -60, rotateY: 60, rotateZ: 90 },
-    'Spinner 04': { count: 18, axis: 'vertical', hinge: 0, diameter: 70, zoom: 85, perspective: 840, rotateX: -18, rotateY: -4, offsetY: 7 },
+    'Spinner 04': { count: 18, axis: 'vertical', hinge: 0, diameter: 70, zoom: 85, perspective: 840, rotateX: -18, rotateY: -4, offset: { x: 0, y: 7 } },
     'Spinner 05': { count: 32, axis: 'horizontal', hinge: 0, diameter: 70, zoom: 85, perspective: 1000 },
     'Spinner 06': { count: 40, axis: 'vertical', hinge: 0, diameter: 1000, zoom: 39, perspective: 125, rotateX: 20 },
     'Hinge 01': { count: 9, axis: 'horizontal', hinge: 282, diameter: 70, zoom: 75, perspective: 125, rotateX: -45, rotateY: -45 },
     'Hinge 02': { count: 9, axis: 'horizontal', hinge: 282, diameter: 70, zoom: 75, perspective: 125, rotateX: -45, rotateY: 0 },
     'Hinge 03': { count: 9, axis: 'horizontal', hinge: 282, diameter: 70, zoom: 75, perspective: 125, rotateX: 0, rotateY: -30 },
-    'Hinge 04': { count: 12, axis: 'horizontal', hinge: 282, diameter: 70, zoom: 75, perspective: 1345, rotateY: -15, offsetX: -5 },
+    'Hinge 04': { count: 12, axis: 'horizontal', hinge: 282, diameter: 70, zoom: 75, perspective: 1345, rotateY: -15, offset: { x: -5, y: 0 } },
     'Hinge 05': { count: 12, axis: 'horizontal', hinge: 280, diameter: 70, zoom: 75, perspective: 1000, rotateX: -115, rotateY: -35, rotateZ: -15 },
-    'Fan 01': { count: 12, axis: 'vertical', hinge: 75, diameter: 70, zoom: 125, perspective: 250, rotateY: -60, rotateZ: -180, offsetX: -16, fanRotation: 180, direction: 'reverse', backface: 'hide' },
-    'Fan 02': { count: 6, axis: 'horizontal', hinge: 0, diameter: 50, zoom: 180, perspective: 150, offsetY: 34 },
-    'Fan 03': { count: 9, axis: 'vertical', hinge: 0, diameter: 440, zoom: 127, perspective: 1000, rotateX: -26, rotateY: 120, offsetX: 34, offsetY: 5, fade: 13, backface: 'hide' },
+    'Fan 01': { count: 12, axis: 'vertical', hinge: 75, diameter: 70, zoom: 125, perspective: 250, rotateY: -60, rotateZ: -180, offset: { x: -16, y: 0 }, fanRotation: 180, direction: 'reverse', backface: 'hide' },
+    'Fan 02': { count: 6, axis: 'horizontal', hinge: 0, diameter: 50, zoom: 180, perspective: 150, offset: { x: 0, y: 34 } },
+    'Fan 03': { count: 9, axis: 'vertical', hinge: 0, diameter: 440, zoom: 127, perspective: 1000, rotateX: -26, rotateY: 120, offset: { x: 34, y: 5 }, fade: 13, backface: 'hide' },
   };
   // Its card shape is per preset too, and a shape is not a control.
   const SPINNER_SHAPES = { 'Spinner 06': 4 / 3, 'Fan 01': 4 / 5, 'Fan 02': 4 / 5, 'Fan 03': 4 / 5 };
@@ -875,7 +883,7 @@ const SPINNER_UNIT = (height, zoom) => height / 2 / ((600 / 200) * ((585 * 100) 
     if (!t) continue;
     const v = defaultsFor(t.meta.id);
     for (const [key, want] of Object.entries(authored)) {
-      check(v[key] === want, name, `${key} is ${JSON.stringify(v[key])}, the reference authors ${JSON.stringify(want)}`);
+      check(sameValue(v[key], want), name, `${key} is ${JSON.stringify(v[key])}, the reference authors ${JSON.stringify(want)}`);
     }
     const shape = SPINNER_SHAPES[name] ?? 1;
     check(Math.abs((t.meta.cardAspect ?? 1) - shape) < 1e-9, name,
@@ -1001,7 +1009,7 @@ const ORBIT_SCENES = [
     values: {
       count: 18, gap: 35, diameter: 0, cardRotation: 0, cardTilt: 0, surface: 'cylinder',
       facing: 'ring', flip: 'no', tiltX: -10, ringYaw: -10, ringRoll: 50,
-      zoom: 100, perspective: 300, offsetX: 0, offsetY: 0, scaleContrast: 0, direction: 'reverse',
+      zoom: 100, perspective: 300, offset: { x: 0, y: 0 }, scaleContrast: 0, direction: 'reverse',
     },
     camera: { fov: 60.3009, z: 1297.997, x: 0, y: 0, near: 12.98, far: 3016.9 },
     cards: [
@@ -1016,7 +1024,7 @@ const ORBIT_SCENES = [
     values: {
       count: 12, gap: 15, diameter: 120, cardRotation: 0, cardTilt: 0, surface: 'cylinder',
       facing: 'ring', flip: 'no', tiltX: 0, ringYaw: 0, ringRoll: 0,
-      zoom: 100, perspective: 500, offsetX: 0, offsetY: 0, scaleContrast: 0, direction: 'reverse',
+      zoom: 100, perspective: 500, offset: { x: 0, y: 0 }, scaleContrast: 0, direction: 'reverse',
     },
     camera: { fov: 84.59, z: 552.485, x: 0, y: 0, near: 5.525, far: 1698.4 },
     cards: [
@@ -1031,7 +1039,7 @@ const ORBIT_SCENES = [
     values: {
       count: 20, gap: -50, diameter: 0, cardRotation: 0, cardTilt: 0, surface: 'flat',
       facing: 'camera', flip: 'no', tiltX: 0, ringYaw: 0, ringRoll: 90,
-      zoom: 41, perspective: 740, offsetX: 0, offsetY: 0, scaleContrast: 200, direction: 'reverse',
+      zoom: 41, perspective: 740, offset: { x: 0, y: 0 }, scaleContrast: 200, direction: 'reverse',
     },
     camera: { fov: 105.0526, z: 1203.047, x: 0, y: 0, near: 12.03, far: 3097.2 },
     cards: [
@@ -1046,7 +1054,7 @@ const ORBIT_SCENES = [
     values: {
       count: 24, gap: 0, diameter: 1000, cardRotation: 0, cardTilt: 0, surface: 'flat',
       facing: 'ring', flip: 'yes', tiltX: 0, ringYaw: 0, ringRoll: 0,
-      zoom: 25, perspective: 2000, offsetX: 0, offsetY: 0, scaleContrast: 0, direction: 'reverse',
+      zoom: 25, perspective: 2000, offset: { x: 0, y: 0 }, scaleContrast: 0, direction: 'reverse',
     },
     camera: { fov: 147.0062, z: 675.645, x: 0, y: 0, near: 6.756, far: 2498.6 },
     cards: [
@@ -1061,7 +1069,7 @@ const ORBIT_SCENES = [
     values: {
       count: 12, gap: 18, diameter: 0, cardRotation: 0, cardTilt: 15, surface: 'flat',
       facing: 'ring', flip: 'no', tiltX: 0, ringYaw: 0, ringRoll: 0,
-      zoom: 85.2, perspective: 610, offsetX: 0, offsetY: 0, scaleContrast: 0, direction: 'reverse',
+      zoom: 85.2, perspective: 610, offset: { x: 0, y: 0 }, scaleContrast: 0, direction: 'reverse',
     },
     camera: { fov: 94.9667, z: 398.953, x: 0, y: 0, near: 3.99, far: 1294.6 },
     cards: [
@@ -1076,7 +1084,7 @@ const ORBIT_SCENES = [
     values: {
       count: 12, gap: 0, diameter: 0, cardRotation: 0, cardTilt: 0, surface: 'flat',
       facing: 'camera', flip: 'no', tiltX: 24, ringYaw: 75, ringRoll: 90,
-      zoom: 40, perspective: 2000, offsetX: 5, offsetY: 7, scaleContrast: 200, direction: 'reverse',
+      zoom: 40, perspective: 2000, offset: { x: 5, y: 7 }, scaleContrast: 200, direction: 'reverse',
     },
     camera: { fov: 147.0062, z: 280.2, x: 47.306, y: 66.229, near: 2.802, far: 1399.8 },
     cards: [
@@ -1208,7 +1216,7 @@ const ORBIT_UNIT = (height, v, aspect) => height / 2 / (ORBIT_FRAME(v, aspect) *
   const ORBIT_PRESETS = {
     'Ring Pure 01': { count: 18, gap: 35, diameter: 0, surface: 'cylinder', facing: 'ring', flip: 'no', fade: 30, fadeMode: 'solid', tiltX: -10, ringYaw: -10, ringRoll: 50, zoom: 100, perspective: 300, direction: 'reverse', speed: 0.9, hold: 0, backface: 'show', shape: 1 },
     'Ring Pure 02': { count: 6, gap: 15, diameter: 0, surface: 'cylinder', facing: 'ring', fade: 15, tiltX: -10, ringYaw: -10, ringRoll: 50, zoom: 75, perspective: 500, speed: 0.3, shape: 1 },
-    'Ring Pure 03': { count: 9, gap: 15, surface: 'cylinder', facing: 'ring', fade: 15, tiltX: -7, offsetY: 4, zoom: 75, perspective: 500, speed: 0.5, shape: 1 },
+    'Ring Pure 03': { count: 9, gap: 15, surface: 'cylinder', facing: 'ring', fade: 15, tiltX: -7, offset: { x: 0, y: 4 }, zoom: 75, perspective: 500, speed: 0.5, shape: 1 },
     'Ring Pure 04': { count: 18, gap: 15, surface: 'cylinder', facing: 'ring', fade: 15, tiltX: 0, zoom: 100, perspective: 500, speed: 0.5, shape: 1 },
     'Ring Pure 05': { count: 12, gap: 15, diameter: 120, surface: 'cylinder', facing: 'ring', zoom: 100, perspective: 500, speed: 0.35, shape: 1 },
     'Ring Pure 06': { count: 18, gap: 0, diameter: 120, cardRotation: 90, surface: 'cylinder', ringRoll: -90, zoom: 65, perspective: 300, direction: 'forward', cornerRadius: 0, shape: 1 },
@@ -1226,8 +1234,8 @@ const ORBIT_UNIT = (height, v, aspect) => height / 2 / (ORBIT_FRAME(v, aspect) *
     'Ring Lightroom 07': { count: 12, gap: 15, diameter: 58, flip: 'no', backface: 'hide', zoom: 37, perspective: 2000, direction: 'forward', shape: 4 / 5 },
     'Ring Lightroom 08': { count: 12, gap: 15, diameter: 58, cardRotation: -90, backface: 'hide', ringRoll: 90, zoom: 42, perspective: 2000, direction: 'forward', shape: 4 / 5 },
     'Ring Bloom 01': { count: 12, gap: 18, cardTilt: 15, surface: 'flat', facing: 'ring', fade: 25, zoom: 85.2, perspective: 610, speed: 0.6, hold: 12.5, shape: 4 / 5 },
-    'Ring Bloom 02': { count: 12, gap: 0, facing: 'camera', fadeMode: 'alpha', scaleContrast: 200, ringYaw: 85, ringRoll: 90, offsetX: 5, zoom: 40, perspective: 2000, speed: 1.2, shape: 1 },
-    'Ring Bloom 03': { count: 12, gap: 0, facing: 'camera', scaleContrast: 200, tiltX: 24, ringYaw: 75, ringRoll: 90, offsetX: 5, offsetY: 7, zoom: 40, perspective: 2000, speed: 1.2, shape: 1 },
+    'Ring Bloom 02': { count: 12, gap: 0, facing: 'camera', fadeMode: 'alpha', scaleContrast: 200, ringYaw: 85, ringRoll: 90, offset: { x: 5, y: 0 }, zoom: 40, perspective: 2000, speed: 1.2, shape: 1 },
+    'Ring Bloom 03': { count: 12, gap: 0, facing: 'camera', scaleContrast: 200, tiltX: 24, ringYaw: 75, ringRoll: 90, offset: { x: 5, y: 7 }, zoom: 40, perspective: 2000, speed: 1.2, shape: 1 },
     'Ring Bloom 04': { count: 12, cardTilt: -44, facing: 'camera', tiltX: 97, ringYaw: -40, ringRoll: 0, zoom: 55, perspective: 2000, speed: 1.2, shape: 1 },
     'Ring Bloom 05': { count: 16, gap: 49, facing: 'ring', fade: 0, fadeMode: 'alpha', tiltX: 90, zoom: 119.3, perspective: 610, speed: 1.35, shape: 9 / 16 },
   };
@@ -1238,7 +1246,7 @@ const ORBIT_UNIT = (height, v, aspect) => height / 2 / (ORBIT_FRAME(v, aspect) *
     const v = defaultsFor(t.meta.id);
     for (const [key, want] of Object.entries(authored)) {
       if (key === 'shape') continue;
-      check(v[key] === want, name, `${key} is ${JSON.stringify(v[key])}, the reference authors ${JSON.stringify(want)}`);
+      check(sameValue(v[key], want), name, `${key} is ${JSON.stringify(v[key])}, the reference authors ${JSON.stringify(want)}`);
     }
     // Its card shape is per preset too, and a shape is not a control.
     check(Math.abs((t.meta.cardAspect ?? 1) - authored.shape) < 1e-9, name,
@@ -1403,7 +1411,7 @@ const ARC_UNIT = (height, zoom) => height / 2 / ((350 / 200) * ((408 * 100) / zo
     if (!preset) continue;
     const v = defaultsFor(preset.meta.id);
     for (const [key, want] of Object.entries(authored)) {
-      check(v[key] === want, name, `${key} is ${JSON.stringify(v[key])}, the reference authors ${JSON.stringify(want)}`);
+      check(sameValue(v[key], want), name, `${key} is ${JSON.stringify(v[key])}, the reference authors ${JSON.stringify(want)}`);
     }
     check(Math.abs((preset.meta.cardAspect ?? 1) - ARC_ASPECT) < 1e-9, name,
       `card shape is ${preset.meta.cardAspect}, the reference authors 500x700`);
@@ -1550,7 +1558,7 @@ const WHEEL_UNIT = (height, zoom) => height / 2 / ((170 / 200) * ((631 * 100) / 
     const v = defaultsFor(preset.meta.id);
     for (const [key, want] of Object.entries(authored)) {
       if (key === 'shape') continue;
-      check(v[key] === want, name, `${key} is ${JSON.stringify(v[key])}, the reference authors ${JSON.stringify(want)}`);
+      check(sameValue(v[key], want), name, `${key} is ${JSON.stringify(v[key])}, the reference authors ${JSON.stringify(want)}`);
     }
     check(Math.abs((preset.meta.cardAspect ?? 1) - authored.shape) < 1e-9, name,
       `card shape is ${preset.meta.cardAspect}, the reference authors ${authored.shape.toFixed(3)}`);
