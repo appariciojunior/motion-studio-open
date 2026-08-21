@@ -43,6 +43,9 @@ const FPS = 30;
 // scaled by this to land here.
 const REF_SCALE = 0.75;
 
+// Offset is stored in the app's own sign convention, which negates the
+// reference's x: the reference authors a camera pan, the app authors where the
+// picture goes. The y matches on both sides.
 // Control values are not all scalars: an xypad carries { x, y }, so identity
 // comparison would fail on two structurally equal pads. Compare by shape.
 const sameValue = (a, b) => (
@@ -759,7 +762,7 @@ const SPINNER_SCENES = [
   },
   {
     name: 'Fan 03', count: 9, aspect: 4 / 5,
-    values: { count: 9, axis: 'vertical', hinge: 0, diameter: 440, zoom: 127, perspective: 1000, rotateX: -26, rotateY: 120, offset: { x: 34, y: 5 }, fade: 13, backface: 'hide' },
+    values: { count: 9, axis: 'vertical', hinge: 0, diameter: 440, zoom: 127, perspective: 1000, rotateX: -26, rotateY: 120, offset: { x: -34, y: 5 }, fade: 13, backface: 'hide' },
     camera: { fov: 120, z: 797.834, x: 469.843, y: 69.094, near: 7.978, far: 4087.8 },
     spin: 1.71042,
     cards: [
@@ -870,11 +873,11 @@ const SPINNER_UNIT = (height, zoom) => height / 2 / ((600 / 200) * ((585 * 100) 
     'Hinge 01': { count: 9, axis: 'horizontal', hinge: 282, diameter: 70, zoom: 75, perspective: 125, rotateX: -45, rotateY: -45 },
     'Hinge 02': { count: 9, axis: 'horizontal', hinge: 282, diameter: 70, zoom: 75, perspective: 125, rotateX: -45, rotateY: 0 },
     'Hinge 03': { count: 9, axis: 'horizontal', hinge: 282, diameter: 70, zoom: 75, perspective: 125, rotateX: 0, rotateY: -30 },
-    'Hinge 04': { count: 12, axis: 'horizontal', hinge: 282, diameter: 70, zoom: 75, perspective: 1345, rotateY: -15, offset: { x: -5, y: 0 } },
+    'Hinge 04': { count: 12, axis: 'horizontal', hinge: 282, diameter: 70, zoom: 75, perspective: 1345, rotateY: -15, offset: { x: 5, y: 0 } },
     'Hinge 05': { count: 12, axis: 'horizontal', hinge: 280, diameter: 70, zoom: 75, perspective: 1000, rotateX: -115, rotateY: -35, rotateZ: -15 },
-    'Fan 01': { count: 12, axis: 'vertical', hinge: 75, diameter: 70, zoom: 125, perspective: 250, rotateY: -60, rotateZ: -180, offset: { x: -16, y: 0 }, fanRotation: 180, direction: 'reverse', backface: 'hide' },
+    'Fan 01': { count: 12, axis: 'vertical', hinge: 75, diameter: 70, zoom: 125, perspective: 250, rotateY: -60, rotateZ: -180, offset: { x: 16, y: 0 }, fanRotation: 180, direction: 'reverse', backface: 'hide' },
     'Fan 02': { count: 6, axis: 'horizontal', hinge: 0, diameter: 50, zoom: 180, perspective: 150, offset: { x: 0, y: 34 } },
-    'Fan 03': { count: 9, axis: 'vertical', hinge: 0, diameter: 440, zoom: 127, perspective: 1000, rotateX: -26, rotateY: 120, offset: { x: 34, y: 5 }, fade: 13, backface: 'hide' },
+    'Fan 03': { count: 9, axis: 'vertical', hinge: 0, diameter: 440, zoom: 127, perspective: 1000, rotateX: -26, rotateY: 120, offset: { x: -34, y: 5 }, fade: 13, backface: 'hide' },
   };
   // Its card shape is per preset too, and a shape is not a control.
   const SPINNER_SHAPES = { 'Spinner 06': 4 / 3, 'Fan 01': 4 / 5, 'Fan 02': 4 / 5, 'Fan 03': 4 / 5 };
@@ -1084,7 +1087,7 @@ const ORBIT_SCENES = [
     values: {
       count: 12, gap: 0, diameter: 0, cardRotation: 0, cardTilt: 0, surface: 'flat',
       facing: 'camera', flip: 'no', tiltX: 24, ringYaw: 75, ringRoll: 90,
-      zoom: 40, perspective: 2000, offset: { x: 5, y: 7 }, scaleContrast: 200, direction: 'reverse',
+      zoom: 40, perspective: 2000, offset: { x: -5, y: 7 }, scaleContrast: 200, direction: 'reverse',
     },
     camera: { fov: 147.0062, z: 280.2, x: 47.306, y: 66.229, near: 2.802, far: 1399.8 },
     cards: [
@@ -1234,8 +1237,8 @@ const ORBIT_UNIT = (height, v, aspect) => height / 2 / (ORBIT_FRAME(v, aspect) *
     'Ring Lightroom 07': { count: 12, gap: 15, diameter: 58, flip: 'no', backface: 'hide', zoom: 37, perspective: 2000, direction: 'forward', shape: 4 / 5 },
     'Ring Lightroom 08': { count: 12, gap: 15, diameter: 58, cardRotation: -90, backface: 'hide', ringRoll: 90, zoom: 42, perspective: 2000, direction: 'forward', shape: 4 / 5 },
     'Ring Bloom 01': { count: 12, gap: 18, cardTilt: 15, surface: 'flat', facing: 'ring', fade: 25, zoom: 85.2, perspective: 610, speed: 0.6, hold: 12.5, shape: 4 / 5 },
-    'Ring Bloom 02': { count: 12, gap: 0, facing: 'camera', fadeMode: 'alpha', scaleContrast: 200, ringYaw: 85, ringRoll: 90, offset: { x: 5, y: 0 }, zoom: 40, perspective: 2000, speed: 1.2, shape: 1 },
-    'Ring Bloom 03': { count: 12, gap: 0, facing: 'camera', scaleContrast: 200, tiltX: 24, ringYaw: 75, ringRoll: 90, offset: { x: 5, y: 7 }, zoom: 40, perspective: 2000, speed: 1.2, shape: 1 },
+    'Ring Bloom 02': { count: 12, gap: 0, facing: 'camera', fadeMode: 'alpha', scaleContrast: 200, ringYaw: 85, ringRoll: 90, offset: { x: -5, y: 0 }, zoom: 40, perspective: 2000, speed: 1.2, shape: 1 },
+    'Ring Bloom 03': { count: 12, gap: 0, facing: 'camera', scaleContrast: 200, tiltX: 24, ringYaw: 75, ringRoll: 90, offset: { x: -5, y: 7 }, zoom: 40, perspective: 2000, speed: 1.2, shape: 1 },
     'Ring Bloom 04': { count: 12, cardTilt: -44, facing: 'camera', tiltX: 97, ringYaw: -40, ringRoll: 0, zoom: 55, perspective: 2000, speed: 1.2, shape: 1 },
     'Ring Bloom 05': { count: 16, gap: 49, facing: 'ring', fade: 0, fadeMode: 'alpha', tiltX: 90, zoom: 119.3, perspective: 610, speed: 1.35, shape: 9 / 16 },
   };

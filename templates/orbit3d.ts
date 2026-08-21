@@ -251,7 +251,12 @@ function ringOf(v: Record<string, any>, count: number, ctx: TransformCtx): Ring 
     n, aspect, extent, wrap, perUnit, W, R, cardScale, dist,
     frame,
     half: frame * BOARD_CROP,
-    panX: (num(v.offset?.x) / 100) * frame,
+    // The pad's x runs the way it runs everywhere else in the app: positive
+    // moves the PICTURE right. Panning a camera does the opposite — the camera
+    // goes right and the cards slide left — so the sign is flipped here rather
+    // than in the reader's head. The reference tool authors the camera's sign;
+    // every value below is stored in ours, which is its negation on x.
+    panX: -(num(v.offset?.x) / 100) * frame,
     panY: (num(v.offset?.y) / 100) * frame,
   };
 }
@@ -881,12 +886,12 @@ export const orbit3dVariants: Template[] = [
   }, NATURAL, PORTRAIT),
   variant(ring3d, 'orbit-3d-24', 'Ring Bloom 02', {
     count: 12, gap: 0, surface: 'flat', facing: 'camera', fade: 0, fadeMode: 'alpha',
-    scaleContrast: 200, tiltX: 0, ringYaw: 85, ringRoll: 90, offset: { x: 5, y: 0 },
+    scaleContrast: 200, tiltX: 0, ringYaw: 85, ringRoll: 90, offset: { x: -5, y: 0 },
     zoom: 40, perspective: 2000, speed: 1.2,
   }, LINEAR, SQUARE),
   variant(ring3d, 'orbit-3d-25', 'Ring Bloom 03', {
     count: 12, gap: 0, surface: 'flat', facing: 'camera', fade: 0, fadeMode: 'alpha',
-    scaleContrast: 200, tiltX: 24, ringYaw: 75, ringRoll: 90, offset: { x: 5, y: 7 },
+    scaleContrast: 200, tiltX: 24, ringYaw: 75, ringRoll: 90, offset: { x: -5, y: 7 },
     zoom: 40, perspective: 2000, speed: 1.2,
   }, LINEAR, SQUARE),
   variant(ring3d, 'orbit-3d-26', 'Ring Bloom 04', {

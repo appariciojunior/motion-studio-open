@@ -144,7 +144,12 @@ function cameraRef(v: Record<string, any>) {
     fov,
     half,
     dist: half / Math.tan((fov * DEG) / 2),
-    panX: (num(v.offset?.x) / 100) * half,
+    // The pad's x runs the way it runs everywhere else in the app: positive
+    // moves the PICTURE right. Panning a camera does the opposite — the camera
+    // goes right and the cards slide left — so the sign is flipped here rather
+    // than in the reader's head. The reference tool authors the camera's sign;
+    // every value below is stored in ours, which is its negation on x.
+    panX: -(num(v.offset?.x) / 100) * half,
     panY: (num(v.offset?.y) / 100) * half,
   };
 }
@@ -463,20 +468,20 @@ export const spinnerVariants: Template[] = [
   variant(spinner, 'hinge-02', 'Hinge 02', { count: 9, hinge: 282, rotateX: -45, zoom: 75 }),
   variant(spinner, 'hinge-03', 'Hinge 03', { count: 9, hinge: 282, rotateY: -30, zoom: 75 }),
   variant(spinner, 'hinge-04', 'Hinge 04', {
-    count: 12, hinge: 282, rotateY: -15, zoom: 75, perspective: 1345, offset: { x: -5, y: 0 },
+    count: 12, hinge: 282, rotateY: -15, zoom: 75, perspective: 1345, offset: { x: 5, y: 0 },
   }),
   variant(spinner, 'hinge-05', 'Hinge 05', {
     count: 12, hinge: 280, rotateX: -115, rotateY: -35, rotateZ: -15, zoom: 75, perspective: 1000,
   }, { id: 'flow' }),
   variant(spinner, 'fan-01', 'Fan 01', {
     count: 12, direction: 'reverse', axis: 'vertical', fanRotation: 180, hinge: 75,
-    rotateY: -60, rotateZ: -180, zoom: 125, perspective: 250, offset: { x: -16, y: 0 }, backface: 'hide',
+    rotateY: -60, rotateZ: -180, zoom: 125, perspective: 250, offset: { x: 16, y: 0 }, backface: 'hide',
   }, { id: 'smooth' }, { cardAspect: 4 / 5 }),
   variant(spinner, 'fan-02', 'Fan 02', {
     count: 6, diameter: 50, zoom: 180, perspective: 150, offset: { x: 0, y: 34 },
   }, undefined, { cardAspect: 4 / 5 }),
   variant(spinner, 'fan-03', 'Fan 03', {
     count: 9, axis: 'vertical', diameter: 440, fade: 13, rotateX: -26, rotateY: 120,
-    zoom: 127, perspective: 1000, offset: { x: 34, y: 5 }, backface: 'hide',
+    zoom: 127, perspective: 1000, offset: { x: -34, y: 5 }, backface: 'hide',
   }, undefined, { cardAspect: 4 / 5 }),
 ];
