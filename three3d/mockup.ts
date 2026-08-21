@@ -11,6 +11,7 @@ import { findDevice } from './devices';
 import { use3DStore } from '../store/use3DStore';
 import { useSceneStore } from '../store/useSceneStore';
 import { apply3DAnimation } from './animations';
+import { createCardVideo, seekVideoToTime } from '@/lib/videoTexture';
 
 // ── Device Mockup 3D effect ─────────────────────────────────────────────────
 // Realistic PBR render — the GLB's own materials (colour, metalness, roughness,
@@ -207,6 +208,7 @@ export function initMockup(
   const MODEL_SIZE = DEV?.fitHeight ?? 2.4;
   let modelHalf = MODEL_SIZE / 2;
   let modelBottom = -modelHalf;
+  let groundBaseY = -modelHalf;   // shadow-catcher height at the model's resting base
   // Default view — a slight 3/4 turn to the right + a touch of elevation
   // (classic product-shot angle) instead of a flat, dead-on front view.
   const INIT_AZIMUTH = THREE.MathUtils.degToRad(28);
@@ -223,9 +225,30 @@ export function initMockup(
     camera.position.copy(INIT_CAM);
     controls.target.copy(INIT_TARGET);
     controls.update();
-    ground.position.set(0, modelBottom, 0);
+    groundBaseY = modelBottom;
+    ground.position.set(0, groundBaseY, 0);
     const gs = dist * 3;
     ground.scale.set(gs, gs, 1);
+  }
+
+  // The contact shadow's catcher plane sits at the model's resting base. That
+  // holds while the model stays put — but the floating animations drive the
+  // pivot DOWN (float_hover reaches posY -0.12), and a plane at the resting
+  // base then slices through the device: everything below it is still drawn,
+  // darkened by the ShadowMaterial, so the lower chassis appears as a dark band
+  // cutting straight across the screen — a straight edge that ignores the
+  // panel's rounded corners, which is how it tells itself apart from a depth
+  // fight. Measured: absent at posY >= 0, and at posY -0.6 it swallowed a
+  // quarter of the display.
+  //
+  // So the plane follows the model DOWN and never rises above its resting
+  // height: a device that floats up still casts its shadow on the floor, and a
+  // device that dips can no longer be cut by it. Pivot rotation is not folded
+  // in — these animations tilt by single-digit degrees, far less than the gap
+  // this keeps.
+  function settleGroundUnderModel() {
+    const bottomNow = pivot.position.y + modelBottom * pivot.scale.y;
+    ground.position.y = Math.min(groundBaseY, bottomNow);
   }
 
   // Render at the scene's EXPORT resolution and let CSS shrink the canvas into
@@ -323,6 +346,11 @@ export function initMockup(
   let screenVideoEl: HTMLVideoElement | null = null;
   let screenImageEl: HTMLImageElement | null = null;
   let screenXformKey = '';
+  // While an export is capturing, the clip is stepped by seekScreenVideo() and
+  // the live sync below must keep its hands off it — advanceVideoForExport()
+  // decodes forward and watches for presented frames, so a stray currentTime
+  // write from the rAF loop would derail the pass.
+  let screenVideoExporting = false;
   // Composite at the panel's real native pixels (1206 x 2622 on an iPhone 17
   // Pro — the same buffer size the reference tool reports), capped on the long
   // edge so a 6K Pro Display XDR doesn't allocate a 6016px texture per frame.
@@ -336,10 +364,36 @@ export function initMockup(
   let screenCtx: CanvasRenderingContext2D | null = null;
   let screenCanvasTex: THREE.CanvasTexture | null = null;
 
+  // A mesh whose screen UVs were authored with the axes swapped needs the
+  // composite laid out TRANSPOSED — the canvas is portrait where the panel is
+  // landscape, and the swap turns it back. Everything downstream keeps working
+  // in the panel's own (visual) orientation; only this allocation and the
+  // transform in beginScreenSpace know about the swap.
+  const SCREEN_TRANSPOSE = DEV?.screenTextureTranspose ?? null;
+
   function ensureScreenCanvas(screenAspect: number) {
-    const h = Math.max(1, Math.round(SCREEN_RES / screenAspect));
+    const aspect = SCREEN_TRANSPOSE ? 1 / screenAspect : screenAspect;
+    const h = Math.max(1, Math.round(SCREEN_RES / aspect));
     if (!screenCanvas) { screenCanvas = document.createElement('canvas'); screenCtx = screenCanvas.getContext('2d'); }
     if (screenCanvas.width !== SCREEN_RES || screenCanvas.height !== h) { screenCanvas.width = SCREEN_RES; screenCanvas.height = h; }
+  }
+
+  // Enters the panel's visual coordinate space and returns its size. Callers
+  // draw as if the canvas were the panel, right way up; the transform lands it
+  // in whatever orientation the mesh actually wants. Pair with ctx.restore().
+  //
+  // Both swaps are REFLECTIONS (a diagonal mirror), not rotations, which is why
+  // a swapped screen came out sideways AND mirrored. A reflection is its own
+  // inverse, so re-applying the measured one cancels it exactly.
+  function beginScreenSpace(ctx: CanvasRenderingContext2D): { W: number; H: number } {
+    const cw = screenCanvas!.width, ch = screenCanvas!.height;
+    ctx.save();
+    if (!SCREEN_TRANSPOSE) return { W: cw, H: ch };
+    // Visual space is the canvas with its axes swapped back.
+    const W = ch, H = cw;
+    if (SCREEN_TRANSPOSE === 'main') ctx.setTransform(0, 1, 1, 0, 0, 0);              // (x,y) -> (y,x)
+    else ctx.setTransform(0, -1, -1, 0, cw, ch);                                      // (x,y) -> (W-y, H-x)
+    return { W, H };
   }
 
   // Lays `source` into the screen under the chosen fit/zoom/anchor, then clips
@@ -351,10 +405,10 @@ export function initMockup(
   // cannot express.
   function drawScreenFrame(source: HTMLImageElement | HTMLVideoElement, screenAspect: number, cornerFrac: number) {
     if (!screenCanvas || !screenCtx) return;
-    const W = screenCanvas.width, H = screenCanvas.height;
     const ctx = screenCtx;
-    ctx.clearRect(0, 0, W, H);
-    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, screenCanvas.width, screenCanvas.height);
+    const { W, H } = beginScreenSpace(ctx);
     const r = Math.min(W, H) * Math.max(0, cornerFrac);
     if (r > 0.5) { ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.clip(); }
 
@@ -382,11 +436,14 @@ export function initMockup(
 
   function drawEmptyScreenFrame() {
     if (!screenCanvas || !screenCtx) return;
-    const W = screenCanvas.width, H = screenCanvas.height;
-    screenCtx.clearRect(0, 0, W, H);
-    screenCtx.fillStyle = '#ffffff';
-    screenCtx.fillRect(0, 0, W, H);
-    drawIPhoneStatusBar(screenCtx, W, H);
+    const ctx = screenCtx;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, screenCanvas.width, screenCanvas.height);
+    const { W, H } = beginScreenSpace(ctx);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, W, H);
+    drawIPhoneStatusBar(ctx, W, H);
+    ctx.restore();
     if (screenCanvasTex) screenCanvasTex.needsUpdate = true;
   }
 
@@ -456,6 +513,80 @@ export function initMockup(
       ctx.fill();
     }
     ctx.restore();
+  }
+
+  // ── Screen playback clock ───────────────────────────────────────────────
+  // A <video> element plays on wall-clock. Left to itself it runs while the
+  // preview is paused, ignores the transport, and never returns to its start
+  // when the timeline wraps — and an export, which only steps a frame counter,
+  // captures whatever the clip happened to be showing. So the TIMELINE drives
+  // the clip: scene time is the single source of truth for which video frame is
+  // on the screen, exactly as it is for video cards (lib/videoTexture.ts).
+  //
+  // While playing, the element plays natively and is only nudged once it has
+  // drifted past DRIFT — seeking every tick would stall the decoder and stutter.
+  const SCREEN_VIDEO_DRIFT = 0.25;   // seconds of slack before a corrective seek
+  let screenVideoSeekTarget = -1;    // last time sought while paused (-1 = none)
+
+  function syncScreenVideoToTimeline() {
+    const v = screenVideoEl;
+    if (!v || screenVideoExporting) return;
+    if (!v.duration || !isFinite(v.duration) || v.duration <= 0) return;
+    const st = useSceneStore.getState();
+    const target = (st.frame / Math.max(1, st.fps)) % v.duration;
+    if (st.playing) {
+      screenVideoSeekTarget = -1;
+      if (v.paused) v.play().catch(() => {});
+      // This covers the loop seam as well: at the wrap `target` drops back to
+      // ~0 while the clip still sits near its end, so the gap trips the seek and
+      // the screen restarts WITH the scene instead of running a loop behind it.
+      if (Math.abs(v.currentTime - target) > SCREEN_VIDEO_DRIFT) v.currentTime = target;
+    } else {
+      if (!v.paused) v.pause();
+      // Paused means scrubbing — land on the frame the playhead is actually on.
+      // Compared against the last REQUESTED time, not against currentTime: a
+      // seek snaps to a decodable boundary, so comparing the landed position
+      // would re-seek every tick and never settle.
+      if (Math.abs(screenVideoSeekTarget - target) > 1e-4) {
+        screenVideoSeekTarget = target;
+        v.currentTime = target;
+      }
+    }
+  }
+
+  // Paints whatever the screen currently shows. Called from the rAF loop AND
+  // from renderFrameAt(), because the export path renders without the loop:
+  // before this was shared, an exported frame reused whatever screen texture
+  // the loop had last painted on wall-clock — which is why video screens came
+  // out frozen or jumping in the MP4.
+  function paintScreenContent() {
+    const status = opts.getScreenStatus?.();
+    const emptyStatusScreen = DEV?.slot === 'phone' && status?.mode !== 'off';
+    const t = opts.getScreenTransform?.() ?? { fit: 'cover' as const, zoom: 1, offsetX: 50, offsetY: 50 };
+    const look = `${t.fit}|${t.zoom}|${t.offsetX}|${t.offsetY}|${status?.mode}|${status?.time}|${status?.battery}|${status?.signal}`;
+    // Both media kinds redraw on the same rule: only when the composite would
+    // actually differ. For a video that means a new source time — which, now
+    // that the timeline owns the clip, does NOT change on a paused preview, so
+    // the old unconditional redraw was recompositing an identical frame up to
+    // 60x a second onto a canvas as large as 2732px.
+    if (screenVideoEl && screenVideoEl.readyState >= 2) {
+      const vkey = `${screenVideoEl.currentTime}|${look}`;
+      if (vkey !== screenXformKey) {
+        screenXformKey = vkey;
+        drawScreenFrame(screenVideoEl, DEV?.screenAspect ?? 16 / 9, DEV?.screenCornerFrac ?? 0);
+      }
+    } else if (screenImageEl) {
+      if (look !== screenXformKey) {
+        screenXformKey = look;
+        drawScreenFrame(screenImageEl, DEV?.screenAspect ?? 16 / 9, DEV?.screenCornerFrac ?? 0);
+      }
+    } else if (emptyStatusScreen) {
+      const xkey = `empty|${status?.mode}|${status?.time}|${status?.battery}|${status?.signal}`;
+      if (xkey !== screenXformKey) {
+        screenXformKey = xkey;
+        drawEmptyScreenFrame();
+      }
+    }
   }
 
   // ── The cover glass over the display ────────────────────────────────────
@@ -920,7 +1051,12 @@ export function initMockup(
     }
 
     // screen content — only re-touch when the media identity actually changes
-    const media = opts.getScreenMedia?.() ?? null;
+    // An empty url is a slot whose bytes are gone (quota eviction, cleared
+    // storage): rehydrateScreenMedia leaves the entry in place with url ''. It
+    // is still a truthy object, so without this the screen would try to load a
+    // <video>/<img> with no source and come up dead instead of blank.
+    const mediaEntry = opts.getScreenMedia?.() ?? null;
+    const media = mediaEntry?.url ? mediaEntry : null;
     const screenStatus = opts.getScreenStatus?.();
     const hasEmptyStatusScreen = DEV?.slot === 'phone' && screenStatus?.mode !== 'off';
     const mkey2 = media ? `${media.kind}|${media.url}` : hasEmptyStatusScreen ? 'empty-status-screen' : '';
@@ -948,10 +1084,14 @@ export function initMockup(
           screenXformKey = '';
           drawEmptyScreenFrame();
         } else if (media.kind === 'video') {
-          const vid = document.createElement('video');
-          vid.src = media.url; vid.crossOrigin = 'anonymous'; vid.loop = true; vid.muted = true; vid.playsInline = true;
-          vid.play().catch(() => {});
-          screenVideoEl = vid;
+          // Built by the same helper the video CARDS use, so the screen clip
+          // gets the settings that actually matter: crossOrigin before src (set
+          // after, the fetch has already started without CORS), preload 'auto'
+          // for a detached element, and defaultMuted so muted autoplay holds.
+          // Playback itself is driven by syncScreenVideoToTimeline() below —
+          // NOT by an autoplay here, which is what put the clip on wall-clock.
+          screenVideoEl = createCardVideo(media.url);
+          screenXformKey = '';   // force the first paint for this clip
         } else {
           const img = new Image();
           img.crossOrigin = 'anonymous';
@@ -967,25 +1107,8 @@ export function initMockup(
         restoreScreenMaterial();
       }
     }
-    // A video's frame changes every tick, so it always redraws. A still image
-    // only needs redrawing when a fit/zoom/anchor slider actually moves.
-    if (screenVideoEl && screenVideoEl.readyState >= 2) {
-      drawScreenFrame(screenVideoEl, DEV?.screenAspect ?? 16 / 9, DEV?.screenCornerFrac ?? 0);
-    } else if (screenImageEl) {
-      const t = opts.getScreenTransform?.() ?? { fit: 'cover', zoom: 1, offsetX: 50, offsetY: 50 };
-      const status = opts.getScreenStatus?.();
-      const xkey = `${t.fit}|${t.zoom}|${t.offsetX}|${t.offsetY}|${status?.mode}|${status?.time}|${status?.battery}|${status?.signal}`;
-      if (xkey !== screenXformKey) {
-        screenXformKey = xkey;
-        drawScreenFrame(screenImageEl, DEV?.screenAspect ?? 16 / 9, DEV?.screenCornerFrac ?? 0);
-      }
-    } else if (hasEmptyStatusScreen) {
-      const xkey = `empty|${screenStatus?.mode}|${screenStatus?.time}|${screenStatus?.battery}|${screenStatus?.signal}`;
-      if (xkey !== screenXformKey) {
-        screenXformKey = xkey;
-        drawEmptyScreenFrame();
-      }
-    }
+    syncScreenVideoToTimeline();
+    paintScreenContent();
     // Screen Brightness — the display is unlit (MeshBasicMaterial), so no light
     // reaches it; scaling the material colour is what dims/boosts the panel.
     if (screenMesh && screenMesh.material !== screenMesh.userData.origMaterial) {
@@ -1079,6 +1202,7 @@ export function initMockup(
       if (gkey !== goboKey) { drawGobo(mt.scale / 100, mt.offX / 100, mt.offY / 100); goboKey = gkey; }
     } else if (sun.map) { sun.map = null; }
 
+    settleGroundUnderModel();   // after the animation has posed the pivot
     rig.update();
     if (controls.enabled) controls.update();
     renderer.render(scene, camera);
@@ -1089,6 +1213,10 @@ export function initMockup(
     const p = P();
     const sceneState = useSceneStore.getState();
     sceneState.setFrame(frame);
+    // The screen is composited on a 2D canvas by the rAF loop, which does not
+    // run in lockstep with this deterministic path. Repaint it here or the
+    // captured frame carries a stale screen.
+    paintScreenContent();
     const animState = use3DStore.getState();
     const duration = Math.max(0.1, sceneState.duration);
     const fps = Math.max(1, sceneState.fps);
@@ -1133,6 +1261,7 @@ export function initMockup(
     if ((scene as any).environmentRotation) {
       (scene as any).environmentRotation.y = THREE.MathUtils.degToRad(lightState.envRotation);
     }
+    settleGroundUnderModel();   // after the animation has posed the pivot
     rig.update();
     if (controls.enabled) controls.update();
     renderer.render(scene, camera);
@@ -1151,10 +1280,49 @@ export function initMockup(
     lastW = 0; lastH = 0;
   };
 
+  // ── Export-time screen video ────────────────────────────────────────────
+  // Every captured frame gets an explicit seek. `screenVideoExporting` parks the
+  // live sync for the duration so the two clocks never fight.
+  //
+  // Deliberately NOT the sequential forward-decode pass the video CARDS use
+  // (prepareVideoForSequentialExport + advanceVideoForExport). That pass rewinds
+  // by playing the element and waiting on requestVideoFrameCallback, which never
+  // fires in a page that has stopped compositing: measured here, the rewind
+  // timed out with the clip parked at 0.93 s, and the forward-only advance then
+  // saw every target as already passed and did nothing — 30 exported frames all
+  // showed the same source frame. seekVideoToTime() is random-access and settles
+  // on 'seeked', so it holds with or without a compositor. The sequential pass
+  // exists to amortise GOP decodes across MANY card videos; a screen has one.
+  const beginVideoExport = async (): Promise<void> => {
+    const v = screenVideoEl;
+    if (!v) return;
+    screenVideoExporting = true;
+    screenVideoSeekTarget = -1;
+    v.pause();
+    v.loop = false;                  // wrapping is decided per frame by the seek
+    await seekVideoToTime(v, 0);
+  };
+
+  const seekVideos = async (frame: number): Promise<void> => {
+    const v = screenVideoEl;
+    if (!v) return;
+    const st = useSceneStore.getState();
+    await seekVideoToTime(v, frame / Math.max(1, st.fps), st.videoEnd);
+  };
+
+  const endVideoExport = (): void => {
+    screenVideoExporting = false;
+    screenVideoSeekTarget = -1;
+    if (screenVideoEl) screenVideoEl.loop = true;
+  };
+
   opts.onRenderer?.({
     renderFrame: renderFrameAt,
     captureFrame: captureFrameAt,
     setCaptureScale: setCaptureScale,
+    beginVideoExport,
+    seekVideos,
+    endVideoExport,
   });
 
   loop();
