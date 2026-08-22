@@ -351,28 +351,43 @@ function XYPadControl({ def, value, onChange }: RowProps) {
   // line to lock ONTO. Anchoring on the press — not on the last move — is what
   // keeps a shift-drag straight instead of letting it creep a pixel per frame.
   const anchor = useRef<{ x: number; y: number } | null>(null);
+  // Which axis a shift-drag committed to, and whether shift was held last move.
+  const axis = useRef<'x' | 'y' | null>(null);
+  const wasLocked = useRef(false);
   const range = def.max ?? 400;
   const v = value ?? { x: 0, y: 0 };
+  const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
 
   const setFromEvent = (clientX: number, clientY: number, lock = false) => {
     const el = ref.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
     let px = clientX, py = clientY;
+    // Taking shift mid-drag re-anchors on the spot: the line starts from where
+    // the hand is, instead of yanking the value back to the press point.
+    if (lock && !wasLocked.current) { anchor.current = { x: clientX, y: clientY }; axis.current = null; }
+    if (!lock) axis.current = null;
+    wasLocked.current = lock;
     const from = anchor.current;
     if (lock && from) {
-      // travel further across than down means this is a horizontal line, so the
-      // other axis is pinned to where the press left it
-      if (Math.abs(clientX - from.x) >= Math.abs(clientY - from.y)) py = from.y;
-      else px = from.x;
+      const dx = Math.abs(clientX - from.x), dy = Math.abs(clientY - from.y);
+      // Commit to an axis once the drag clears 6px, then STAY on it. Re-deciding
+      // every move made a near-diagonal drag flip axis frame to frame.
+      if (!axis.current && Math.max(dx, dy) > 6) axis.current = dx >= dy ? 'x' : 'y';
+      if (axis.current === 'x') py = from.y;
+      else if (axis.current === 'y') px = from.x;
+      else { px = from.x; py = from.y; }
     }
-    const nx = (px - rect.left) / rect.width;
-    const ny = (py - rect.top) / rect.height;
+    // A captured pointer reports moves well outside the pad; without this the
+    // value ran past ±range and the dot left the square entirely.
+    const nx = clamp01((px - rect.left) / rect.width);
+    const ny = clamp01((py - rect.top) / rect.height);
     onChange({ x: Math.round((nx * 2 - 1) * range), y: Math.round((ny * 2 - 1) * range) });
   };
 
-  const dotX = ((v.x / range + 1) / 2) * 100;
-  const dotY = ((v.y / range + 1) / 2) * 100;
+  const pct = (n: number) => Math.max(0, Math.min(100, ((n / range + 1) / 2) * 100));
+  const dotX = pct(v.x);
+  const dotY = pct(v.y);
 
   return (
     <div className="xypad-wrap">
@@ -384,13 +399,14 @@ function XYPadControl({ def, value, onChange }: RowProps) {
           try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* no live pointer: nothing to capture */ }
           pressed.current = true;
           anchor.current = { x: e.clientX, y: e.clientY };
-          setFromEvent(e.clientX, e.clientY);
+          axis.current = null;
+          setFromEvent(e.clientX, e.clientY, e.shiftKey);
         }}
         // shift is read per move, so it can be taken and released mid-drag
         onPointerMove={(e) => { if (pressed.current && e.buttons === 1) setFromEvent(e.clientX, e.clientY, e.shiftKey); }}
-        onPointerUp={() => { pressed.current = false; anchor.current = null; }}
-        onPointerCancel={() => { pressed.current = false; anchor.current = null; }}
-        onLostPointerCapture={() => { pressed.current = false; anchor.current = null; }}
+        onPointerUp={() => { pressed.current = false; anchor.current = null; axis.current = null; wasLocked.current = false; }}
+        onPointerCancel={() => { pressed.current = false; anchor.current = null; axis.current = null; wasLocked.current = false; }}
+        onLostPointerCapture={() => { pressed.current = false; anchor.current = null; axis.current = null; wasLocked.current = false; }}
       >
         <svg className="xypad-grid" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
           {PAD_GRID.map((p) => <line key={`v${p}`} className="xypad-line" x1={p} y1={0} x2={p} y2={100} />)}
@@ -400,7 +416,9 @@ function XYPadControl({ def, value, onChange }: RowProps) {
         </svg>
         <span className="xypad-tag xypad-tag-x">X</span>
         <span className="xypad-tag xypad-tag-y">Y</span>
-        <div className="xypad-dot" style={{ left: `${dotX}%`, top: `${dotY}%` }} />
+        <div className="xypad-field">
+          <div className="xypad-dot" style={{ left: `${dotX}%`, top: `${dotY}%` }} />
+        </div>
       </div>
       <div className="xypad-vals">
         <span className="xypad-axis">X</span>

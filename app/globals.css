@@ -531,6 +531,7 @@ select.field { padding-right: 26px; }
 }
 .xypad-tag-x { right: 5px; top: 50%; transform: translateY(-50%); }
 .xypad-tag-y { left: 50%; top: 5px; transform: translateX(-50%); }
+.xypad-field { position: absolute; inset: 5px; pointer-events: none; }
 .xypad-dot { position: absolute; width: 10px; height: 10px; border-radius: 50%; background: var(--fg-label); transform: translate(-50%, -50%); }
 .xypad-vals {
   display: flex; align-items: center; justify-content: center; gap: 4px;
@@ -1420,6 +1421,7 @@ select.field { padding-right: 26px; }
   .mobile-composed-panel .icon-btn { width: 44px; height: 44px; }
   .mobile-editor .xypad-wrap { width: 100%; align-items: stretch; flex-direction: column; gap: 8px; }
   .mobile-editor .xypad { width: 100%; min-height: 180px; }
+  .mobile-editor .xypad-field { inset: 14px; }
   .mobile-editor .xypad-dot { width: 28px; height: 28px; border: 7px solid var(--card); box-shadow: 0 0 0 1px var(--handle); }
   .mobile-editor .xypad-vals { text-align: center; font-size: 13px; }
   .mobile-editor .xypad-reset { min-height: 44px; border-radius: var(--r-ctrl); background: var(--card-inset); color: var(--fg-muted); }
