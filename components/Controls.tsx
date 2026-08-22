@@ -347,15 +347,27 @@ function XYPadControl({ def, value, onChange }: RowProps) {
   const mobile = useMobileInteractions();
   const ref = useRef<HTMLDivElement>(null);
   const pressed = useRef(false);
+  // Where the drag began, in client space: shift locks to one axis and needs a
+  // line to lock ONTO. Anchoring on the press — not on the last move — is what
+  // keeps a shift-drag straight instead of letting it creep a pixel per frame.
+  const anchor = useRef<{ x: number; y: number } | null>(null);
   const range = def.max ?? 400;
   const v = value ?? { x: 0, y: 0 };
 
-  const setFromEvent = (clientX: number, clientY: number) => {
+  const setFromEvent = (clientX: number, clientY: number, lock = false) => {
     const el = ref.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    const nx = (clientX - rect.left) / rect.width;
-    const ny = (clientY - rect.top) / rect.height;
+    let px = clientX, py = clientY;
+    const from = anchor.current;
+    if (lock && from) {
+      // travel further across than down means this is a horizontal line, so the
+      // other axis is pinned to where the press left it
+      if (Math.abs(clientX - from.x) >= Math.abs(clientY - from.y)) py = from.y;
+      else px = from.x;
+    }
+    const nx = (px - rect.left) / rect.width;
+    const ny = (py - rect.top) / rect.height;
     onChange({ x: Math.round((nx * 2 - 1) * range), y: Math.round((ny * 2 - 1) * range) });
   };
 
@@ -367,15 +379,18 @@ function XYPadControl({ def, value, onChange }: RowProps) {
       <div
         ref={ref}
         className="xypad"
+        title="Drag to place; hold Shift to travel in a straight line"
         onPointerDown={(e) => {
           try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* no live pointer: nothing to capture */ }
           pressed.current = true;
+          anchor.current = { x: e.clientX, y: e.clientY };
           setFromEvent(e.clientX, e.clientY);
         }}
-        onPointerMove={(e) => { if (pressed.current && e.buttons === 1) setFromEvent(e.clientX, e.clientY); }}
-        onPointerUp={() => { pressed.current = false; }}
-        onPointerCancel={() => { pressed.current = false; }}
-        onLostPointerCapture={() => { pressed.current = false; }}
+        // shift is read per move, so it can be taken and released mid-drag
+        onPointerMove={(e) => { if (pressed.current && e.buttons === 1) setFromEvent(e.clientX, e.clientY, e.shiftKey); }}
+        onPointerUp={() => { pressed.current = false; anchor.current = null; }}
+        onPointerCancel={() => { pressed.current = false; anchor.current = null; }}
+        onLostPointerCapture={() => { pressed.current = false; anchor.current = null; }}
       >
         <svg className="xypad-grid" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
           {PAD_GRID.map((p) => <line key={`v${p}`} className="xypad-line" x1={p} y1={0} x2={p} y2={100} />)}
