@@ -388,6 +388,7 @@ function XYPadControl({ def, value, onChange }: RowProps) {
         <div className="xypad-dot" style={{ left: `${dotX}%`, top: `${dotY}%` }} />
       </div>
       <div className="xypad-vals">
+        <span className="xypad-axis">X</span>
         <ExactNumber
           label={`${def.label} X`}
           value={v.x}
@@ -396,7 +397,7 @@ function XYPadControl({ def, value, onChange }: RowProps) {
           step={1}
           onCommit={(n) => onChange({ x: n, y: v.y })}
         />
-        <span className="xypad-sep">,</span>
+        <span className="xypad-axis">Y</span>
         <ExactNumber
           label={`${def.label} Y`}
           value={v.y}

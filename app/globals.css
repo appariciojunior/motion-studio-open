@@ -533,10 +533,13 @@ select.field { padding-right: 26px; }
 .xypad-tag-y { left: 50%; top: 5px; transform: translateX(-50%); }
 .xypad-dot { position: absolute; width: 10px; height: 10px; border-radius: 50%; background: var(--fg-label); transform: translate(-50%, -50%); }
 .xypad-vals {
-  display: flex; align-items: center; justify-content: center; gap: 2px;
+  display: flex; align-items: center; justify-content: center; gap: 4px;
   color: var(--fg-faint); font-size: var(--fs-ui); font-variant-numeric: tabular-nums;
 }
-.xypad-sep { color: var(--fg-faint); }
+.xypad-axis {
+  font-size: var(--fs-meta); line-height: 1; color: var(--fg-faint);
+  letter-spacing: .04em; padding: 0 2px;
+}
 .exact-num {
   text-align: center; background: var(--card-inset); border: 1px solid transparent;
   border-radius: var(--r-seg); color: var(--fg-value); font-size: var(--fs-ui); padding: 3px 4px;
