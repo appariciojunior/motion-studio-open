@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { exportSettings, type VideoExportFormat } from '@/lib/exportVideo';
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
@@ -85,8 +86,11 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'bad params' }, { status: 400 });
       }
       const dir = sessionDir(sessionId);
-      const base64 = String(dataUrl).replace(/^data:image\/\w+;base64,/, '');
-      const file = path.join(dir, `frame_${String(idx).padStart(5, '0')}.jpg`);
+      const imageType = String(dataUrl).match(/^data:(image\/(?:jpeg|png));base64,/);
+      if (!imageType) return NextResponse.json({ error: 'bad frame' }, { status: 400 });
+      const base64 = String(dataUrl).replace(/^data:image\/(?:jpeg|png);base64,/, '');
+      const extension = imageType[1] === 'image/png' ? 'png' : 'jpg';
+      const file = path.join(dir, `frame_${String(idx).padStart(5, '0')}.${extension}`);
       await fs.writeFile(file, Buffer.from(base64, 'base64'));
       return NextResponse.json({ ok: true });
     }
@@ -98,7 +102,12 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'bad params' }, { status: 400 });
       }
       const dir = sessionDir(sessionId);
-      const pattern = path.join(dir, 'frame_%05d.jpg');
+      const exportFormat = format as VideoExportFormat;
+      if (!['mp4', 'gif', 'both', 'webm'].includes(exportFormat)) {
+        return NextResponse.json({ error: 'bad format' }, { status: 400 });
+      }
+      const settings = exportSettings(exportFormat, fps, Number(width), Number(height));
+      const pattern = path.join(dir, settings.pattern);
       await fs.mkdir(EXPORTS_DIR, { recursive: true });
 
       // Exact output size when the client provides one (already even-rounded);
@@ -129,6 +138,13 @@ export async function POST(req: NextRequest) {
         if (audioFile) args.push('-c:a', 'aac', '-shortest');
         args.push(outPath);
         await run('ffmpeg', args);
+        files.push(out);
+      }
+
+      if (format === 'webm') {
+        const out = `motion_${sessionId}.webm`;
+        const outPath = path.join(EXPORTS_DIR, out);
+        await run('ffmpeg', ['-y', '-start_number', '0', '-framerate', String(fps), '-i', pattern, ...settings.args, outPath]);
         files.push(out);
       }
 

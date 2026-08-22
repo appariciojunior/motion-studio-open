@@ -46,7 +46,7 @@ export interface ActiveEffect {
 }
 
 export interface BackgroundSettings {
-  source: 'color' | 'image' | 'card'; // solid/gradient · uploaded image · reflected from the featured card
+  source: 'color' | 'image' | 'card' | 'transparent'; // solid/gradient · uploaded image · reflected card · alpha canvas
   color: string;
   gradient: boolean;
   color2: string;

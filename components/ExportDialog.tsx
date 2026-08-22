@@ -12,7 +12,7 @@ import { BackIcon, ExportIcon, PauseIcon, PlayIcon } from '@/components/EditorIc
 // local Blobs (url is an object URL for the download link).
 interface OutputFile { name: string; url: string; blob?: Blob }
 
-type Fmt = 'mp4' | 'gif' | 'both';
+type Fmt = 'mp4' | 'gif' | 'both' | 'webm';
 type Res = '1080p' | '2k' | '4k' | 'exact';
 type Phase = 'idle' | 'preparing' | 'capturing' | 'encoding' | 'done' | 'error';
 
@@ -216,7 +216,7 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
       try {
         for (let f = 0; f < totalFrames; f++) {
           await renderer.seekVideos?.(f);                 // frame-accurate video cards (no-op without video)
-          const dataUrl = renderer.captureFrame(f);       // time = frame counter, never wall-clock
+          const dataUrl = renderer.captureFrame(f, format === 'webm' ? 'image/png' : 'image/jpeg');
           await post({ action: 'frame', sessionId, index: f, dataUrl });
           setCaptured(f + 1);
           // yield to keep UI responsive
@@ -307,12 +307,14 @@ npm run dev`}</code></pre>
             </label>
             <div className="ctl-input">
               <div className="pills pills-fit">
-                {(['mp4', 'gif', 'both'] as Fmt[]).map((f) => (
+                {(['mp4', 'webm', 'gif', 'both'] as Fmt[]).map((f) => (
                   <button key={f} className={`pill ${format === f ? 'active' : ''}`} onClick={() => setFormat(f)}>{f.toUpperCase()}</button>
                 ))}
               </div>
             </div>
           </div>
+
+          {format === 'webm' && <div className="ctl-hint">WebM uses VP9 with transparent background.</div>}
 
           <div className="ctl-row">
             <label className="ctl-label">Resolution</label>

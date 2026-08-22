@@ -21,7 +21,7 @@ export default function ThreeStage3D({ effectId: forcedEffectId }: { effectId?: 
   const threeEngineRef = useRef<{
     renderFrame: (frame: number) => void;
     setCaptureScale: (k: number) => void;
-    captureFrame: (frame: number) => string;
+    captureFrame: (frame: number, mimeType?: 'image/jpeg' | 'image/png') => string;
   } | null>(null);
   const storeEffectId = use3DStore((s) => s.effectId);
   // Mockup mode forces 'mockup' regardless of the 3D-effects picker's own
@@ -94,13 +94,13 @@ export default function ThreeStage3D({ effectId: forcedEffectId }: { effectId?: 
           useSceneStore.getState().setFrame(f);
         }
       },
-      captureFrame: (f) => {
+      captureFrame: (f, mimeType = 'image/jpeg') => {
         if (threeEngineRef.current) {
-          return threeEngineRef.current.captureFrame(f);
+          return threeEngineRef.current.captureFrame(f, mimeType);
         }
         useSceneStore.getState().setFrame(f);
         const c = canvasRef.current;
-        return c ? c.toDataURL('image/jpeg', 0.92) : '';
+        return c ? (mimeType === 'image/png' ? c.toDataURL(mimeType) : c.toDataURL(mimeType, 0.92)) : '';
       },
       setCaptureScale: (k) => {
         if (threeEngineRef.current) {

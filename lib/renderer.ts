@@ -329,7 +329,10 @@ export class SceneRenderer {
 
     // background
     this.bg.clear();
-    if (s.background.gradient) {
+    if (s.background.source === 'transparent') {
+      // The Pixi canvas is initialized with backgroundAlpha: 0, so leaving this
+      // layer empty preserves alpha in the preview and PNG/WebM capture paths.
+    } else if (s.background.gradient) {
       const grad = new PIXI.FillGradient(0, 0, 0, height);
       grad.addColorStop(0, s.background.color);
       grad.addColorStop(1, s.background.color2);
@@ -589,9 +592,11 @@ export class SceneRenderer {
   // JPEG (q0.92) over PNG: ~5–10× smaller + far faster to encode at 2K/4K, and
   // the scene always paints a background so the missing alpha channel is moot.
   // ffmpeg re-encodes to h264/gif downstream, so there's no visible quality loss.
-  captureFrame(frame: number): string {
+  captureFrame(frame: number, mimeType: 'image/jpeg' | 'image/png' = 'image/jpeg'): string {
     this.renderFrame(frame);
-    return (this.app.canvas as HTMLCanvasElement).toDataURL('image/jpeg', 0.92);
+    return mimeType === 'image/png'
+      ? (this.app.canvas as HTMLCanvasElement).toDataURL(mimeType)
+      : (this.app.canvas as HTMLCanvasElement).toDataURL(mimeType, 0.92);
   }
 
   // Multiply the backing-store resolution for export capture. Logical

@@ -8,8 +8,8 @@ export interface IRenderer {
   getFrameState(frame: number): void;
   // Realize + draw a frame (preview loop and export both use this).
   renderFrame(frame: number): void;
-  // Deterministic capture: realize frame, render, read pixels as PNG data URL.
-  captureFrame(frame: number): string;
+  // Deterministic capture: realize frame, render, and read pixels in the requested format.
+  captureFrame(frame: number, mimeType?: 'image/jpeg' | 'image/png'): string;
   // Multiply the backing-store resolution for export capture (logical size
   // unchanged, so template layout is untouched).
   setCaptureScale(k: number): void;

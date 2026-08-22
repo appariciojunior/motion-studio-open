@@ -662,7 +662,9 @@ export class SceneRenderer3D implements IRenderer {
 
     // Background parity with Pixi: solid, gradient, uploaded image, or an
     // asset reflected from the active motion layer.
-    if (s.background.source === 'color' && s.background.gradient) {
+    if (s.background.source === 'transparent') {
+      this.scene.background = null;
+    } else if (s.background.source === 'color' && s.background.gradient) {
       const sig = s.background.color + '|' + s.background.color2;
       if (this.gradientSig !== sig) {
         this.gradientTex?.dispose();
@@ -1034,9 +1036,10 @@ export class SceneRenderer3D implements IRenderer {
     this.getFrameState(frame);
     const s = useSceneStore.getState();
 
-    // The accumulator begins with the opaque scene background.
+    const transparentBackground = s.background.source === 'transparent';
+    // The accumulator begins with the scene background, or transparent pixels.
     this.renderer.setRenderTarget(this.composeA);
-    this.renderer.setClearColor(0x000000, 1);
+    this.renderer.setClearColor(0x000000, transparentBackground ? 0 : 1);
     this.renderer.clear(true, true, true);
     this.renderer.render(this.scene, this.camera);
 
@@ -1073,7 +1076,7 @@ export class SceneRenderer3D implements IRenderer {
     );
     this.outputQuad.material.uniforms.pixelSize.value = Number(pixelate?.values.size ?? 1) * this.resolution;
     this.renderer.setRenderTarget(null);
-    this.renderer.setClearColor(0x000000, 1);
+    this.renderer.setClearColor(0x000000, transparentBackground ? 0 : 1);
     this.renderer.clear(true, true, true);
     this.renderer.render(this.outputScene, this.composeCam);
 
@@ -1083,10 +1086,11 @@ export class SceneRenderer3D implements IRenderer {
     this.renderer.autoClear = true;
   }
 
-  captureFrame(frame: number): string {
+  captureFrame(frame: number, mimeType: 'image/jpeg' | 'image/png' = 'image/jpeg'): string {
     this.renderFrame(frame);
-    // JPEG (q0.92) — see the Pixi renderer's captureFrame for the rationale.
-    return this.renderer.domElement.toDataURL('image/jpeg', 0.92);
+    return mimeType === 'image/png'
+      ? this.renderer.domElement.toDataURL(mimeType)
+      : this.renderer.domElement.toDataURL(mimeType, 0.92);
   }
 
   extractCanvas(): HTMLCanvasElement {

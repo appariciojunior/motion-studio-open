@@ -9,6 +9,7 @@ const basePath = isStatic ? '/motion-studio-open' : '';
 const nextConfig = {
   reactStrictMode: false, // avoid double Pixi mount in dev
   devIndicators: false,   // hide the dev overlay badge (it covers the play button)
+  turbopack: { root: process.cwd() },
   ...(isStatic && {
     output: 'export',
     basePath,

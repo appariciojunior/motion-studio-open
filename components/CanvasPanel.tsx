@@ -5,10 +5,11 @@ import { useSceneStore, ASPECTS } from '@/store/useSceneStore';
 import { ControlRow } from './Controls';
 
 const FPS_OPTIONS = [15, 25, 30, 60] as const;
-const BG_SOURCES: { id: 'color' | 'image' | 'card'; label: string }[] = [
+const BG_SOURCES: { id: 'color' | 'image' | 'card' | 'transparent'; label: string }[] = [
   { id: 'color', label: 'Color' },
   { id: 'image', label: 'Image' },
   { id: 'card', label: 'From card' },
+  { id: 'transparent', label: 'Transparent' },
 ];
 
 // Pixel input that commits on blur/Enter so half-typed values don't
@@ -132,7 +133,7 @@ export default function CanvasPanel({ is3DMode = false }: { is3DMode?: boolean }
         <Collapsible title="Background">
           <div className="ctl-row">
             <label className="ctl-label">Source</label>
-            <div className="pills">
+            <div className="pills bg-source-pills">
               {BG_SOURCES.map((src) => (
                 <button key={src.id} className={`pill ${background.source === src.id ? 'active' : ''}`} onClick={() => setBackground({ source: src.id })}>{src.label}</button>
               ))}
@@ -173,6 +174,10 @@ export default function CanvasPanel({ is3DMode = false }: { is3DMode?: boolean }
               <div className="ctl-hint">Reflects the featured card — the background moves with the animation.</div>
               <ControlRow def={{ key: 'bgblur', label: 'Blur', type: 'slider', min: 0, max: 100, step: 1, default: 28 }} value={background.blur} onChange={(v) => setBackground({ blur: Number(v) })} />
             </>
+          )}
+
+          {background.source === 'transparent' && (
+            <div className="ctl-hint">The preview and WebM export preserve the transparent background.</div>
           )}
         </Collapsible>
 
