@@ -11,6 +11,7 @@ import type { IRenderer } from '@/lib/rendererTypes';
 import type { CameraPose, LayerTransform3D } from '@/lib/types';
 import { resolveTrackTime, trackAssetIndices, type MotionTrack } from '@/lib/tracks';
 import type { SceneState } from '@/store/useSceneStore';
+import { captureCanvasFrame } from '@/lib/exportVideo';
 
 // Shared with the Pixi renderer so control values read identically in px.
 const SPRITE_BASE = 340;
@@ -294,12 +295,15 @@ export class SceneRenderer3D implements IRenderer {
           vec4 base = texture2D(baseMap, vUv);
           vec4 layer = texture2D(layerMap, vUv);
           float a = clamp(layer.a * opacity, 0.0, 1.0);
-          vec3 straight = layer.a > 0.00001 ? layer.rgb / layer.a : vec3(0.0);
-          vec3 blend = straight;
-          if (blendMode == 1) blend = min(vec3(1.0), base.rgb + straight);
-          else if (blendMode == 2) blend = vec3(1.0) - (vec3(1.0) - base.rgb) * (vec3(1.0) - straight);
-          else if (blendMode == 3) blend = base.rgb * straight;
-          gl_FragColor = vec4(mix(base.rgb, blend, a), 1.0);
+          vec3 baseStraight = base.a > 0.00001 ? base.rgb / base.a : vec3(0.0);
+          vec3 layerStraight = layer.a > 0.00001 ? layer.rgb / layer.a : vec3(0.0);
+          vec3 blend = layerStraight;
+          if (blendMode == 1) blend = min(vec3(1.0), baseStraight + layerStraight);
+          else if (blendMode == 2) blend = vec3(1.0) - (vec3(1.0) - baseStraight) * (vec3(1.0) - layerStraight);
+          else if (blendMode == 3) blend = baseStraight * layerStraight;
+          float outA = a + base.a * (1.0 - a);
+          vec3 outRgb = blend * a + base.rgb * (1.0 - a);
+          gl_FragColor = vec4(outRgb, outA);
         }
       `,
     });
@@ -1088,9 +1092,7 @@ export class SceneRenderer3D implements IRenderer {
 
   captureFrame(frame: number, mimeType: 'image/jpeg' | 'image/png' = 'image/jpeg'): string {
     this.renderFrame(frame);
-    return mimeType === 'image/png'
-      ? this.renderer.domElement.toDataURL(mimeType)
-      : this.renderer.domElement.toDataURL(mimeType, 0.92);
+    return captureCanvasFrame(this.renderer.domElement, mimeType);
   }
 
   extractCanvas(): HTMLCanvasElement {

@@ -200,6 +200,7 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
 }
 .tab:hover:not(.active) { color: var(--fg); background: var(--card-thumb); }
 .tab.active { background: var(--card-inset); color: var(--accent); box-shadow: none; }
+.tpl-head-row:has(.tabs) + .searchbox { margin-top: 8px; }
 
 /* BETA marker — 3D mode ships unfinished; flags it in the panel header. */
 .tab-beta { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
@@ -1003,7 +1004,7 @@ select.field { padding-right: 26px; }
 .btn.solid:hover, .btn.primary:hover { opacity: 0.9; background: var(--accent); color: var(--accent-fg); }
 .progress { display: flex; flex-direction: column; gap: 9px; color: var(--fg-muted); font-size: var(--fs-ui); }
 .progress-bar { height: 6px; background: var(--card-inset); border-radius: 3px; overflow: hidden; }
-.progress-bar > div { height: 100%; background: var(--accent); transition: width 0.1s; }
+.progress-bar > div { height: 100%; background: var(--fg-body); transition: width 0.1s; }
 .export-done { font-size: var(--fs-label); color: var(--fg-muted); }
 .export-done a { color: var(--fg-body); }
 .export-error { color: var(--fg-label); font-size: var(--fs-ui); line-height: 1.5; }

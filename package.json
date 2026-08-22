@@ -8,6 +8,7 @@
     "test:ui-tabs": "node scripts/verify-tab-theme.cjs",
     "test:ui-new": "node scripts/verify-template-novelty.cjs",
     "test:ui-brand": "node scripts/verify-brand-logo.cjs",
+    "test:ui": "npm run test:ui-tabs && npm run test:ui-new && npm run test:ui-brand",
     "dev": "next dev",
     "dev:network": "next dev -H 0.0.0.0",
     "build": "next build",

@@ -11,6 +11,7 @@ import { findDevice } from './devices';
 import { use3DStore } from '../store/use3DStore';
 import { useSceneStore } from '../store/useSceneStore';
 import { apply3DAnimation } from './animations';
+import { captureCanvasFrame } from '@/lib/exportVideo';
 
 // ── Device Mockup 3D effect ─────────────────────────────────────────────────
 // Realistic PBR render — the GLB's own materials (colour, metalness, roughness,
@@ -1049,6 +1050,7 @@ export function initMockup(
     // fill spec), so this is a string compare per frame, not a canvas redraw.
     const bgSpec = opts.getBgFill?.();
     if (bgSpec) paintBackground(bgSpec);
+    scene.background = opts.getTransparentBackground?.() ? null : bgTex;
 
     const shadowMat = ground.material as THREE.ShadowMaterial;
     shadowMat.opacity = Math.max(0, Math.min(1, Number(p.shadowOpacity ?? 35) / 100));
@@ -1125,9 +1127,9 @@ export function initMockup(
     renderer.render(scene, camera);
   };
 
-  const captureFrameAt = (frame: number): string => {
+  const captureFrameAt = (frame: number, mimeType: 'image/jpeg' | 'image/png' = 'image/jpeg'): string => {
     renderFrameAt(frame);
-    return renderer.domElement.toDataURL('image/jpeg', 0.92);
+    return captureCanvasFrame(renderer.domElement, mimeType);
   };
 
   const setCaptureScale = (k: number): void => {

@@ -8,6 +8,7 @@ import { assetIndexForSlot, clamp } from '@/lib/motion';
 import { resolveTrackTime, trackAssetIndices, type MotionTrack } from '@/lib/tracks';
 import { cardAspectFor, coverCrop, cropKey } from '@/lib/crop';
 import { advanceVideoForExport, createCardVideo, isVideoSource, prepareVideoForSequentialExport, whenVideoReady } from '@/lib/videoTexture';
+import { captureCanvasFrame } from '@/lib/exportVideo';
 
 // Reference base long-edge (px) shared with templates (carousel BASE = 340),
 // so control values read directly in on-screen pixels.
@@ -594,9 +595,7 @@ export class SceneRenderer {
   // ffmpeg re-encodes to h264/gif downstream, so there's no visible quality loss.
   captureFrame(frame: number, mimeType: 'image/jpeg' | 'image/png' = 'image/jpeg'): string {
     this.renderFrame(frame);
-    return mimeType === 'image/png'
-      ? (this.app.canvas as HTMLCanvasElement).toDataURL(mimeType)
-      : (this.app.canvas as HTMLCanvasElement).toDataURL(mimeType, 0.92);
+    return captureCanvasFrame(this.app.canvas as HTMLCanvasElement, mimeType);
   }
 
   // Multiply the backing-store resolution for export capture. Logical

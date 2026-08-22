@@ -55,6 +55,7 @@ export default function ThreeStage3D({ effectId: forcedEffectId }: { effectId?: 
       onParts: (keys) => use3DStore.getState().setParts(keys),
       onPickPart: (key) => use3DStore.getState().selectPart(key),
       getBgFill: () => use3DStore.getState().bgFill,
+      getTransparentBackground: () => useSceneStore.getState().background.source === 'transparent',
       getBgTex: () => ({ amount: use3DStore.getState().bgTexAmount, scale: use3DStore.getState().bgTexScale }),
       getSunShadow: () => use3DStore.getState().sunShadow,
       getSunlight: () => use3DStore.getState().sunIntensity,
@@ -173,11 +174,12 @@ export default function ThreeStage3D({ effectId: forcedEffectId }: { effectId?: 
   };
 
   const bgFill = use3DStore((s) => s.bgFill);
+  const transparentBackground = useSceneStore((s) => s.background.source === 'transparent');
   const background =
     bgFill.type === 'linear' ? `linear-gradient(to top, ${bgFill.c1} 0%, ${bgFill.c2} 100%)`
     : bgFill.type === 'radial' ? `radial-gradient(130% 130% at 50% 50%, ${bgFill.c1} 0%, ${bgFill.c2} 100%)`
     : bgFill.c1;
-  const stageStyle: React.CSSProperties = { background };
+  const stageStyle: React.CSSProperties = { background: transparentBackground ? 'transparent' : background };
 
   // Same "contain" fit a <canvas>/<img> gets for free from object-fit, ported
   // to a plain div via container query units: whichever axis would overflow

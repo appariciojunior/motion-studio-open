@@ -9,6 +9,7 @@ import { makeCameraRig } from './cameraRig';
 import { use3DStore } from '../store/use3DStore';
 import { useSceneStore } from '../store/useSceneStore';
 import { apply3DAnimation } from './animations';
+import { captureCanvasFrame } from '@/lib/exportVideo';
 
 // ── Cartoon (toon) 3D effect ────────────────────────────────────────────────
 // Renders the model with THREE.MeshToonMaterial straight to the (WebGL) canvas.
@@ -579,6 +580,7 @@ vec4 stochNormal(sampler2D tex, vec2 uv){
     // wall (background) uniforms — gradient + stroke amount
     const wsh = wallMat.userData.shader as any;
     const bf = opts.getBgFill?.();
+    wall.visible = !opts.getTransparentBackground?.();
     if (wsh && bf) {
       wsh.uniforms.uType.value = bf.type === 'linear' ? 1 : bf.type === 'radial' ? 2 : 0;
       wsh.uniforms.uC1.value.set(bf.c1).convertSRGBToLinear();
@@ -641,9 +643,9 @@ vec4 stochNormal(sampler2D tex, vec2 uv){
     renderer.render(scene, camera);
   };
 
-  const captureFrameAt = (frame: number): string => {
+  const captureFrameAt = (frame: number, mimeType: 'image/jpeg' | 'image/png' = 'image/jpeg'): string => {
     renderFrameAt(frame);
-    return renderer.domElement.toDataURL('image/jpeg', 0.92);
+    return captureCanvasFrame(renderer.domElement, mimeType);
   };
 
   const setCaptureScale = (k: number): void => {

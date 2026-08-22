@@ -36,6 +36,7 @@ export interface AsciiOptions {
   onPickPart?: (key: string | null) => void; // click-to-pick result
   // background paint texture
   getBgFill?: () => { type: string; c1: string; c2: string };
+  getTransparentBackground?: () => boolean;
   getBgTex?: () => { amount: number; scale: number };
   getSunShadow?: () => number;              // sun shadow / hardness 0..100
   getSunlight?: () => number;               // window-light intensity 0..100
@@ -57,7 +58,7 @@ export interface AsciiOptions {
   // caller seek to an exact frame and capture it, independent of the rAF loop.
   onRenderer?: (handle: {
     renderFrame: (frame: number) => void;
-    captureFrame: (frame: number) => string;
+    captureFrame: (frame: number, mimeType?: 'image/jpeg' | 'image/png') => string;
     setCaptureScale: (k: number) => void;
   } | null) => void;
 }

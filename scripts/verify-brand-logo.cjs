@@ -24,7 +24,7 @@ function assertEqual(actual, expected, label) {
   try {
     const page = await browser.newPage();
     await page.setViewport({ width: 1294, height: 912, deviceScaleFactor: 1 });
-    await page.goto(url, { waitUntil: 'networkidle0' });
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('.rail-logo svg');
 
     const logo = await page.evaluate(() => {

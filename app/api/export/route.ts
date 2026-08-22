@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { exportSettings, type VideoExportFormat } from '@/lib/exportVideo';
+import { exportSettings, webmFfmpegArgs, type VideoExportFormat } from '@/lib/exportVideo';
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
@@ -144,7 +144,7 @@ export async function POST(req: NextRequest) {
       if (format === 'webm') {
         const out = `motion_${sessionId}.webm`;
         const outPath = path.join(EXPORTS_DIR, out);
-        await run('ffmpeg', ['-y', '-start_number', '0', '-framerate', String(fps), '-i', pattern, ...settings.args, outPath]);
+        await run('ffmpeg', webmFfmpegArgs({ ...settings, pattern }, fps, audioFile, outPath));
         files.push(out);
       }
 

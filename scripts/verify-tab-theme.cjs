@@ -24,10 +24,10 @@ function assertEqual(actual, expected, label) {
   try {
     const page = await browser.newPage();
     await page.setViewport({ width: 1294, height: 912, deviceScaleFactor: 1 });
-    await page.goto(url, { waitUntil: 'networkidle0' });
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('.tab.active');
 
-    const { styles, tabToContentGaps } = await page.evaluate(() => {
+    const { styles, tabToContentGaps, templateTabToSearchGap } = await page.evaluate(() => {
       const pick = (selector) => {
         const element = document.querySelector(selector);
         if (!element) throw new Error(`Missing ${selector}`);
@@ -64,6 +64,9 @@ function assertEqual(actual, expected, label) {
           const nextLabel = row.nextElementSibling.querySelector('.ctl-label');
           return nextLabel.getBoundingClientRect().top - tabs.getBoundingClientRect().bottom;
         }),
+        templateTabToSearchGap:
+          document.querySelector('.searchbox').getBoundingClientRect().top
+          - document.querySelector('.tabs').getBoundingClientRect().bottom,
       };
     });
 
@@ -113,6 +116,9 @@ function assertEqual(actual, expected, label) {
     tabToContentGaps.forEach((gap, index) => {
       if (gap < 16) throw new Error(`tab group ${index + 1} content gap: expected at least 16px, received ${gap}px`);
     });
+    if (templateTabToSearchGap < 16) {
+      throw new Error(`template tabs content gap: expected at least 16px, received ${templateTabToSearchGap}px`);
+    }
 
     console.log('Tab theme verification passed for tab, seg, and pill controls.');
   } finally {

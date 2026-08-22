@@ -124,6 +124,16 @@ export default function CanvasPanel({ is3DMode = false }: { is3DMode?: boolean }
             </div>
           </div>
         )}
+
+        {is3DMode && (
+          <div className="ctl-row">
+            <label className="ctl-label">Background</label>
+            <div className="segmented">
+              <button className={`seg ${background.source !== 'transparent' ? 'active' : ''}`} onClick={() => setBackground({ source: 'color' })}>Opaque</button>
+              <button className={`seg ${background.source === 'transparent' ? 'active' : ''}`} onClick={() => setBackground({ source: 'transparent' })}>Transparent</button>
+            </div>
+          </div>
+        )}
       </div>
 
       {!is3DMode && (

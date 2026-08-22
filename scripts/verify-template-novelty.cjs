@@ -37,9 +37,11 @@ async function groupState(page) {
   const browser = await puppeteer.launch({ executablePath, headless: true });
   try {
     const page = await browser.newPage();
-    await page.goto(url, { waitUntil: 'networkidle0' });
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('.tpl-item');
     await page.evaluate((key) => localStorage.removeItem(key), storageKey);
-    await page.reload({ waitUntil: 'networkidle0' });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('.tpl-item');
 
     const before = await groupState(page);
     check(before.hasGroupBadge, 'Spiral must begin with a Novo badge for an unseen user');
@@ -60,19 +62,22 @@ async function groupState(page) {
     }, storageKey);
     check(Array.isArray(persisted) && persisted.length >= 2, 'opening Spiral must persist all viewed template ids');
 
-    await page.reload({ waitUntil: 'networkidle0' });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('.tpl-item');
     const afterReload = await groupState(page);
     check(!afterReload.hasGroupBadge, 'viewed families must stay without Novo after reload');
 
     if (Array.isArray(persisted) && persisted.length > 0) {
       await page.evaluate((key, ids) => localStorage.setItem(key, JSON.stringify(ids.slice(1))), storageKey, persisted);
-      await page.reload({ waitUntil: 'networkidle0' });
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.waitForSelector('.tpl-item');
       const withFutureUnseen = await groupState(page);
       check(withFutureUnseen.hasGroupBadge, 'an unseen template id must make Novo appear again');
     }
 
     await page.evaluate((key) => localStorage.setItem(key, '{broken'), storageKey);
-    await page.reload({ waitUntil: 'networkidle0' });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('.tpl-item');
     const afterCorruption = await groupState(page);
     check(afterCorruption.hasGroupBadge, 'corrupt novelty storage must fail safely and show unseen content');
 
