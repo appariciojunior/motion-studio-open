@@ -251,8 +251,13 @@ function ringOf(v: Record<string, any>, count: number, ctx: TransformCtx): Ring 
     n, aspect, extent, wrap, perUnit, W, R, cardScale, dist,
     frame,
     half: frame * BOARD_CROP,
-    panX: (num(v.offsetX) / 100) * frame,
-    panY: (num(v.offsetY) / 100) * frame,
+    // The pad's x runs the way it runs everywhere else in the app: positive
+    // moves the PICTURE right. Panning a camera does the opposite — the camera
+    // goes right and the cards slide left — so the sign is flipped here rather
+    // than in the reader's head. The reference tool authors the camera's sign;
+    // every value below is stored in ours, which is its negation on x.
+    panX: -(num(v.offset?.x) / 100) * frame,
+    panY: (num(v.offset?.y) / 100) * frame,
   };
 }
 
@@ -571,9 +576,8 @@ const ring3d: Template = {
       description: 'Moves the camera itself, at the same Perspective — a different move than widening the lens.' },
     { key: 'perspective', label: 'Perspective', type: 'slider', min: 0, max: 2000, step: 1, default: 312, section: 'Depth',
       description: 'The lens: 0 is a 10° telephoto, 1000 a 120° wide angle. Changes the keystone without changing how big a face-on card reads.' },
-    { key: 'offsetX', label: 'Offset X', type: 'slider', min: -100, max: 100, step: 1, default: 0, section: 'Depth', unit: '%',
+    { key: 'offset', label: 'Offset', type: 'xypad', max: 100, default: { x: 0, y: 0 }, section: 'Depth',
       description: 'Pans the camera rather than the ring, as a share of the frame — the ring keeps its own lens axis and simply sits off centre.' },
-    { key: 'offsetY', label: 'Offset Y', type: 'slider', min: -100, max: 100, step: 1, default: 0, section: 'Depth', unit: '%' },
     { key: 'tiltX', label: 'Rotation X', type: 'slider', min: -180, max: 180, step: 1, default: -12, section: 'Depth', unit: '°' },
     { key: 'ringYaw', label: 'Rotation Y', type: 'slider', min: -180, max: 180, step: 1, default: -13, section: 'Depth', unit: '°' },
     { key: 'ringRoll', label: 'Rotation Z', type: 'slider', min: -180, max: 180, step: 1, default: 55, section: 'Depth', unit: '°' },
@@ -782,7 +786,7 @@ export const orbit3dVariants: Template[] = [
   }, LINEAR, SQUARE),
   variant(ring3d, 'orbit-3d-06', 'Ring Pure 03', {
     count: 9, gap: 15, surface: 'cylinder', facing: 'ring', fade: 15, fadeMode: 'solid',
-    tiltX: -7, ringYaw: 0, ringRoll: 0, offsetY: 4, zoom: 75, perspective: 500, speed: 0.5,
+    tiltX: -7, ringYaw: 0, ringRoll: 0, offset: { x: 0, y: 4 }, zoom: 75, perspective: 500, speed: 0.5,
   }, GLIDE, SQUARE),
   variant(ring3d, 'orbit-3d-07', 'Ring Pure 04', {
     count: 18, gap: 15, surface: 'cylinder', facing: 'ring', fade: 15, fadeMode: 'solid',
@@ -882,12 +886,12 @@ export const orbit3dVariants: Template[] = [
   }, NATURAL, PORTRAIT),
   variant(ring3d, 'orbit-3d-24', 'Ring Bloom 02', {
     count: 12, gap: 0, surface: 'flat', facing: 'camera', fade: 0, fadeMode: 'alpha',
-    scaleContrast: 200, tiltX: 0, ringYaw: 85, ringRoll: 90, offsetX: 5,
+    scaleContrast: 200, tiltX: 0, ringYaw: 85, ringRoll: 90, offset: { x: -5, y: 0 },
     zoom: 40, perspective: 2000, speed: 1.2,
   }, LINEAR, SQUARE),
   variant(ring3d, 'orbit-3d-25', 'Ring Bloom 03', {
     count: 12, gap: 0, surface: 'flat', facing: 'camera', fade: 0, fadeMode: 'alpha',
-    scaleContrast: 200, tiltX: 24, ringYaw: 75, ringRoll: 90, offsetX: 5, offsetY: 7,
+    scaleContrast: 200, tiltX: 24, ringYaw: 75, ringRoll: 90, offset: { x: -5, y: 7 },
     zoom: 40, perspective: 2000, speed: 1.2,
   }, LINEAR, SQUARE),
   variant(ring3d, 'orbit-3d-26', 'Ring Bloom 04', {
