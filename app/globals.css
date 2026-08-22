@@ -65,7 +65,7 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
   grid-template-areas:
     "rail templates stage controls right"
     "rail bottom bottom bottom bottom";
-  background: var(--card);
+  background: var(--stage);
   overflow: hidden;
   transition: grid-template-columns 180ms ease;
 }
@@ -75,6 +75,8 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
 .card {
   background: var(--card);
   border-radius: var(--r-card);
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.10);
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -109,7 +111,7 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
 .rail-top { padding: 12px 8px 0; display: flex; flex-direction: column; align-items: stretch; flex: 1; }
 .rail-logo {
   width: 40px; height: 40px; margin: 8px auto 16px;
-  background: var(--inverse-bg); color: var(--inverse-fg);
+  background: transparent; color: var(--accent);
   display: grid; place-items: center;
 }
 .rail-item {
@@ -188,15 +190,16 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
 .tpl-strip { align-items: center; padding-top: 12px; }
 .app-tpl-collapsed { --templates-col: 40px; }
 .tabs {
-  display: flex; background: var(--card-inset); border-radius: var(--r-ctrl);
-  padding: var(--seg-pad); width: 100%;
+  display: flex; align-items: flex-end; gap: 4px; width: 100%;
+  background: transparent; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 0;
 }
 .tab {
-  flex: 1; padding: 5px 8px; border-radius: var(--r-seg); text-align: center;
-  color: var(--fg-faint); line-height: var(--lh-ui);
-  transition: background var(--t-fast), color var(--t-fast);
+  flex: 0 0 auto; min-width: 0; padding: 10px 16px; border-radius: 8px 8px 0 0; text-align: center;
+  color: var(--fg-body); background: var(--card); line-height: var(--lh-ui); font-weight: 600;
+  transition: background var(--t-fast), color var(--t-fast), box-shadow var(--t-fast);
 }
-.tab.active { background: var(--seg-active-bg); color: var(--seg-active-fg); }
+.tab:hover:not(.active) { color: var(--fg); background: var(--card-thumb); }
+.tab.active { background: var(--card-inset); color: var(--accent); box-shadow: none; }
 
 /* BETA marker — 3D mode ships unfinished; flags it in the panel header. */
 .tab-beta { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
@@ -310,8 +313,9 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
 .tpl-card {
   position: relative;
   display: flex; flex-direction: column; gap: 8px; padding: 8px;
-  background: var(--card-soft); border: 1px solid var(--line);
-  transition: border-color var(--t-fast), background var(--t-fast);
+  background: #1d1d1d; border: 1px solid rgba(255,255,255,0.06); border-radius: 10px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.035), 0 8px 20px rgba(0,0,0,.18);
+  transition: border-color var(--t-fast), background var(--t-fast), transform var(--t-fast), box-shadow var(--t-fast);
 }
 /* NEW next to a family name in the collapsed accordion list, so the marker is
    visible without opening a group. .tpl-name is flex:1, which would shove the
@@ -323,7 +327,7 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
   margin-left: 6px; margin-right: auto; flex: 0 0 auto;
   font-size: var(--fs-micro); line-height: 1; letter-spacing: 0.6px; font-weight: 500;
   padding: 2px 4px; border-radius: var(--r-seg);
-  background: var(--inverse-bg); color: var(--inverse-fg);
+  background: var(--accent); color: var(--accent-fg);
 }
 
 /* NEW badge, pinned over the thumbnail's top-right corner. Reuses the beta-tag
@@ -332,15 +336,15 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
   position: absolute; top: 12px; right: 12px; z-index: 2;
   font-size: var(--fs-micro); line-height: 1; letter-spacing: 0.6px; font-weight: 500;
   padding: 3px 5px; border-radius: var(--r-seg);
-  background: var(--inverse-bg); color: var(--inverse-fg);
+  background: var(--accent); color: var(--accent-fg);
   pointer-events: none;
 }
-.tpl-card:hover { border-color: var(--handle); }
-.tpl-card.active { border-color: var(--fg); }
-.tpl-card.active .tpl-card-label { color: var(--fg); }
+.tpl-card:hover { border-color: rgba(255,255,255,.20); transform: translateY(-2px); box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 14px 28px rgba(0,0,0,.28); }
+.tpl-card.active { border-color: var(--handle); box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 0 0 1px var(--handle), 0 14px 28px rgba(0,0,0,.28); }
+.tpl-card.active .tpl-card-label { color: #f4f4f4; }
 .tpl-thumb {
   position: relative; width: 100%; aspect-ratio: 3 / 4;
-  background: var(--frame); overflow: hidden;
+  background: #151515; border-radius: 6px; overflow: hidden;
   /* The preview cards carry the renderer's own stacking numbers
      (TemplateThumb: depth * 1000 + i), so they run into the thousands. Without
      a stacking context here those compete directly with .tpl-new's z-index in
@@ -364,7 +368,7 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
 @media (prefers-reduced-motion: reduce) {
   .tpl-thumb::after { display: none; }
 }
-.tpl-card-label { font-size: var(--fs-meta); line-height: 16.5px; color: var(--fg-muted); text-align: center; }
+.tpl-card-label { font-size: var(--fs-meta); line-height: 16.5px; color: #e1e1e1; text-align: left; font-weight: 600; }
 
 /* ============================================================
    CONTROL PRIMITIVES (Figma specs)
@@ -373,6 +377,18 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
    (canvas-settings panel keeps the 20px default) */
 .controls { grid-area: controls; border-left: 1px solid var(--line); --pad-sect: 14px; transition: opacity 140ms ease; }
 .right { grid-area: right; border-left: 1px solid var(--line); transition: opacity 140ms ease; }
+.controls .sval,
+.controls .sval-input,
+.controls .xypad-vals,
+.controls .dim-field,
+.controls input[type="number"],
+.right .sval,
+.right .sval-input,
+.right .xypad-vals,
+.right .dim-field,
+.right input[type="number"],
+.right .badge,
+.right .asset-idx { color: #4c4c4c; }
 .app.right-collapsed .controls,
 .app.right-collapsed .right {
   opacity: 0; visibility: hidden; pointer-events: none; border-left-color: transparent;
@@ -386,52 +402,66 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
    Figma: gray #f3f4f6 track, white fill box outlined #b9bfcb, 2×16 handle bar */
 .strack {
   position: relative; width: 100%; height: var(--ctl-h); border-radius: var(--r-ctrl);
-  background: var(--card-inset); cursor: ew-resize; user-select: none; overflow: hidden;
+  background: transparent; cursor: ew-resize; user-select: none; overflow: visible;
+}
+.strack::before {
+  content: ''; position: absolute; left: 0; right: 68px; top: 50%; height: 6px;
+  transform: translateY(-50%); background: var(--card-thumb); border-radius: var(--r-chip);
 }
 .sfill {
-  position: absolute; inset: 0 auto 0 0; background: var(--card);
-  border: 1px solid var(--handle); border-radius: var(--r-ctrl); pointer-events: none;
+  position: absolute; left: 0; top: 50%; height: 6px; transform: translateY(-50%);
+  background: color-mix(in srgb, var(--fg-muted) 45%, var(--card-thumb));
+  border: 0; border-radius: var(--r-chip); pointer-events: none;
 }
 .shandle {
   position: absolute; top: 50%; transform: translate(-50%, -50%);
-  width: 2px; height: 16px; border-radius: 1px; background: var(--handle); pointer-events: none;
+  width: 22px; height: 14px; border-radius: var(--r-chip); background: var(--handle);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28); pointer-events: none;
 }
 .sval {
-  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  position: absolute; right: 0; top: 50%; transform: translateY(-50%);
   font-size: var(--fs-ui); line-height: var(--lh-ui); color: var(--fg-value);
-  font-variant-numeric: tabular-nums; padding: 2px 6px; border-radius: var(--r-seg); cursor: text;
+  font-variant-numeric: tabular-nums; min-width: 56px; text-align: right; padding: 2px 0; border-radius: var(--r-seg); cursor: text;
 }
 .sval-input {
-  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
-  width: 64px; text-align: right; background: var(--card-thumb); border: none; border-radius: var(--r-seg);
-  color: var(--fg-body); font-size: var(--fs-ui); padding: 2px 6px;
+  position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+  width: 58px; text-align: right; background: transparent; border: none; border-radius: var(--r-seg);
+  color: var(--fg-body); font-size: var(--fs-ui); padding: 2px 0;
   font-variant-numeric: tabular-nums;
 }
 
-/* segmented — one #232323 track, p3; active thumb #2d2d2d r6 */
+/* segmented controls share the same tab treatment as Templates / Custom */
 .segmented {
-  display: flex; background: var(--card-inset); border-radius: var(--r-ctrl);
-  padding: var(--seg-pad); width: 100%;
+  display: flex; align-items: flex-end; gap: 4px; width: 100%;
+  background: transparent; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 0;
 }
 .seg {
-  flex: 1; min-width: 1px; padding: 5px 8px; border-radius: var(--r-seg);
-  color: var(--fg-faint); font-size: var(--fs-ui); line-height: var(--lh-ui);
+  flex: 1; min-width: 1px; padding: 5px 8px; border-radius: 8px 8px 0 0;
+  color: var(--fg-faint); background: var(--card); font-size: var(--fs-ui); line-height: var(--lh-ui);
   text-align: center; text-transform: capitalize; white-space: nowrap;
   transition: background var(--t-fast), color var(--t-fast);
 }
 .seg:hover:not(.active) { color: var(--fg-muted); }
-.seg.active { background: var(--seg-active-bg); color: var(--seg-active-fg); }
+.seg.active { background: var(--card-inset); color: var(--accent); box-shadow: none; }
 
-/* pills — same segmented skin, used for short option rows (logo corner etc.) */
-.pills { display: flex; background: var(--card-inset); border-radius: var(--r-ctrl); padding: var(--seg-pad); width: 100%; }
+/* pills use the same bottom-divider tab skin, including wrapped option grids */
+.pills {
+  display: flex; align-items: flex-end; gap: 4px; width: 100%;
+  background: transparent; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 0;
+}
 .pill {
-  flex: 1; min-width: 1px; padding: 5px 8px; border-radius: var(--r-seg);
-  color: var(--fg-faint); font-size: var(--fs-ui); line-height: var(--lh-ui);
+  flex: 1; min-width: 1px; padding: 5px 8px; border-radius: 8px 8px 0 0;
+  color: var(--fg-faint); background: var(--card); font-size: var(--fs-ui); line-height: var(--lh-ui);
   text-align: center; text-transform: capitalize; white-space: nowrap;
   transition: background var(--t-fast), color var(--t-fast);
 }
 .pill:hover:not(.active) { color: var(--fg-muted); }
-.pill.active { background: var(--seg-active-bg); color: var(--seg-active-fg); }
+.pill.active { background: var(--card-inset); color: var(--accent); box-shadow: none; }
+.bg-source-pills { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.bg-source-pills .pill { min-height: 30px; }
+
+/* Keep the first control after a tab row from touching its bottom divider. */
+.ctl-row:has(.segmented, .pills) + .ctl-row { padding-top: 8px; }
 
 /* custom canvas size (W × H px) */
 .dim-inputs { display: flex; align-items: center; gap: 6px; width: 100%; }
@@ -440,7 +470,7 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
 
 /* select / text */
 .field {
-  width: 100%; height: var(--ctl-h); background: var(--card-inset); border: none;
+  width: 100%; height: var(--ctl-h); background: var(--card-inset); border: 1px solid var(--line);
   border-radius: var(--r-ctrl); padding: 0 10px; color: var(--fg-body); font-size: var(--fs-ui);
 }
 select.field { padding-right: 26px; }
@@ -781,7 +811,7 @@ select.field { padding-right: 26px; }
   padding: 0 6px; text-align: center; color: var(--fg-body); font-variant-numeric: tabular-nums;
 }
 .export-btn {
-  height: var(--ctl-h); padding: 0 20px; background: var(--inverse-bg); color: var(--inverse-fg);
+  height: var(--ctl-h); padding: 0 20px; background: var(--accent); color: var(--accent-fg);
   border-radius: var(--r-seg); display: flex; align-items: center; justify-content: center; gap: 6px;
   font-size: var(--fs-label); font-weight: 600; letter-spacing: 0.2px; flex: 0 0 auto;
   transition: opacity var(--t-fast);
@@ -949,7 +979,7 @@ select.field { padding-right: 26px; }
    MODAL
    ============================================================ */
 .modal-backdrop {
-  position: fixed; inset: 0; background: rgba(17,24,39,0.35); backdrop-filter: blur(2px);
+  position: fixed; inset: 0; background: rgba(16,15,13,0.58); backdrop-filter: blur(2px);
   display: flex; align-items: center; justify-content: center; z-index: 100;
 }
 .modal { width: 400px; background: var(--card); border-radius: var(--r-card); border: 1px solid var(--line); box-shadow: 0 20px 60px rgba(0,0,0,0.18); }
@@ -967,13 +997,13 @@ select.field { padding-right: 26px; }
 .export-primary-action { align-items: center; justify-content: center; gap: 8px; }
 .export-primary-action > svg { display: none; }
 .btn.solid, .btn.primary {
-  background: var(--inverse-bg); color: var(--inverse-fg); font-weight: 600; letter-spacing: 0.2px;
+  background: var(--accent); color: var(--accent-fg); font-weight: 700; letter-spacing: 0.2px;
   border-radius: var(--r-seg); font-size: var(--fs-label);
 }
-.btn.solid:hover, .btn.primary:hover { opacity: 0.9; background: var(--inverse-bg); color: var(--inverse-fg); }
+.btn.solid:hover, .btn.primary:hover { opacity: 0.9; background: var(--accent); color: var(--accent-fg); }
 .progress { display: flex; flex-direction: column; gap: 9px; color: var(--fg-muted); font-size: var(--fs-ui); }
 .progress-bar { height: 6px; background: var(--card-inset); border-radius: 3px; overflow: hidden; }
-.progress-bar > div { height: 100%; background: var(--fg-body); transition: width 0.1s; }
+.progress-bar > div { height: 100%; background: var(--accent); transition: width 0.1s; }
 .export-done { font-size: var(--fs-label); color: var(--fg-muted); }
 .export-done a { color: var(--fg-body); }
 .export-error { color: var(--fg-label); font-size: var(--fs-ui); line-height: 1.5; }
@@ -989,7 +1019,7 @@ select.field { padding-right: 26px; }
 /* ============================================================
    WELCOME — first-run dialog over a heavily blurred, faded app
    ============================================================ */
-.welcome-backdrop { background: rgba(17,24,39,0.3); backdrop-filter: blur(10px); }
+.welcome-backdrop { background: rgba(16,15,13,0.52); backdrop-filter: blur(10px); }
 .modal.welcome { width: 460px; max-height: 86vh; overflow-y: auto; }
 .welcome-body { padding: 24px 26px 26px; display: flex; flex-direction: column; gap: 12px; }
 .welcome-title { margin: 0; font-size: 18px; font-weight: 600; color: var(--fg); line-height: 1.2; }
@@ -1402,7 +1432,7 @@ select.field { padding-right: 26px; }
   .mobile-notice-backdrop {
     position: fixed; inset: 0; z-index: 140; display: flex; align-items: flex-end;
     padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
-    background: rgba(17,24,39,.42); backdrop-filter: blur(3px);
+    background: rgba(16,15,13,.52); backdrop-filter: blur(3px);
   }
   .mobile-notice {
     width: 100%; padding: 20px; background: var(--card); border: 1px solid var(--line);

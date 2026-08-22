@@ -39,6 +39,10 @@
   --seg-active-bg: #111827;
   --seg-active-fg: #ffffff;
 
+  /* ---- Design Circuit action accent ---- */
+  --accent: #f4c914;
+  --accent-fg: #161616;
+
   /* ---- Inverse (Export button, play button, logo) ---- */
   --inverse-bg:   #111827;
   --inverse-fg:   #ffffff;
@@ -66,11 +70,11 @@
   --gz-label:     #0f1319;                 /* letters on the filled balls */
 
   /* ---- Radii — the design is fully square ---- */
-  --r-card:  0px;
-  --r-ctrl:  0px;
-  --r-seg:   0px;
-  --r-chip:  0px;
-  --r-nav:   0px;
+  --r-card:  16px;
+  --r-ctrl:  12px;
+  --r-seg:   9px;
+  --r-chip:  999px;
+  --r-nav:   12px;
 
   /* ---- Type scale (Inter) ---- */
   --fs-label: 13px;  /* control labels, lh 19.5 */
@@ -103,20 +107,20 @@
 }
 
 :root[data-theme="dark"] {
-  --stage:      #0d0d0d;
+  --stage:      #111111;
   --stage-dot:  rgba(255,255,255,0.085);
   --stage-edge: rgba(255,255,255,0.18);
   /* Heavier than light mode: a black shadow on a near-black stage (#0d0d0d)
      has very little room to darken before it stops reading at all. */
   --stage-shadow: rgba(0,0,0,0.55);
-  --card:       #171717;
-  --card-inset: #232323;
-  --card-thumb: #2d2d2d;
-  --card-soft:  #1f1f1f;
+  --card:       #1d1d1d;
+  --card-inset: #282828;
+  --card-thumb: #343434;
+  --card-soft:  #1d1d1d;
   --frame:      #0d0d0d;
-  --line:       #303030;
+  --line:       #383838;
   --line-soft:  rgba(255,255,255,0.14);
-  --handle:     #595959;
+  --handle:     #f4f4f5;
   --fg:        #ffffff;
   --fg-body:   #e8e8e8;
   --fg-label:  #cccccc;
@@ -125,6 +129,8 @@
   --fg-faint:  #858585;
   --seg-active-bg: #2d2d2d;
   --seg-active-fg: #ffffff;
+  --accent: #f4c914;
+  --accent-fg: #161616;
   --inverse-bg: #ffffff;
   --inverse-fg: #111111;
   --chip-bg:    #cccccc;

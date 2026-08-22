@@ -54,10 +54,8 @@ export default function IconRail() {
     <aside className="card rail">
       <div className="rail-top">
         <div className="rail-logo">
-          <svg width="42" height="19" viewBox="0 0 42 19" fill="none">
-            <rect x="1" y="2" width="10" height="15" rx="2.5" fill="currentColor"/>
-            <rect x="14" y="4.5" width="8" height="10" rx="2" fill="currentColor" opacity="0.55"/>
-            <rect x="25" y="6.5" width="6" height="6" rx="1.5" fill="currentColor" opacity="0.3"/>
+          <svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true">
+            <path d="M 16.062 13.551 L 16.062 0.5 L 13.14 0.5 C 13.14 4.102 11.665 7.371 9.292 9.727 C 6.826 12.185 3.482 13.561 0 13.55 L 0 16.45 L 13.143 16.45 L 13.143 29.5 L 16.064 29.5 C 16.057 26.033 17.443 22.708 19.912 20.273 C 22.383 17.821 25.724 16.447 29.205 16.451 L 29.205 13.551 Z" fill="currentColor" />
           </svg>
         </div>
         <button className="rail-item rail-action" onClick={newProject} title="Create a new project">

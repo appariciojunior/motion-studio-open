@@ -6,6 +6,7 @@ import { catalogTemplateList, templateList, templateGroups, getTemplate } from '
 import TemplateThumb from './TemplateThumb';
 import { ControlRow } from './Controls';
 import { useMobileInteractions } from './MobileInteractions';
+import { markTemplateIdsSeen, readSeenTemplateIds } from '@/lib/templateNovelty';
 
 const Chevron = ({ dir = 'right' }: { dir?: 'right' | 'left' }) => (
   <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={dir === 'left' ? { transform: 'rotate(180deg)' } : undefined}>
@@ -44,11 +45,18 @@ export default function TemplatesCard({
   const [query, setQuery] = useState('');
   const [naming, setNaming] = useState(false);
   const [presetName, setPresetName] = useState('');
+  const [seenTemplateIds, setSeenTemplateIds] = useState<Set<string>>(new Set());
+  const [noveltyReady, setNoveltyReady] = useState(false);
 
   // saved presets live in localStorage — pick them up after mount
   useEffect(() => {
     if (customPresetsEnabled) loadCustomPresets();
   }, [customPresetsEnabled, loadCustomPresets]);
+
+  useEffect(() => {
+    setSeenTemplateIds(readSeenTemplateIds());
+    setNoveltyReady(true);
+  }, []);
 
   // Mobile deliberately exposes only the template catalogue. Keeping this as
   // a derived value prevents custom state from leaking in if the prop changes.
@@ -57,7 +65,15 @@ export default function TemplatesCard({
   const activeMeta = templateList.find((t) => t.meta.id === activeTemplateId)?.meta;
 
   // Select a template. In board mode this also drills into its sliders.
+  const markSeen = (ids: Iterable<string>) => {
+    setSeenTemplateIds(markTemplateIdsSeen(ids));
+  };
+
+  const isUnseen = (template: (typeof catalogTemplateList)[number]) =>
+    noveltyReady && !!template.meta.isNew && !seenTemplateIds.has(template.meta.id);
+
   const pick = (id: string) => {
+    markSeen([id]);
     setActiveTemplate(id);
     if (controlsInline) setShowControls(true);
     onSelect?.();
@@ -147,7 +163,7 @@ export default function TemplatesCard({
                 onClick={() => pick(t.meta.id)}
               >
                 <TemplateThumb template={t} />
-                {t.meta.isNew && <span className="tpl-new">NEW</span>}
+                {isUnseen(t) && <span className="tpl-new">Novo</span>}
                 <span className="tpl-card-label">{t.meta.name}</span>
               </button>
             ))}
@@ -186,14 +202,17 @@ export default function TemplatesCard({
                 <div key={name} className={`tpl-accordion ${isOpen ? 'open' : ''}`}>
                   <button
                     className={`tpl-item ${activeHere || isOpen ? 'active' : ''}`}
-                    onClick={() => setOpenGroup(isOpen ? null : name)}
+                    onClick={() => {
+                      if (!isOpen) markSeen(items.filter((t) => t.meta.isNew).map((t) => t.meta.id));
+                      setOpenGroup(isOpen ? null : name);
+                    }}
                     aria-expanded={isOpen}
                     aria-controls={panelId}
                   >
                     <span className="tpl-name">{name}</span>
                     {/* A family is new if any of its presets is, so the marker
                         shows on the collapsed list without opening the group. */}
-                    {items.some((t) => t.meta.isNew) && <span className="tpl-new-inline">NEW</span>}
+                    {items.some(isUnseen) && <span className="tpl-new-inline">Novo</span>}
                     <span className="tpl-accordion-chevron"><Chevron /></span>
                   </button>
                   {isOpen && (
@@ -205,7 +224,7 @@ export default function TemplatesCard({
                           onClick={() => pick(t.meta.id)}
                         >
                           <TemplateThumb template={t} autoPreview={mobile} />
-                          {t.meta.isNew && <span className="tpl-new">NEW</span>}
+                          {isUnseen(t) && <span className="tpl-new">Novo</span>}
                           <span className="tpl-card-label">{t.meta.name}</span>
                         </button>
                       ))}
