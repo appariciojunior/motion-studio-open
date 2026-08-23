@@ -1,0 +1,91 @@
+Motion Studio
+Copyright (c) 2026 Motion Studio Authors and Contributors
+
+Licensed under the Elastic License 2.0. See the LICENSE file for the full terms:
+use, modification and distribution are free, including commercially; offering
+Motion Studio to third parties as a hosted or managed service is not.
+
+This product includes third-party software, listed below with the licence each
+one is distributed under. Their notices are preserved as required, both here and
+in the license headers their own files carry.
+
+
+================================================================================
+RUNTIME DEPENDENCIES
+================================================================================
+
+The following are bundled into the application delivered to the browser, or run
+on the server.
+
+  @dnd-kit/core             6.3.1     MIT
+  @dnd-kit/sortable         10.0.0    MIT
+  @dnd-kit/utilities        3.2.2     MIT
+  @react-three/fiber        9.0.0     MIT
+  @tailwindcss/browser      4.3.3     MIT
+  gifenc                    1.0.3     MIT
+  jszip                     3.10.1    MIT OR GPL-3.0-or-later  (used under MIT)
+  mediabunny                1.54.0    MPL-2.0
+  mp4-muxer                 5.2.2     MIT
+  next                      16.2.10   MIT
+  pixi-filters              6.1.5     MIT
+  pixi.js                   8.19.0    MIT
+  react                     19.2.7    MIT
+  react-dom                 19.2.7    MIT
+  sucrase                   3.35.1    MIT
+  three                     0.185.1   MIT
+  use-sync-external-store   1.5.0     MIT
+  zustand                   5.0.14    MIT
+
+Transitive dependencies are recorded in package-lock.json. One is worth calling
+out because it is not permissive: @img/sharp-* ships under Apache-2.0 AND
+LGPL-3.0-or-later. It arrives with Next.js as a native binary used during build
+and on the server, and is not part of the browser bundle.
+
+
+================================================================================
+DEVELOPMENT DEPENDENCIES
+================================================================================
+
+Not distributed with the application.
+
+  @types/node               26.1.1    MIT
+  @types/react              19.2.17   MIT
+  @types/react-dom          19.2.3    MIT
+  @types/three              0.185.1   MIT
+  playwright-core           1.61.1    Apache-2.0
+  puppeteer-core            25.3.0    Apache-2.0
+  typescript                5.9.3     Apache-2.0
+
+
+================================================================================
+MOZILLA PUBLIC LICENSE 2.0 — mediabunny
+================================================================================
+
+mediabunny (https://github.com/Vanilagy/mediabunny) muxes the WebM and MP4
+containers this application writes. It is distributed under the Mozilla Public
+License, Version 2.0, a file-level copyleft: it may be combined with proprietary
+code — your own files remain your own — but the Source Code Form of the
+MPL-covered files must remain available, and any modification made to those
+files must be published under the same licence.
+
+Motion Studio uses mediabunny unmodified. Its Source Code Form is available at:
+
+    https://github.com/Vanilagy/mediabunny
+
+A copy of the licence is available at https://mozilla.org/MPL/2.0/ and the
+notice below travels inside the shipped bundle, in the library's own files:
+
+    Copyright (c) 2026-present, Vanilagy and contributors
+
+    This Source Code Form is subject to the terms of the Mozilla Public
+    License, v. 2.0. If a copy of the MPL was not distributed with this
+    file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+
+================================================================================
+FONTS AND ASSETS
+================================================================================
+
+Geist and Geist Mono are served through next/font. The bundled demo images under
+public/demo-ref are used for preview purposes only and are not covered by this
+project's licence.

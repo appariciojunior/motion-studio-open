@@ -18,7 +18,7 @@ out/
 
 # reference imagery pulled from the reference tool for local visual comparison
 # only. Third-party licensed stock — never commit, never deploy.
-public/demo-arqe/
+public/demo-ref/
 
 # local env (holds the demo-set override; never commit)
 .env*.local
@@ -26,3 +26,5 @@ public/demo-arqe/
 # contact sheets from scripts/shoot.cjs — generated, and rendered with whatever
 # demo set is active (may be third-party reference imagery)
 .shots/
+# scratch dir genExportSources.mjs leaves behind if esbuild fails mid-run
+.exp-*/

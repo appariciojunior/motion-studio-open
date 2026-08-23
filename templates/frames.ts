@@ -2,6 +2,7 @@ import type { Template } from '@/lib/types';
 import type { EasingSpec } from '@/lib/easing';
 import { clamp, stepHold } from '@/lib/motion';
 import { variant } from './variant';
+import { latticeCount, solveLattice } from './lattice';
 
 // Reference size (px) shared with the renderer's sprite normalization, so that
 // `cardSize` reads directly in on-screen pixels.
@@ -45,18 +46,6 @@ const BASE = 340;
 //  exact rather than approximate.
 // ============================================================
 
-// The divisor of `n` closest to `want`, preferring the wider grid on a tie so
-// the wall stays landscape-ish rather than collapsing to a single column.
-// Shared with the Grid family, which has the same no-half-row requirement.
-export function divisorNear(n: number, want: number): number {
-  let best = 1;
-  for (let d = 1; d <= n; d++) {
-    if (n % d !== 0) continue;
-    if (Math.abs(d - want) < Math.abs(best - want)) best = d;
-  }
-  return best;
-}
-
 const framesBase: Template = {
   meta: {
     id: 'wall-01',
@@ -72,8 +61,9 @@ const framesBase: Template = {
 
   controls: [
     { key: 'direction',    label: 'Direction',     type: 'pills',  options: ['forward','reverse'], default: 'forward' },
-    { key: 'count',        label: 'Count',         type: 'slider', min: 2, max: 60, step: 1,   default: 9 },
-    { key: 'columns',      label: 'Columns',       type: 'slider', min: 1, max: 10, step: 1,   default: 3, section: 'Layout', description: 'Snaps to a divisor of Count so the wall has no half-filled row.' },
+    // No Count and no Columns: how many pictures the wall holds is a
+    // consequence of how big they are and how big the frame is. See
+    // templates/lattice.ts — the reference tool ships the same two controls.
     { key: 'cardSize',     label: 'Plane Size',    type: 'slider', min: 60, max: 1000, step: 1, default: 762 },
     { key: 'gap',          label: 'Gap',           type: 'slider', min: 0, max: 300, step: 1,  default: 30 },
     { key: 'cornerRadius', label: 'Corner Radius', type: 'slider', min: 0, max: 100, step: 1,  default: 0 },
@@ -86,28 +76,20 @@ const framesBase: Template = {
     { key: 'speed',        label: 'Speed',         type: 'slider', min: 0, max: 3, step: 0.05, default: 0.5 }, // cells/sec
   ],
 
+  // Enough hung pictures to cover the wall, derived from their size and the
+  // frame. The old Count/Columns pair could not express this: a smaller print
+  // needs MORE of them, and every preset had to be hand-tuned to stay covered.
+  layerCount: (v, ctx) => latticeCount(v, ctx, 3 / 4),
+
   transform: (frame, index, count, v, ctx) => {
-    // The wall wraps as a torus, so a half-filled last row is not a cosmetic
-    // detail: the empty cells scroll straight through the frame as holes.
-    // Snapping Columns to a divisor of Count makes the lattice a complete
-    // rectangle for every count, without hiding a card or doubling one up.
-    const cols = divisorNear(count, clamp(Math.round(v.columns), 1, 10));
-    const rows = Math.max(1, Math.round(count / cols));
+    // Solved from the canvas; the sprite pool came from the same solver, so on
+    // the stage the two agree exactly. `count` goes in only for the board and
+    // web-export surfaces, whose card total is however many elements the user
+    // placed — see solveLattice's `atLeast`.
+    const { cols, rows, pitchX, pitchY } = solveLattice(v, ctx, 3 / 4, count);
     const col = index % cols;
     const row = Math.floor(index / cols);
-
-    // The renderer normalizes a sprite's LONG edge to BASE, so cardSize is that
-    // edge and the short one follows the card's RESOLVED aspect — which the
-    // scene's card shape can override away from this family's declared 3:4.
-    // Spacing off the declared value leaves one mount right and the other wrong.
-    // `gap` is a true edge gap in canvas px, which is why it is not scaled:
-    // pitch has to stay readable as "card plus mount".
-    const aspect = ctx.cardAspect ?? 3 / 4;
     const sizeFactor = v.cardSize / BASE;
-    const cardW = aspect < 1 ? v.cardSize * aspect : v.cardSize;
-    const cardH = aspect < 1 ? v.cardSize : v.cardSize / aspect;
-    const pitchX = cardW + v.gap;
-    const pitchY = cardH + v.gap;
 
     // Masonry: rowsSkipped 0 aligns columns, 1 shifts alternate rows half a
     // cell, 2 steps in thirds. The shift is fractional so it survives wrapping.
@@ -201,14 +183,15 @@ export const framesVariants: Template[] = [
   preset(framesBase, 'wall-05', 'Frames 05', {
     tilt: -15, hold: 0,
   }, { id: 'flow' }),
-  // A dense wall of small prints: more cells, wide mounts between them. The
-  // lattice has to stay larger than the canvas, so a smaller card needs more
-  // of them — count and columns move together with cardSize.
+  // A dense wall of small prints with wide mounts between them. The lattice
+  // grows to match on its own now — this used to need count and columns
+  // hand-tuned alongside cardSize, and they went stale the moment the canvas
+  // changed shape.
   preset(framesBase, 'wall-06', 'Frames 06', {
-    cardSize: 152, gap: 80, hold: 0, count: 30, columns: 6, direction: 'reverse',
+    cardSize: 152, gap: 80, hold: 0, direction: 'reverse',
   }, { id: 'linear' }),
   // Gapless — the wall reads as one continuous tiled surface.
   preset(framesBase, 'wall-07', 'Frames 07', {
-    cardSize: 465, gap: 0, hold: 0, count: 16, columns: 4,
+    cardSize: 465, gap: 0, hold: 0,
   }, { id: 'linear' }),
 ];

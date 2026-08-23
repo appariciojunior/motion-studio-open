@@ -1,0 +1,23 @@
+#!/bin/sh
+# Refuse to push a branch that would carry this fork's deploy wiring upstream.
+#
+# Install once (this points git at the whole tracked hooks directory, so the
+# hook travels with the repo instead of living only in your .git):
+#
+#   git config core.hooksPath scripts/hooks
+#
+# It only runs when an upstream base is available. Without one there is nothing
+# to compare against, and a hook that fails on every push just gets bypassed.
+#
+# Bypass deliberately when you mean to: git push --no-verify
+
+if ! git rev-parse --verify --quiet upstream/main >/dev/null 2>&1; then
+  exit 0
+fi
+
+node scripts/verify-fork-only.cjs || {
+  echo ""
+  echo "  Push stopped. Use --no-verify to override once you have decided."
+  echo ""
+  exit 1
+}

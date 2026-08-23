@@ -52,6 +52,7 @@ export interface BackgroundSettings {
   color2: string;
   imageUrl: string | null;            // for source: 'image'
   blur: number;                       // px blur for image/card backgrounds
+  userSet?: boolean;                  // preserve an explicit choice across template switches
 }
 
 export interface LogoSettings {
@@ -72,6 +73,13 @@ export interface CustomPreset {
 const PRESETS_KEY = 'motion-custom-presets';
 function persistPresets(list: CustomPreset[]) {
   try { localStorage.setItem(PRESETS_KEY, JSON.stringify(list)); } catch { /* storage full/blocked */ }
+}
+
+// Hearted templates, in the order they were favourited. Stored as ids rather
+// than templates so a catalogue edit can never resurrect a stale copy of one.
+const FAVORITES_KEY = 'motion-favorite-templates';
+function persistFavorites(ids: string[]) {
+  try { localStorage.setItem(FAVORITES_KEY, JSON.stringify(ids)); } catch { /* storage full/blocked */ }
 }
 
 export interface SceneState {
@@ -118,6 +126,9 @@ export interface SceneState {
 
   // custom presets (saved template snapshots)
   customPresets: CustomPreset[];
+
+  // template ids the user hearted, oldest first
+  favoriteTemplateIds: string[];
 
   // ---- actions ----
   // These four act on the ACTIVE track (and mirror to the legacy fields), so
@@ -170,6 +181,9 @@ export interface SceneState {
   saveCustomPreset: (name: string) => void;
   applyCustomPreset: (id: string) => void;
   deleteCustomPreset: (id: string) => void;
+
+  loadFavorites: () => void;
+  toggleFavorite: (templateId: string) => void;
 
   addEffect: (effectId: string, values: Record<string, any>) => void;
   removeEffect: (instanceId: string) => void;
@@ -253,8 +267,9 @@ const initDims = dimsFor('3:4');
  * create()) because "new project" has to restore exactly this — one definition,
  * so the app's defaults and a new project's defaults can never disagree.
  *
- * Deliberately excludes `customPresets`: saved presets are a user-wide library,
- * not per-project, so creating a project must not wipe them.
+ * Deliberately excludes `customPresets` and `favoriteTemplateIds`: saved presets
+ * and hearted templates are a user-wide library, not per-project, so creating a
+ * project must not wipe them.
  */
 function initialSceneState() {
   const tracks = [makeTrack(INITIAL_TEMPLATE, 'Layer 1')];
@@ -287,6 +302,7 @@ function initialSceneState() {
 export const useSceneStore = create<SceneState>((set, get) => ({
   ...initialSceneState(),
   customPresets: [],
+  favoriteTemplateIds: [],
 
   setValue: (key, val) =>
     set((s) => withTrack(s, s.activeTrackId, { values: { ...s.values, [key]: val } })),
@@ -295,10 +311,122 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   // and seed the track easing from the template's default curve. Only the
   // ACTIVE track switches — the other layers keep their own motion.
   setActiveTemplate: (id) =>
-    set((s) => ({
-      ...withTrack(s, s.activeTrackId, { templateId: id, values: defaultsFor(id), easing: easingFor(id) }),
-      frame: 0,
-    })),
+    set((s) => {
+      const group = templates[id]?.meta.group;
+      const isStickerPreset = id.startsWith('stickers-');
+      const isPosterPreset = id.startsWith('poster-');
+      const isSpinnerPreset = group === 'Spinner';
+      const posterDuration = id === 'poster-04' || id === 'poster-05' ? 13
+        : id === 'poster-06' ? 22 : 21;
+      const stickerDuration = id === 'stickers-01' ? 36 : 13;
+      // The reference authors a Duration per spinner preset, and what that
+      // really pins is the SECONDS PER CARD: its belt advances one slot per
+      // step, so the cadence is duration/count and the same 18s clip is a third
+      // slower on a 6-card belt than on a 9-card one. These are its authored
+      // numbers — 2s per card everywhere except the Hinge subfamily, which runs
+      // 1.33s (1s at count 12, 1.25s on Hinge 05).
+      const spinnerDuration = id === 'spinner-06' ? 80
+        : id === 'spinner-03' || id === 'spinner-05' ? 64
+        : id === 'spinner-04' ? 36
+        : id === 'fan-01' ? 24
+        : id === 'fan-03' ? 18
+        : id === 'hinge-05' ? 15
+        // Hinge 01-04 at count 9/12, and Spinner 01/02 + Fan 02 at count 6.
+        : 12;
+      // Flicker/Pulse 03-12 (`flicker-r01..r10`) each bake a cards/sec `speed`
+      // computed from the reference's own clip length (see templates/flicker.ts
+      // refFlicker). That rate only lands on the intended lap count when the
+      // scene duration matches the length it was measured at — left at
+      // whatever duration the previous template used, most of them drift off
+      // their authored cadence, and the short ones (3-4s) can end up repeating
+      // extra laps in a still-short clip and read as "too fast". Pin it, same
+      // as Spinner/Sticker/Poster do above.
+      const isPulseRefPreset = id.startsWith('flicker-r');
+      const pulseDuration = id === 'flicker-r02' ? 4 : id === 'flicker-r10' ? 3
+        : (id === 'flicker-r06' || id === 'flicker-r07' || id === 'flicker-r08' || id === 'flicker-r09') ? 8
+        : 6; // flicker-r01, r03, r04, r05
+      // Flip advances one card every `stepTime` seconds, but `loopCycles` snaps
+      // the clip to a whole number of passes through the pool — so the authored
+      // 2s step only survives when the clip is a multiple of count * stepTime.
+      // At the app's default 8s, all six presets would silently run their step
+      // in 1.33s instead. The reference's own clip is 12s for exactly this
+      // reason (6 cards x 2s), so pin it, as Pulse above does.
+      const isFlipPreset = group === 'Flip';
+      // Orbit 3D's ported presets, same story as Spinner's: the reference
+      // authors a Duration per preset and what it pins is the SECONDS PER CARD,
+      // because its ring advances one slot per step. Left at whatever duration
+      // the previous template used, every one of them reads at the wrong
+      // cadence — and the ones that step (a curve plus a Hold) stop landing on
+      // their own beat, which is the whole character of the Carousel and
+      // Lightroom subfamilies. Its own numbers, off its preset table:
+      const ORBIT_3D_DURATION: Record<string, number> = {
+        'orbit-3d-04': 20, 'orbit-3d-05': 20, 'orbit-3d-06': 18, 'orbit-3d-07': 36,
+        'orbit-3d-08': 36, 'orbit-3d-09': 36,
+        'orbit-3d-10': 20, 'orbit-3d-11': 20, 'orbit-3d-12': 11.25, 'orbit-3d-13': 25,
+        'orbit-3d-14': 7.5,
+        'orbit-3d-15': 20, 'orbit-3d-16': 20, 'orbit-3d-17': 20, 'orbit-3d-18': 30,
+        'orbit-3d-19': 18, 'orbit-3d-20': 18, 'orbit-3d-21': 36, 'orbit-3d-22': 36,
+        'orbit-3d-23': 20, 'orbit-3d-24': 10, 'orbit-3d-25': 10, 'orbit-3d-26': 10,
+        'orbit-3d-27': 12,
+      };
+      // Its artboard is per preset too — square for five of the six Pure
+      // presets, 4:5 for the rest — and the ring is framed against the frame's
+      // half-HEIGHT, so the canvas ratio decides how much of the ring the
+      // sides show. Only the ported presets pin it; orbit-3d-01..03 are ours
+      // and leave the user's canvas alone.
+      const ORBIT_3D_SQUARE = new Set(['orbit-3d-04', 'orbit-3d-05', 'orbit-3d-07', 'orbit-3d-08', 'orbit-3d-09']);
+      const orbitDuration = ORBIT_3D_DURATION[id];
+      const isOrbit3dPreset = orbitDuration !== undefined;
+      // The Arc is the reference's other ported engine (its Wheel category, our
+      // Ferris group): a row of cards on the rim of a very large wheel. Its
+      // Pause and Stagger are authored in SECONDS against a specific clip
+      // length, so the clip is what has to be pinned — at another duration the
+      // pause eats a different share of each step and Arc 01's settle turns
+      // into a drift.
+      const ARC_DURATION: Record<string, number> = {
+        'arc-01': 4.2, 'arc-02': 13.5, 'arc-03': 13.5,
+      };
+      const arcDuration = ARC_DURATION[id];
+      const isArcPreset = arcDuration !== undefined;
+      // The reference's Wheel, same reasoning again: its ring advances one slot
+      // per step, so what its Duration pins is the seconds per card. Its own
+      // artboard for the family is 1:1 (the family default, which none of the
+      // five presets overrides).
+      const WHEEL_R_DURATION: Record<string, number> = {
+        'wheel-r01': 20, 'wheel-r02': 12, 'wheel-r03': 12, 'wheel-r04': 10, 'wheel-r05': 12,
+      };
+      const wheelRefDuration = WHEEL_R_DURATION[id];
+      const isWheelRefPreset = wheelRefDuration !== undefined;
+      const referenceAspect = (isSpinnerPreset || isStickerPreset || isPosterPreset || isArcPreset) ? '4:5'
+        : isOrbit3dPreset ? (ORBIT_3D_SQUARE.has(id) ? '1:1' : '4:5')
+        : isWheelRefPreset ? '1:1'
+        : null;
+      const referenceCanvas = referenceAspect ? dimsFor(referenceAspect) : null;
+      return {
+        ...withTrack(s, s.activeTrackId, { templateId: id, values: defaultsFor(id), easing: easingFor(id) }),
+        // These reconstructed families have an intrinsic source ratio, just as
+        // their reference presets do. Users can still change it afterwards.
+        // Spinner takes 'auto' rather than one ratio for the whole family: the
+        // reference authors the card shape PER PRESET — square for Spinner 01-05
+        // and every Hinge, 4:3 for Spinner 06, 4:5 for all three Fans — and
+        // 'auto' is what defers to each template's own declared cardAspect.
+        // Pinning the family to 4:3 made every square preset a wide slab.
+        // Orbit 3D takes 'auto' for the same reason Spinner does: the reference
+        // authors the card shape per preset (square for most, 4:5 for the
+        // Lightroom drums, 9:16 for Bloom 05), and 'auto' is what defers to each
+        // template's own declared cardAspect. Any fixed shape here overrides it
+        // and every preset comes out the same proportion.
+        cardShape: group === 'Spinner' || isOrbit3dPreset || isArcPreset || isWheelRefPreset ? 'auto' : isStickerPreset ? '1:1' : isPosterPreset ? '4:5' : s.cardShape,
+        duration: isSpinnerPreset ? spinnerDuration : isStickerPreset ? stickerDuration : isPosterPreset ? posterDuration
+          : isPulseRefPreset ? pulseDuration : isFlipPreset ? 12 : isOrbit3dPreset ? orbitDuration
+          : isArcPreset ? arcDuration : isWheelRefPreset ? wheelRefDuration : s.duration,
+        ...((isSpinnerPreset || isStickerPreset || isPosterPreset) && !s.background.userSet ? {
+          background: { ...s.background, source: 'color' as const, color: '#FFFFFF', gradient: false },
+        } : {}),
+        ...(referenceCanvas && referenceAspect ? { aspect: referenceAspect, ...referenceCanvas } : {}),
+        frame: 0,
+      };
+    }),
 
   setEasing: (easing) => set((s) => withTrack(s, s.activeTrackId, { easing })),
 
@@ -424,7 +552,9 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     }),
   setDuration: (d) => set(() => ({ duration: d })),
   toggleSafeArea: () => set((s) => ({ safeArea: !s.safeArea })),
-  setBackground: (patch) => set((s) => ({ background: { ...s.background, ...patch } })),
+  setBackground: (patch) => set((s) => ({
+    background: { ...s.background, ...patch, userSet: true },
+  })),
   setLogo: (patch) => set((s) => ({ logo: { ...s.logo, ...patch } })),
   setAudioUrl: (url) => set(() => ({ audioUrl: url })),
 
@@ -467,10 +597,11 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     const index = current.findIndex((asset) => asset.id === id);
     const a = current[index];
     if (a?.origin === 'upload') idbDelete(id).catch(() => {});
-    if (index < 0 || a?.origin === 'demo') return;
-    set((s) => ({ assets: s.assets.map((asset, slot) => slot === index
-      ? { ...demoSourceForSlot(slot), id: asset.id, visible: true, origin: 'demo' as const }
-      : asset) }));
+    if (index < 0) return;
+    // Removal must remove the media item itself. Replacing it with a demo asset
+    // made the card look deleted while keeping a permanent, undeletable slot in
+    // the list. The panel supplies empty rows up to the template's card count.
+    set((s) => ({ assets: s.assets.filter((asset) => asset.id !== id) }));
   },
   toggleAsset: (id) =>
     set((s) => ({
@@ -632,6 +763,31 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       const next = s.customPresets.filter((c) => c.id !== id);
       persistPresets(next);
       return { customPresets: next };
+    }),
+
+  // Same client-only lazy read as the presets above: localStorage is absent
+  // during SSR, and seeding at create() time would desync the first render.
+  loadFavorites: () =>
+    set(() => {
+      if (typeof window === 'undefined') return {};
+      try {
+        const raw = localStorage.getItem(FAVORITES_KEY);
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        // Storage is user-editable and survives across app versions, so accept
+        // only what this build can actually render back.
+        if (!Array.isArray(parsed)) return {};
+        return { favoriteTemplateIds: parsed.filter((id): id is string => typeof id === 'string') };
+      } catch { return {}; }
+    }),
+  toggleFavorite: (templateId) =>
+    set((s) => {
+      const on = s.favoriteTemplateIds.includes(templateId);
+      const next = on
+        ? s.favoriteTemplateIds.filter((id) => id !== templateId)
+        : [...s.favoriteTemplateIds, templateId];
+      persistFavorites(next);
+      return { favoriteTemplateIds: next };
     }),
 
   addEffect: (effectId, values) =>

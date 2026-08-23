@@ -20,7 +20,7 @@ export interface ControlDef {
   options?: string[];          // pills / select / toggle
   default: number | string | boolean | { x: number; y: number };
   section?: 'Layout' | 'Motion' | 'Depth' | 'Finish';
-  unit?: '°' | '%' | 'px' | '×' | '';
+  unit?: '°' | '%' | 'px' | '×' | 's' | '';
   description?: string;
   precision?: number;
   visibleWhen?: { key: string; equals?: any; not?: any };
@@ -38,6 +38,30 @@ export interface LayerTransform {
   skewY?: number;
   scaleX?: number;   // optional non-uniform squash (default 1) — flips/page turns
   scaleY?: number;   // optional non-uniform squash (default 1) — split-flap
+  // Darken the card toward black, 0 = untouched .. 1 = fully black. This is
+  // how a card RECEDES: dropping its alpha instead makes it see-through, so
+  // whatever it overlaps ghosts through it and the field reads as broken
+  // glass rather than as depth. Reach for `alpha` when a card is genuinely
+  // appearing or leaving, and `dim` when it is merely far away.
+  dim?: number;
+  // Show only part of the card, as fractions of its own box (0,0 = top-left,
+  // 1,1 = bottom-right). The card does NOT move or squash — it stays exactly
+  // where it is and a straight edge uncovers it, which is the only way to
+  // build a real wipe: translating a full-frame card slides it, and scaling
+  // one distorts it. Omitted means the whole card.
+  clip?: { x0: number; y0: number; x1: number; y1: number };
+  // Narrow one edge of the card against its opposite one. This is the
+  // PROJECTIVE half of a 3D fold: the edge that has turned away from the camera
+  // reads shorter, and no affine transform can say so — scale, skew and
+  // rotation all keep opposite edges parallel and equal in length. A pose that
+  // sets this is drawn through a perspective mesh instead of a plain sprite, so
+  // reach for it only when a card is genuinely tilting out of the plane;
+  // everything else stays on the cheaper sprite path.
+  //
+  // `edge` is the edge that shrinks, named in the card's OWN space (before
+  // rotation). `ratio` is its length as a fraction of the opposite edge: 1 is
+  // untapered, 0.75 is a quarter narrower. `clip` is ignored while tapered.
+  taper?: { edge: 'top' | 'bottom' | 'left' | 'right'; ratio: number };
   depth: number;     // sort order; higher = drawn on top / nearer
 }
 
@@ -56,6 +80,17 @@ export interface LayerTransform3D {
   shadowStrength?: number;   // 0..1, per-card cast/receive contribution
   materialExposure?: number; // linear multiplier, 1 = neutral
   bend?: number;             // centre sag in normalized card-width units; 0 = flat
+  // Darken the card toward black, 0 = untouched .. 1 = black — the 3D twin of
+  // LayerTransform.dim, and for the same reason: a card that is merely FAR
+  // must not go see-through, or whatever sits behind it shows through and the
+  // scene reads as glass. Distinct from `materialExposure`, which is lighting
+  // and is ignored entirely for cards without thickness.
+  dim?: number;
+  curl?: number;             // signed cylindrical page curl in radians
+  cornerPeel?: number;       // 0..1 directional sheet peel
+  peelAngle?: number;        // radians rotated around the moving fold
+  peelDirection?: number;    // degrees: 0 right, 90 top, 180 left, 270 bottom
+  backfaceColor?: string;    // optional solid reverse side (used by rolling stickers)
   velocity?: { x: number; y: number; z: number }; // px/s, used by finish passes
   scale: number;
   alpha: number;
@@ -115,6 +150,17 @@ export interface Template {
     cardAspect?: number | 'canvas';           // cover-crop shape: w/h ratio (default 4/5) or the canvas aspect (full-bleed)
   };
   controls: ControlDef[];                     // its FULL own set
+  // How many layers this template wants, when that is a consequence of the
+  // canvas rather than a choice. A lattice family is the case: its wall has to
+  // hold enough cells to cover the frame, so shrinking the card must ADD cells —
+  // the reference tool derives them the same way and ships no count control at
+  // all. Templates that leave this out keep taking the layer count from their
+  // own `count` control, which is still the right model for everything whose
+  // card total is a design decision.
+  layerCount?: (
+    values: Record<string, any>,
+    ctx: Pick<TransformCtx, 'width' | 'height' | 'cardAspect'>,
+  ) => number;
   transform: (
     frame: number,                            // absolute frame index
     index: number,                            // this layer's slot 0..count-1

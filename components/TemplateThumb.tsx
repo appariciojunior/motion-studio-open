@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Template } from '@/lib/types';
-import { defaultsFor, easingFor } from '@/templates';
+import type { LayerTransform, Template } from '@/lib/types';
+import { defaultsFor, easingFor, layerCountFor } from '@/templates';
 import { resolveEasing } from '@/lib/easing';
 
 // Live template thumbnail: run the template's own transform at a fixed frame
@@ -15,9 +15,23 @@ const TEX_LONG = 600;                 // placeholder long edge
 const DRAW_BUDGET = 28;              // max cards a thumbnail paints; layout still uses the real count
 const SPRITE_BASE = 340;
 
+// The pose's clip as a CSS inset(), or undefined when the card is whole.
+function clipPathFor(c: LayerTransform['clip']): string | undefined {
+  if (!c) return undefined;
+  if (c.x0 <= 0 && c.y0 <= 0 && c.x1 >= 1 && c.y1 >= 1) return undefined;
+  const pc = (n: number) => `${(Math.max(0, Math.min(1, n)) * 100).toFixed(2)}%`;
+  return `inset(${pc(c.y0)} ${pc(1 - c.x1)} ${pc(1 - c.y1)} ${pc(c.x0)})`;
+}
+
 interface CardPose {
+  // The card's own box, before the pose's 2x2 — always positive.
   x: number; y: number; w: number; h: number;
-  rotation: number; skewX: number; alpha: number; z: number; r: number;
+  // That 2x2, in pixi's convention, handed to CSS as a matrix().
+  a: number; b: number; c: number; d: number;
+  // Drawn half-extents, so the draw budget can tell what is off-canvas.
+  ex: number; ey: number;
+  alpha: number; dim: number; z: number; r: number;
+  clipPath?: string;
 }
 
 export default function TemplateThumb({
@@ -125,12 +139,14 @@ export default function TemplateThumb({
       : template.meta.cardAspect ?? 4 / 5;
     const texW = TEX_LONG * Math.min(1, texAspect);
     const texH = TEX_LONG * Math.min(1, 1 / texAspect);
-    // The REAL count. It is a layout input, not a drawing cost: lattice families
-    // derive their columns, rows and wrap period from it, so clamping it here
-    // used to lay out a different grid than the stage — measured at up to
-    // 2645px of divergence on Grid, on an 810px-wide canvas. The draw budget is
-    // enforced further down instead, by showing fewer of the correct cards.
-    const count = Math.max(1, Math.round(v.count ?? 6));
+    // The REAL count, asked of the template. It is a layout input, not a drawing
+    // cost: lattice families derive their columns, rows and wrap period from it,
+    // so clamping it here used to lay out a different grid than the stage —
+    // measured at up to 2645px of divergence on Grid, on an 810px-wide canvas.
+    // The draw budget is enforced further down instead, by showing fewer of the
+    // correct cards.
+    const count = layerCountFor(template.meta.id, v,
+      { width: CTX_BASE.width, height: CTX_BASE.height, cardAspect: texAspect });
     const norm = SPRITE_BASE / TEX_LONG;
     const ease = resolveEasing(easingFor(template.meta.id));
     const ctx = {
@@ -145,13 +161,34 @@ export default function TemplateThumb({
     const out: CardPose[] = [];
     for (let i = 0; i < count; i++) {
       const t = template.transform(frame, i, count, v, ctx);
-      const w = texW * norm * t.scale * (t.scaleX ?? 1);
-      const h = texH * norm * t.scale * (t.scaleY ?? 1);
+      const w = texW * norm * t.scale;
+      const h = texH * norm * t.scale;
+      // A pose is rotation + skew + a scale per axis, and the renderer that
+      // defines what those four mean is pixi: its Container builds
+      //   (a, b) = ( cos(rotation + skewY), sin(rotation + skewY)) * scaleX
+      //   (c, d) = (-sin(rotation - skewX), cos(rotation - skewX)) * scaleY
+      // Building the same pose out of CSS `rotate() skewX()` is NOT the same
+      // parameterization: CSS skewX shears the box, so its second column comes
+      // out along the right direction but 1/cos(skewX) too long, and a pose
+      // whose skew passes 90 degrees (a card showing its back — half of any
+      // Spinner belt at any instant) inverts instead. Measured against the
+      // exact parallelogram on an 810x1080 preview, that mapping was off by
+      // 157px on Spinner 01 and by more than the canvas on Hinge 04, while
+      // negative heights collapsed those cards to a 0.001px hairline. Handing
+      // the 2x2 straight to matrix() reproduces every pose exactly and costs
+      // nothing; the families that only ever skew a few degrees (Ticker,
+      // Coverflow) move by under 7px.
+      const sx = t.scaleX ?? 1, sy = t.scaleY ?? 1;
+      const rs = t.rotation + (t.skewY ?? 0), rk = t.rotation - (t.skewX ?? 0);
+      const a = Math.cos(rs) * sx, b = Math.sin(rs) * sx;
+      const c = -Math.sin(rk) * sy, d = Math.cos(rk) * sy;
       out.push({
-        x: t.x, y: t.y, w, h,
-        rotation: t.rotation,
-        skewX: t.skewX ?? 0,
+        x: t.x, y: t.y, w, h, a, b, c, d,
+        ex: (Math.abs(a) * w + Math.abs(c) * h) / 2,
+        ey: (Math.abs(b) * w + Math.abs(d) * h) / 2,
         alpha: t.alpha,
+        dim: Math.max(0, Math.min(1, t.dim ?? 0)),
+        clipPath: clipPathFor(t.clip),
         z: Math.round(t.depth * 1000 + i),
         r: (Math.min(w, h) / 2) * Math.max(0, Math.min(1, (v.cornerRadius ?? 0) / 100)),
       });
@@ -159,15 +196,19 @@ export default function TemplateThumb({
 
     // Draw budget. A thumbnail is a few hundred px across and the catalogue runs
     // to 140 cards, so keep the DOM bounded — but drop whole cards rather than
-    // move them. Off-canvas ones go first, then the furthest from centre, so what
-    // survives is what a viewer would actually have seen.
+    // move them. Invisible ones go first (a scattered flicker field like
+    // Parallax has most of its cards at alpha 0 at any instant, and picking
+    // purely by distance from centre could fill the whole budget with
+    // currently-invisible cards while every actually-visible one gets cut for
+    // sitting farther out), then off-canvas ones, then the furthest from
+    // centre — so what survives is what a viewer would actually have seen.
     if (out.length <= DRAW_BUDGET) return out;
     const halfW = CTX_BASE.width / 2, halfH = CTX_BASE.height / 2;
     const offCanvas = (p: CardPose) =>
-      Math.abs(p.x) - p.w / 2 > halfW || Math.abs(p.y) - p.h / 2 > halfH;
+      Math.abs(p.x) - p.ex > halfW || Math.abs(p.y) - p.ey > halfH;
     return out
-      .map((p, i) => ({ p, i, off: offCanvas(p) ? 1 : 0, d: Math.hypot(p.x, p.y) }))
-      .sort((a, b) => a.off - b.off || a.d - b.d)
+      .map((p, i) => ({ p, i, invisible: p.alpha < 0.02 ? 1 : 0, off: offCanvas(p) ? 1 : 0, d: Math.hypot(p.x, p.y) }))
+      .sort((a, b) => a.invisible - b.invisible || a.off - b.off || a.d - b.d)
       .slice(0, DRAW_BUDGET)
       .sort((a, b) => a.i - b.i)
       .map((e) => e.p);
@@ -185,8 +226,13 @@ export default function TemplateThumb({
             aspectRatio: `${Math.max(0.001, p.w)} / ${Math.max(0.001, p.h)}`,
             left: `${50 + (p.x / CTX_BASE.width) * 100}%`,
             top: `${50 + (p.y / CTX_BASE.height) * 100}%`,
-            transform: `translate(-50%, -50%) rotate(${p.rotation}rad) skewX(${p.skewX}rad)`,
+            transform: `translate(-50%, -50%) matrix(${p.a.toFixed(5)}, ${p.b.toFixed(5)}, ${p.c.toFixed(5)}, ${p.d.toFixed(5)}, 0, 0)`,
             opacity: p.alpha,
+            // Mirrors the renderer: a receding card darkens, it does not
+            // go see-through.
+            filter: p.dim > 0 ? `brightness(${(1 - p.dim).toFixed(3)})` : undefined,
+            // Mirrors the renderer's mask: a wipe clips a still card.
+            clipPath: p.clipPath,
             zIndex: p.z,
             borderRadius: `${Math.max(1, (p.r / p.w) * 100)}%`,
           }}

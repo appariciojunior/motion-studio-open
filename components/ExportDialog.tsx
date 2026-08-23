@@ -5,6 +5,8 @@ import { useSceneStore } from '@/store/useSceneStore';
 import { getRendererInstance } from '@/lib/rendererInstance';
 import { BASE_PATH, IS_STATIC_EXPORT } from '@/lib/paths';
 import { supportsWebCodecs, encodeMp4WebCodecs } from '@/lib/webcodecsExport';
+import { encodeGifInBrowser, gifEffectiveFps } from '@/lib/gifExport';
+import { encodeWebmWebCodecs } from '@/lib/webmExport';
 import { countDemoSlotsInUse } from '@/lib/demoUsage';
 import { BackIcon, ExportIcon, PauseIcon, PlayIcon } from '@/components/EditorIcons';
 
@@ -12,13 +14,16 @@ import { BackIcon, ExportIcon, PauseIcon, PlayIcon } from '@/components/EditorIc
 // local Blobs (url is an object URL for the download link).
 interface OutputFile { name: string; url: string; blob?: Blob }
 
-type Fmt = 'mp4' | 'gif' | 'both' | 'webm';
-type Res = '1080p' | '2k' | '4k' | 'exact';
+// WebM replaced the old 'both': it encodes entirely in this tab through
+// WebCodecs, whereas 'both' only ever meant "run the pipeline twice".
+type Fmt = 'mp4' | 'gif' | 'webm';
+type Res = '720p' | '1080p' | '2k' | '4k' | 'exact';
 type Phase = 'idle' | 'preparing' | 'capturing' | 'encoding' | 'done' | 'error';
 
 // Presets are defined by the shortest edge (vertical 1080p = 1080×1920).
-const RES_SHORT: Record<Exclude<Res, 'exact'>, number> = { '1080p': 1080, '2k': 1440, '4k': 2160 };
-const RES_LABEL: Record<Exclude<Res, 'exact'>, string> = { '1080p': '1080p', '2k': '2K', '4k': '4K' };
+// Key order drives the pill order in the dialog — smallest first.
+const RES_SHORT: Record<Exclude<Res, 'exact'>, number> = { '720p': 720, '1080p': 1080, '2k': 1440, '4k': 2160 };
+const RES_LABEL: Record<Exclude<Res, 'exact'>, string> = { '720p': '720p', '1080p': '1080p', '2k': '2K', '4k': '4K' };
 
 // Target output size + capture scale for a given preset. Even dimensions
 // are required by libx264 with yuv420p.
@@ -63,6 +68,7 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
   const frame = useSceneStore((s) => s.frame);
   const fps = useSceneStore((s) => s.fps);
   const duration = useSceneStore((s) => s.duration);
+  const audioUrl = useSceneStore((s) => s.audioUrl);
   const playing = useSceneStore((s) => s.playing);
   const setPlaying = useSceneStore((s) => s.setPlaying);
   const demoSlots = useSceneStore(countDemoSlotsInUse);
@@ -73,12 +79,23 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
   const [captured, setCaptured] = useState(0);
   const [total, setTotal] = useState(0);
   const [outputs, setOutputs] = useState<OutputFile[]>([]);
-  const [engine, setEngine] = useState<'webcodecs' | 'ffmpeg'>('ffmpeg');
+  const [engine, setEngine] = useState<'browser' | 'ffmpeg'>('ffmpeg');
   const [err, setErr] = useState('');
   const [saving, setSaving] = useState(false);
   const [savedTo, setSavedTo] = useState<string | null>(null);
   const [saveErr, setSaveErr] = useState('');
   const [confirmDemo, setConfirmDemo] = useState(false);
+  // Probed after mount: WebCodecs is absent during SSR, and branching the first
+  // render on it would desync hydration.
+  const [hasWebCodecs, setHasWebCodecs] = useState(false);
+  useEffect(() => { setHasWebCodecs(supportsWebCodecs()); }, []);
+
+  // Both formats encode client-side now — H.264 through WebCodecs, GIF through
+  // gifenc — so a build with no API routes can still export. What genuinely
+  // still needs the server is muxing an audio track, and making MP4 on a
+  // browser that has no WebCodecs at all.
+  const needsServer = format !== 'gif' && (!hasWebCodecs || !!audioUrl);
+  const serverUnavailable = IS_STATIC_EXPORT && needsServer;
 
   // The mobile export page mirrors the existing renderer instead of creating
   // a second Pixi/Three instance. Desktop hides this canvas completely.
@@ -167,30 +184,81 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
     setPhase('capturing');
     setErr('');
 
-    // Fast path — in-browser hardware H.264 via WebCodecs (no per-frame HTTP, no
-    // server re-encode). GIF and audio muxing still need the ffmpeg pipeline.
-    if (format === 'mp4' && !s.audioUrl && supportsWebCodecs()) {
+    // Fast path — everything encoded in the browser, so a deploy needs no
+    // ffmpeg on the box at all. MP4 goes through hardware H.264 (WebCodecs);
+    // GIF is quantised by gifenc, since WebCodecs has no GIF encoder to offer —
+    // VideoEncoder only speaks video codecs. Audio muxing is the one job left
+    // that still requires the server pipeline, and it does not apply to GIF.
+    const wantsMp4 = format === 'mp4';
+    const wantsGif = format === 'gif';
+    const wantsWebm = format === 'webm';
+    // GIF is pure JS and always works here. The two video formats need
+    // WebCodecs, and an audio track is the one job only the server can do.
+    const canEncodeInBrowser = wantsGif || (supportsWebCodecs() && !s.audioUrl);
+
+    // One capture pass: prepare the video cards, hold the hi-res backing store
+    // for the duration, and put everything back however it exits.
+    const capturePass = async <T,>(encode: () => Promise<T>): Promise<T> => {
+      setCaptured(0);
+      setPhase('preparing');
+      await renderer.beginVideoExport?.(); // one forward decode pass for video cards
+      setPhase('capturing');
+      renderer.setCaptureScale(target.k);  // hi-res backing store; layout untouched
       try {
-        // prepare video cards for one forward decode pass during capture
-        setPhase('preparing');
-        await renderer.beginVideoExport?.();
-        setPhase('capturing');
-        renderer.setCaptureScale(target.k);
-        const blob = await encodeMp4WebCodecs({
-          width: target.width,
-          height: target.height,
-          fps: s.fps,
-          totalFrames,
-          renderFrame: async (f) => {
-            await renderer.seekVideos?.(f); // frame-accurate video cards
-            renderer.renderFrame(f);
-            return renderer.extractCanvas();
-          },
-          onProgress: setCaptured,
-        });
-        setEngine('webcodecs');
-        const name = `motion_${Date.now().toString(36)}.mp4`;
-        setOutputs([{ name, url: URL.createObjectURL(blob), blob }]);
+        return await encode();
+      } finally {
+        renderer.endVideoExport?.();
+        renderer.setCaptureScale(1);
+        renderer.resumeVideos?.();
+        if (!wasPlaying) renderer.pauseVideos?.();
+      }
+    };
+
+    const drawFrame = async (f: number) => {
+      await renderer.seekVideos?.(f); // frame-accurate video cards
+      renderer.renderFrame(f);
+      return renderer.extractCanvas();
+    };
+
+    if (canEncodeInBrowser) {
+      try {
+        const stamp = Date.now().toString(36);
+        const files: OutputFile[] = [];
+        if (wantsWebm) {
+          const blob = await capturePass(() => encodeWebmWebCodecs({
+            width: target.width,
+            height: target.height,
+            fps: s.fps,
+            totalFrames,
+            renderFrame: drawFrame,
+            onProgress: setCaptured,
+          }));
+          files.push({ name: `motion_${stamp}.webm`, url: URL.createObjectURL(blob), blob });
+        }
+        if (wantsMp4) {
+          const blob = await capturePass(() => encodeMp4WebCodecs({
+            width: target.width,
+            height: target.height,
+            fps: s.fps,
+            totalFrames,
+            renderFrame: drawFrame,
+            onProgress: setCaptured,
+          }));
+          files.push({ name: `motion_${stamp}.mp4`, url: URL.createObjectURL(blob), blob });
+        }
+        if (wantsGif) {
+          const blob = await capturePass(() => encodeGifInBrowser({
+            width: target.width,
+            height: target.height,
+            fps: s.fps,
+            totalFrames,
+            renderFrame: drawFrame,
+            onProgress: setCaptured,
+          }));
+          files.push({ name: `motion_${stamp}.gif`, url: URL.createObjectURL(blob), blob });
+        }
+        setEngine('browser');
+        setOutputs(files);
         setPhase('done');
         if (wasPlaying) s.setPlaying(true);
         return;
@@ -198,12 +266,25 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
         // encoder unavailable/failed mid-run — fall through to the ffmpeg path
         setCaptured(0);
         setPhase('capturing');
-      } finally {
-        renderer.endVideoExport?.();
-        renderer.setCaptureScale(1);
-        renderer.resumeVideos?.();
-        if (!wasPlaying) renderer.pauseVideos?.();
       }
+    }
+
+    // WebM exists only on the WebCodecs path — the server pipeline has no VP9
+    // branch, and adding one would put it back on an ffmpeg this deploy lacks.
+    if (wantsWebm) {
+      setErr('WebM needs WebCodecs, which this browser did not provide. Try MP4 or GIF.');
+      setPhase('error');
+      if (wasPlaying) s.setPlaying(true);
+      return;
+    }
+
+    // A static build ships no API routes, so there is no ffmpeg to fall back
+    // to — say that plainly instead of letting the POST fail as a 404.
+    if (IS_STATIC_EXPORT) {
+      setErr('This build has no export server. GIF encodes in-browser here; MP4 needs WebCodecs and no audio track.');
+      setPhase('error');
+      if (wasPlaying) s.setPlaying(true);
+      return;
     }
 
     try {
@@ -216,7 +297,7 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
       try {
         for (let f = 0; f < totalFrames; f++) {
           await renderer.seekVideos?.(f);                 // frame-accurate video cards (no-op without video)
-          const dataUrl = renderer.captureFrame(f, format === 'webm' ? 'image/png' : 'image/jpeg');
+          const dataUrl = renderer.captureFrame(f, 'image/jpeg');
           await post({ action: 'frame', sessionId, index: f, dataUrl });
           setCaptured(f + 1);
           // yield to keep UI responsive
@@ -283,22 +364,6 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="modal-body export-modal-body">
-          {IS_STATIC_EXPORT ? (
-          <div className="export-static-note">
-            <p>
-              Export renders every frame and encodes MP4/GIF with native ffmpeg —
-              that pipeline isn&apos;t available on this hosted demo.
-            </p>
-            <p>To export, clone the repo and run it locally:</p>
-            <pre><code>{`git clone https://github.com/appariciojunior/motion-studio-open.git
-cd motion-studio-open
-npm install && brew install ffmpeg
-npm run dev`}</code></pre>
-            <a className="btn primary full" href="https://github.com/appariciojunior/motion-studio-open" target="_blank" rel="noreferrer">
-              View on GitHub
-            </a>
-          </div>
-          ) : (
           <>
           <div className="ctl-row">
             <label className="ctl-label">
@@ -307,7 +372,7 @@ npm run dev`}</code></pre>
             </label>
             <div className="ctl-input">
               <div className="pills pills-fit">
-                {(['mp4', 'webm', 'gif', 'both'] as Fmt[]).map((f) => (
+                {(['mp4', 'gif', 'webm'] as Fmt[]).map((f) => (
                   <button key={f} className={`pill ${format === f ? 'active' : ''}`} onClick={() => setFormat(f)}>{f.toUpperCase()}</button>
                 ))}
               </div>
@@ -339,7 +404,37 @@ npm run dev`}</code></pre>
             })()}
           </div>
 
-          {phase === 'idle' && !confirmDemo && (
+          {/* GIF keeps frame delay in hundredths of a second, so most fps values
+              cannot be expressed exactly. State the playback rate the file will
+              really carry — this is a property of the format, not of gifenc. */}
+          {format === 'gif' && Math.abs(gifEffectiveFps(fps) - fps) > 0.05 && (
+            <div className="ctl-hint">
+              GIF stores delays in 1/100 s, so {fps} fps plays back at {gifEffectiveFps(fps).toFixed(1)} fps.
+            </div>
+          )}
+
+          {/* Only the combinations that still need native ffmpeg are blocked
+              here — GIF and plain MP4 encode in this tab. The format pills stay
+              reachable so switching to a workable one is one click away. */}
+          {serverUnavailable && (
+            <div className="export-static-note" role="alert">
+              <p>
+                {audioUrl
+                  ? 'Muxing an audio track still needs native ffmpeg, which this hosted build has no server to run.'
+                  : 'MP4 needs WebCodecs, which this browser doesn’t provide, and this hosted build has no server to run ffmpeg on.'}
+                {' '}GIF exports here without either — switch the format above, or run it locally:
+              </p>
+              <pre><code>{`git clone https://github.com/appariciojunior/motion-studio-open.git
+cd motion-studio-open
+npm install && brew install ffmpeg
+npm run dev`}</code></pre>
+              <a className="btn full" href="https://github.com/appariciojunior/motion-studio-open" target="_blank" rel="noreferrer">
+                View on GitHub
+              </a>
+            </div>
+          )}
+
+          {phase === 'idle' && !confirmDemo && !serverUnavailable && (
             <button className="btn primary full export-primary-action" onClick={() => demoSlots > 0 ? setConfirmDemo(true) : run()}>
               <ExportIcon size={16} />
               <span className="export-action-desktop">Start export</span>
@@ -372,8 +467,11 @@ npm run dev`}</code></pre>
           {phase === 'done' && (
             <div className="export-done">
               <p>
-                Done{engine === 'webcodecs'
-                  ? ' — encoded in-browser (WebCodecs, GPU).'
+                Done{engine === 'browser'
+                  ? ` — encoded in-browser (${
+                      format === 'gif' ? 'gifenc'
+                      : format === 'webm' ? 'WebCodecs VP9'
+                      : 'WebCodecs H.264'}).`
                   : <>. Generated in <code>/exports</code>:</>}
               </p>
               <ul>
@@ -405,7 +503,6 @@ npm run dev`}</code></pre>
             </div>
           )}
           </>
-          )}
         </div>
       </div>
     </div>

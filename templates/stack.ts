@@ -90,9 +90,27 @@ const stack: Template = {
   },
 };
 
+// Stack 03/04 fill out the reference's 4-preset family (it ships exactly one
+// more LOOK beyond Stack 01/02 — denser, faster, no stagger — offered in both
+// directions, which is also how 01/02 pair up over there). Its own numbers
+// don't convert 1:1 into ours: its `planeSize`/`zoom` are canvas-relative
+// percentages (confirmed by reading its live card rect — 38%*150% zoom = the
+// measured 615.6px on a 1080px stage, exactly), where ours is a literal
+// on-screen px `cardSize`; and Shuffle 01/02 here were themselves never a
+// pixel-measured port of the reference's Stack 01/02 (300px vs. what that same
+// formula gives Stack 01, ~460px here). Rather than snap 03/04 onto a scale
+// neither existing preset uses, they carry over the reference's RELATIVE move
+// off its own Stack 01 — about double the visible cards, tighter zoom-in, no
+// stagger, a faster step — applied on top of Shuffle 01/02's own scale.
 export const stackVariants: Template[] = [
   stack, // Stack 01 — deck advance with anticipation
   variant(stack, 'stack-02', 'Shuffle 02', {
     visible: 4, stagger: 0.24, perspective: 0, speed: 0.4,
+  }),
+  variant(stack, 'stack-03', 'Shuffle 03', {
+    visible: 6, cardSize: 220, zoom: 180, cornerRadius: 0, perspective: 90, stagger: 0, speed: 0.85,
+  }),
+  variant(stack, 'stack-04', 'Shuffle 04', {
+    direction: 'up', visible: 6, cardSize: 220, zoom: 180, cornerRadius: 0, perspective: 90, stagger: 0, speed: 0.85,
   }),
 ];

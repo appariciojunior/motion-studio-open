@@ -37,7 +37,7 @@ Module._resolveFilename = function (request, parent, isMain, options) {
   return originalResolve.call(this, request, parent, isMain, options);
 };
 
-const { templateList, defaultsFor, easingFor } = require('../templates');
+const { templateList, defaultsFor, easingFor, layerCountFor } = require('../templates');
 const { resolveEasing } = require('../lib/easing');
 
 let assertions = 0;
@@ -87,7 +87,7 @@ function thumbnailPoses(template, frame) {
     : template.meta.cardAspect ?? 4 / 5;
   const texW = TEX_LONG * Math.min(1, texAspect);
   const texH = TEX_LONG * Math.min(1, 1 / texAspect);
-  const count = Math.max(1, Math.round(values.count ?? 6));
+  const count = layerCountFor(template.meta.id, values, { width: CTX_W, height: CTX_H, cardAspect: texAspect });
   const norm = SPRITE_BASE / TEX_LONG;
   const ease = resolveEasing(easingFor(template.meta.id));
   const ctx = {
@@ -109,9 +109,14 @@ function thumbnailPoses(template, frame) {
 
   const halfW = CTX_W / 2, halfH = CTX_H / 2;
   const offCanvas = (p) => Math.abs(p.x) - p.w / 2 > halfW || Math.abs(p.y) - p.h / 2 > halfH;
+  // Invisible cards go first (see TemplateThumb.tsx): a scattered flicker
+  // field like Parallax has most cards at alpha 0 at any instant, and a pure
+  // distance-from-centre sort could fill the whole budget with currently-
+  // invisible ones while every actually-visible card gets cut for sitting
+  // farther out.
   const drawn = all
-    .map((p) => ({ p, off: offCanvas(p) ? 1 : 0, d: Math.hypot(p.x, p.y) }))
-    .sort((a, b) => a.off - b.off || a.d - b.d)
+    .map((p) => ({ p, invisible: p.alpha < 0.02 ? 1 : 0, off: offCanvas(p) ? 1 : 0, d: Math.hypot(p.x, p.y) }))
+    .sort((a, b) => a.invisible - b.invisible || a.off - b.off || a.d - b.d)
     .slice(0, DRAW_BUDGET)
     .sort((a, b) => a.p.i - b.p.i)
     .map((e) => e.p);

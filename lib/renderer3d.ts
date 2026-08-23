@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { getTemplate } from '@/templates';
+import { getTemplate, layerCountFor } from '@/templates';
 import { useSceneStore } from '@/store/useSceneStore';
 import { resolveEasing } from '@/lib/easing';
 import { assetIndexForSlot, clamp, lerp } from '@/lib/motion';
 import { loadImage } from '@/lib/textureLoad';
 import { cardAspectFor, coverCrop, cropKey } from '@/lib/crop';
-import { advanceVideoForExport, createCardVideo, isVideoSource, prepareVideoForSequentialExport } from '@/lib/videoTexture';
+import { advanceVideoForExport, createCardVideo, isVideoSource, prepareVideoForSequentialExport, useVideoProxies } from '@/lib/videoTexture';
+import { BASE_PATH, IS_STATIC_EXPORT } from '@/lib/paths';
 import type { IRenderer } from '@/lib/rendererTypes';
 import type { CameraPose, LayerTransform3D } from '@/lib/types';
 import { resolveTrackTime, trackAssetIndices, type MotionTrack } from '@/lib/tracks';
@@ -48,8 +49,18 @@ function makeBentPlaneGeometry(sag: number): THREE.PlaneGeometry {
   const ac = new THREE.Vector2().subVectors(a, c);
   const radius = (ab.length() * bc.length() * ac.length()) / (2 * Math.abs(ab.cross(ac)));
   const centre = new THREE.Vector2(0, bend - Math.sign(bend) * radius);
-  const baseAngle = new THREE.Vector2().subVectors(a, centre).angle() - Math.PI / 2;
-  const arc = baseAngle * 2;
+  // The arc from c to a around the centre, taken the SHORT way. This used to be
+  // `(a - centre).angle() * 2 - PI`, which relies on the centre sitting BELOW
+  // the chord and so only held for a positive bend. Vector2.angle() returns
+  // [0, 2*PI), so a negative bend — centre above the chord — picked the reflex
+  // angle and swept the card nearly all the way round its own circle: at
+  // bend -0.04 the centre vertex landed 6.25 units out instead of 0.04, about
+  // 150x too far. Measuring the signed difference works for either side.
+  const angleA = new THREE.Vector2().subVectors(a, centre).angle();
+  const angleC = new THREE.Vector2().subVectors(c, centre).angle();
+  let arc = angleA - angleC;
+  if (arc > Math.PI) arc -= Math.PI * 2;
+  if (arc < -Math.PI) arc += Math.PI * 2;
   const uv = geometry.attributes.uv;
   const position = geometry.attributes.position;
   const point = new THREE.Vector2();
@@ -61,6 +72,115 @@ function makeBentPlaneGeometry(sag: number): THREE.PlaneGeometry {
   }
   position.needsUpdate = true;
   geometry.computeVertexNormals();
+  return geometry;
+}
+
+// Cylindrical page roll anchored at the right edge. Unlike `bend`, which is a
+// shallow symmetric bow, curl can turn far enough to expose the back face.
+function makeCurlPlaneGeometry(angle: number): THREE.PlaneGeometry {
+  const curl = clamp(angle, -Math.PI * 2.4, Math.PI * 2.4);
+  const geometry = new THREE.PlaneGeometry(1, 1, 32, 8);
+  if (Math.abs(curl) < 0.001) return geometry;
+  const position = geometry.attributes.position;
+  const uv = geometry.attributes.uv;
+  for (let i = 0; i < position.count; i++) {
+    const u = 1 - uv.getX(i); // right edge anchored, left edge free
+    const a = u * curl;
+    position.setX(i, 0.5 - Math.sin(a) / curl);
+    position.setZ(i, (1 - Math.cos(a)) / curl);
+  }
+  position.needsUpdate = true;
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+// Directional page peel. The moving fold begins at the edge/corner selected by
+// the direction vector and travels through the sheet to the opposite side.
+// Cardinal directions become straight page flips; diagonals become corner
+// peels. These are the two silhouettes used across Poster 01-06.
+const CORNER_PEEL_SEGMENTS = 32;
+
+function makeCornerPeelGeometry(progress: number, angle: number, curl: number, directionDeg: number): THREE.BufferGeometry {
+  const p = clamp(progress, 0, 1);
+  if (p < 0.0001) return new THREE.PlaneGeometry(1, 1, 1, 1);
+  const raw = ((directionDeg % 360) + 360) % 360;
+  const radians = raw * Math.PI / 180;
+  const nx = Math.cos(radians), ny = Math.sin(radians);
+  const tx = -ny, ty = nx;
+  const edgeN = 0.5 * (Math.abs(nx) + Math.abs(ny));
+  const foldDistance = p * edgeN * 2;
+  const foldN = edgeN - foldDistance;
+
+  type PeelVertex = { x: number; y: number; u: number; v: number };
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const signedDistance = (vertex: PeelVertex) => vertex.x * nx + vertex.y * ny - foldN;
+  const intersection = (a: PeelVertex, b: PeelVertex): PeelVertex => {
+    const da = signedDistance(a), db = signedDistance(b);
+    const t = da / (da - db);
+    return {
+      x: a.x + (b.x - a.x) * t,
+      y: a.y + (b.y - a.y) * t,
+      u: a.u + (b.u - a.u) * t,
+      v: a.v + (b.v - a.v) * t,
+    };
+  };
+  const clipTriangle = (triangle: PeelVertex[], folded: boolean) => {
+    const result: PeelVertex[] = [];
+    for (let i = 0; i < triangle.length; i++) {
+      const a = triangle[i];
+      const b = triangle[(i + 1) % triangle.length];
+      const aInside = folded ? signedDistance(a) >= -1e-7 : signedDistance(a) <= 1e-7;
+      const bInside = folded ? signedDistance(b) >= -1e-7 : signedDistance(b) <= 1e-7;
+      if (aInside) result.push(a);
+      if (aInside !== bInside) result.push(intersection(a, b));
+    }
+    return result;
+  };
+  const emitVertex = (vertex: PeelVertex, folded: boolean) => {
+    let x = vertex.x, y = vertex.y, z = 0;
+    if (folded) {
+      const normal = x * nx + y * ny;
+      const tangent = x * tx + y * ty;
+      const distanceBehindFold = Math.max(0, normal - foldN);
+      const across = clamp(distanceBehindFold / Math.max(0.001, foldDistance), 0, 1);
+      const localAngle = angle + curl * Math.sin(across * Math.PI);
+      const foldedN = foldN + distanceBehindFold * Math.cos(localAngle);
+      x = foldedN * nx + tangent * tx;
+      y = foldedN * ny + tangent * ty;
+      z = distanceBehindFold * Math.sin(localAngle);
+    }
+    positions.push(x, y, z);
+    uvs.push(vertex.u, vertex.v);
+  };
+  const emitPolygon = (polygon: PeelVertex[], folded: boolean) => {
+    for (let i = 1; i + 1 < polygon.length; i++) {
+      emitVertex(polygon[0], folded);
+      emitVertex(polygon[i], folded);
+      emitVertex(polygon[i + 1], folded);
+    }
+  };
+  const makeVertex = (x: number, y: number): PeelVertex => ({ x, y, u: x + 0.5, v: y + 0.5 });
+  const step = 1 / CORNER_PEEL_SEGMENTS;
+  for (let row = 0; row < CORNER_PEEL_SEGMENTS; row++) {
+    const y0 = -0.5 + row * step, y1 = y0 + step;
+    for (let col = 0; col < CORNER_PEEL_SEGMENTS; col++) {
+      const x0 = -0.5 + col * step, x1 = x0 + step;
+      const triangles = [
+        [makeVertex(x0, y0), makeVertex(x1, y0), makeVertex(x1, y1)],
+        [makeVertex(x0, y0), makeVertex(x1, y1), makeVertex(x0, y1)],
+      ];
+      for (const triangle of triangles) {
+        emitPolygon(clipTriangle(triangle, false), false);
+        emitPolygon(clipTriangle(triangle, true), true);
+      }
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.computeVertexNormals();
+  geometry.computeBoundingSphere();
   return geometry;
 }
 
@@ -145,6 +265,7 @@ export class SceneRenderer3D implements IRenderer {
   private croppedCache = new Map<string, THREE.Texture>(); // cover-crop clones (repeat/offset) of cached bases
   private videoEls = new Map<string, HTMLVideoElement>();   // live <video> per url, for playback + cleanup
   private exportVideoFrames = new Map<string, { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D; texture: THREE.CanvasTexture }>();
+  private restoreVideoSources: (() => void) | null = null; // undo the export proxy swap
   private placeholders = new Map<number, THREE.CanvasTexture>();
   private cornerMaps = new Map<string, THREE.CanvasTexture>();
   private gradientTex: THREE.CanvasTexture | null = null;
@@ -167,7 +288,7 @@ export class SceneRenderer3D implements IRenderer {
   private outputQuad!: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
   private cardPlaneGeometry = new THREE.PlaneGeometry(1, 1);
   private cardBodyGeometry = new RoundedBoxGeometry(1, 1, 1, 3, 0.055);
-  private bentCardGeometries = new Map<string, THREE.PlaneGeometry>();
+  private bentCardGeometries = new Map<string, THREE.BufferGeometry>();
   private resolution = 1;
   private r3f: import('@/lib/r3fSceneBridge').R3FSceneBridge | null = null;
   private width = 810;
@@ -268,6 +389,12 @@ export class SceneRenderer3D implements IRenderer {
     target.texture.minFilter = THREE.LinearFilter;
     target.texture.magFilter = THREE.LinearFilter;
     target.texture.generateMipmaps = false;
+    // Tracks are rendered off-screen before composition. Antialiasing on the
+    // WebGLRenderer does not cover those intermediate buffers, so diagonal
+    // silhouettes (most visibly Poster 01's moving peel tip) arrived at the
+    // final canvas already jagged. Three resolves this multisampled target
+    // automatically when its texture is sampled by the compositor.
+    target.samples = Math.max(1, Math.min(8, this.renderer.capabilities.maxSamples));
     return target;
   }
 
@@ -363,6 +490,9 @@ export class SceneRenderer3D implements IRenderer {
         if (!img || !this.ready) return null;
         const tex = new THREE.Texture(img);
         tex.colorSpace = THREE.SRGBColorSpace;
+        tex.minFilter = THREE.LinearMipmapLinearFilter;
+        tex.magFilter = THREE.LinearFilter;
+        tex.generateMipmaps = true;
         // Every card can end up viewed near edge-on — a Card Tunnel wall close to
         // the vanishing point, a Surface curve's far edge, any face turned away
         // in Box or Orbit. Mipmapping alone still aliases badly at a grazing
@@ -430,11 +560,13 @@ export class SceneRenderer3D implements IRenderer {
   }
 
   private syncTrackSlots(track: MotionTrack, rt: TrackRT3D, s: SceneState) {
-    const count = Math.max(1, Math.round(track.values.count ?? 6));
     const meta = getTemplate(track.templateId).meta;
     const r3fManaged = meta.id.startsWith('box-');
     const repeat = meta.repeatAssets === true;
     const aspect = cardAspectFor(meta, s.width, s.height, s.cardShape);
+    // Asked of the template — see the same call in lib/renderer.ts.
+    const count = layerCountFor(track.templateId, track.values,
+      { width: s.width, height: s.height, cardAspect: aspect });
     const pool = trackAssetIndices(track, s.assets).map((i) => s.assets[i]).filter(Boolean);
     const assetSig = (repeat ? 'R|' : '') + 'A' + aspect.toFixed(4) + '|' +
       pool.map((a) => a.id + ':' + a.url + ':' + a.visible + ':' + (a.crop ? a.crop.x + ',' + a.crop.y : 'c')).join('|');
@@ -501,6 +633,8 @@ export class SceneRenderer3D implements IRenderer {
         side: THREE.DoubleSide,
       });
       const backMaterial = new THREE.MeshStandardMaterial({ color: 0x17171b, roughness: 0.9, metalness: 0, transparent: true });
+      frontMaterial.alphaToCoverage = true;
+      backMaterial.alphaToCoverage = true;
       const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x24242a, roughness: 0.88, metalness: 0, transparent: true });
       const root = new THREE.Group();
       const body = new THREE.Mesh(this.cardBodyGeometry, bodyMaterial);
@@ -649,7 +783,9 @@ export class SceneRenderer3D implements IRenderer {
     slot.cornerR = fracR;
     if (fracR === 0) {
       slot.front.material.alphaMap = null;
+      slot.back.material.alphaMap = null;
       slot.front.material.needsUpdate = true;
+      slot.back.material.needsUpdate = true;
       return;
     }
     const aspect = slot.texW / slot.texH;
@@ -657,7 +793,9 @@ export class SceneRenderer3D implements IRenderer {
     let map = this.cornerMaps.get(key);
     if (!map) { map = makeCornerAlphaMap(fracR, aspect); this.cornerMaps.set(key, map); }
     slot.front.material.alphaMap = map;
+    slot.back.material.alphaMap = map;
     slot.front.material.needsUpdate = true;
+    slot.back.material.needsUpdate = true;
   }
 
   // Backdrop + HUD (logo, safe-area) sync from the store.
@@ -851,9 +989,14 @@ export class SceneRenderer3D implements IRenderer {
     const thickness = Math.max(0, t.thickness ?? 0);
     const bend = clamp(t.bend ?? 0, -0.45, 0.45);
     const bent = Math.abs(bend) > 0.0001;
-    const physical = thickness > 0.05 && !bent;
+    const curl = clamp(t.curl ?? 0, -Math.PI * 2.4, Math.PI * 2.4);
+    const curled = Math.abs(curl) > 0.001;
+    const cornerPeel = clamp(t.cornerPeel ?? 0, 0, 1);
+    const peeling = cornerPeel > 0.0001;
+    const physical = thickness > 0.05 && !bent && !curled && !peeling;
     const exposure = clamp(t.materialExposure ?? 1, 0.25, 2.5);
     const shadow = (t.shadowStrength ?? 0) > 0.02;
+    const customBackface = typeof t.backfaceColor === 'string' && t.backfaceColor.length > 0;
 
     slot.root.position.set(t.x, -t.y, t.z);
     if (t.quaternion) {
@@ -861,12 +1004,37 @@ export class SceneRenderer3D implements IRenderer {
     } else {
       slot.root.rotation.set(t.rotationX ?? 0, t.rotationY ?? 0, t.rotationZ ?? 0);
     }
+    const cardWidth = slot.texW * norm * t.scale;
     slot.root.scale.set(
-      slot.texW * norm * t.scale,
+      cardWidth,
       slot.texH * norm * t.scale,
-      physical ? thickness : 1,
+      (bent || curled || peeling) ? cardWidth : physical ? thickness : 1,
     );
-    if (bent) {
+    if (peeling) {
+      const progressSteps = 180;
+      const quantizedProgress = Math.round(cornerPeel * progressSteps) / progressSteps;
+      const quantizedAngle = Math.round((t.peelAngle ?? Math.PI * 0.78) * 64) / 64;
+      const quantizedCurl = Math.round(curl * 64) / 64;
+      const quantizedDirection = Math.round((t.peelDirection ?? 50) * 2) / 2;
+      const key = `peel:${quantizedProgress.toFixed(3)}:${quantizedAngle.toFixed(3)}:${quantizedCurl.toFixed(3)}:${quantizedDirection.toFixed(1)}`;
+      let geometry = this.bentCardGeometries.get(key);
+      if (!geometry) {
+        geometry = makeCornerPeelGeometry(quantizedProgress, quantizedAngle, quantizedCurl, quantizedDirection);
+        this.bentCardGeometries.set(key, geometry);
+      }
+      slot.front.geometry = geometry;
+      slot.back.geometry = geometry;
+    } else if (curled) {
+      const quantized = Math.round(curl * 60) / 60;
+      const key = `curl:${quantized.toFixed(3)}`;
+      let geometry = this.bentCardGeometries.get(key);
+      if (!geometry) {
+        geometry = makeCurlPlaneGeometry(quantized);
+        this.bentCardGeometries.set(key, geometry);
+      }
+      slot.front.geometry = geometry;
+      slot.back.geometry = geometry;
+    } else if (bent) {
       const key = bend.toFixed(3);
       let geometry = this.bentCardGeometries.get(key);
       if (!geometry) {
@@ -874,20 +1042,31 @@ export class SceneRenderer3D implements IRenderer {
         this.bentCardGeometries.set(key, geometry);
       }
       slot.front.geometry = geometry;
+      slot.back.geometry = geometry;
     } else {
       slot.front.geometry = this.cardPlaneGeometry;
+      slot.back.geometry = this.cardPlaneGeometry;
     }
     slot.front.position.z = physical ? 0.501 : 0;
+    slot.front.material.side = customBackface ? THREE.FrontSide : THREE.DoubleSide;
     slot.front.material.opacity = alpha;
     slot.front.material.depthWrite = alpha > 0.995;
+    // `dim` darkens a card that is merely FAR, without touching its opacity —
+    // fading such a card on alpha lets whatever is behind it show through, and
+    // a ring then reads as glass rather than as depth. It is deliberately
+    // separate from `exposure`: exposure is lighting, and the branch below
+    // ignores lighting entirely to keep flat cards colour-accurate.
+    const lit = 1 - clamp(t.dim ?? 0, 0, 1);
     if (physical) {
-      slot.front.material.color.setRGB(exposure, exposure, exposure);
-      slot.front.material.emissiveIntensity = 0.18 + exposure * 0.14;
+      const e = exposure * lit;
+      slot.front.material.color.setRGB(e, e, e);
+      slot.front.material.emissiveIntensity = (0.18 + exposure * 0.14) * lit;
     } else {
       // Match CSS 3D panels: the source image stays color-accurate while its
-      // geometry supplies the perspective. Only cards with thickness are lit.
+      // geometry supplies the perspective. Only cards with thickness are lit —
+      // so here `dim` is the ONLY thing that may darken the image.
       slot.front.material.color.setRGB(0, 0, 0);
-      slot.front.material.emissiveIntensity = 1;
+      slot.front.material.emissiveIntensity = lit;
     }
     slot.front.castShadow = shadow;
     slot.front.receiveShadow = shadow;
@@ -906,9 +1085,12 @@ export class SceneRenderer3D implements IRenderer {
     // you cannot see the edge of a translucent card anyway.
     const solid = physical && alpha > 0.995;
     slot.body.visible = solid;
-    slot.back.visible = solid;
+    slot.back.visible = solid || (customBackface && alpha > 0.001);
+    slot.back.position.z = physical ? -0.501 : (bent || curled) ? -0.004 : -0.02;
+    if (customBackface) slot.back.material.color.set(t.backfaceColor!);
     slot.body.material.opacity = alpha;
     slot.back.material.opacity = alpha;
+    slot.back.material.depthWrite = alpha > 0.995;
     slot.body.castShadow = slot.body.receiveShadow = shadow;
     slot.back.castShadow = slot.back.receiveShadow = shadow;
     slot.root.visible = alpha > 0.001 && t.scale > 0.0001;
@@ -976,6 +1158,9 @@ export class SceneRenderer3D implements IRenderer {
   // ---- video export sync ---- (see the Pixi renderer for the rationale)
   async beginVideoExport() {
     if (this.videoEls.size === 0) return;
+    if (!IS_STATIC_EXPORT) {
+      this.restoreVideoSources = await useVideoProxies(this.videoEls, BASE_PATH);
+    }
     await Promise.all([...this.videoEls.values()].map(prepareVideoForSequentialExport));
     this.videoEls.forEach((video, url) => {
       if (!video.videoWidth || !video.videoHeight) return;
@@ -996,6 +1181,8 @@ export class SceneRenderer3D implements IRenderer {
   }
 
   endVideoExport() {
+    this.restoreVideoSources?.();
+    this.restoreVideoSources = null;
     this.croppedCache.forEach((tex) => tex.dispose());
     this.croppedCache.clear();
     this.exportVideoFrames.forEach(({ texture }) => texture.dispose());

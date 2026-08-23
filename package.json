@@ -14,11 +14,12 @@
     "dev:network": "next dev -H 0.0.0.0",
     "build": "next build",
     "start": "next start",
-    "start:network": "next start -H 0.0.0.0"
+    "start:network": "next start -H 0.0.0.0",
+    "check:upstream": "node scripts/verify-fork-only.cjs"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "Elastic-2.0",
   "type": "module",
   "private": "true",
   "dependencies": {
@@ -27,7 +28,9 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@react-three/fiber": "^9.0.0",
     "@tailwindcss/browser": "^4.3.3",
+    "gifenc": "^1.0.3",
     "jszip": "^3.10.1",
+    "mediabunny": "^1.54.0",
     "mp4-muxer": "^5.2.2",
     "next": "^16.2.10",
     "pixi-filters": "^6.1.5",

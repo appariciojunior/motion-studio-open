@@ -2,6 +2,8 @@ import type { Template } from '@/lib/types';
 import { DEFAULT_EASING, type EasingSpec } from '@/lib/easing';
 import { carousel, carouselVariants, carouselRefVariants } from './carousel';
 import { wheelVariants } from './wheel';
+import { wheelEllipseVariants } from './wheelEllipse';
+import { arcVariants } from './arc';
 import { orbitVariants } from './orbit';
 import { orbit3dVariants } from './orbit3d';
 import { spinVariants } from './spin';
@@ -10,6 +12,7 @@ import { storiesVariants } from './stories';
 import { flickerVariants, flickerRefVariants } from './flicker';
 import { fieldVariants } from './field';
 import { wipeVariants } from './wipe';
+import { wipeRevealVariants } from './wipeReveal';
 import { globeVariants } from './globe';
 import { spiralVariants } from './spiral';
 import { spiralImagesVariants } from './spiralImages';
@@ -31,13 +34,16 @@ import { tickerVariants } from './ticker';
 import { isometricVariants } from './isometric';
 import { coverflowVariants } from './coverflow';
 import { deckVariants } from './deck';
-import { flipVariants } from './flipgrid';
+import { rippleVariants } from './flipgrid';
+import { flipVariants } from './flip';
 import { boxVariants } from './box';
 import { surfaceVariants } from './surface';
 import { premium3dTemplates } from './premium3d';
 import { showcaseVariants } from './showcase';
 import { helix3dVariants } from './helix3d';
 import { interactiveCardsVariants } from './interactiveCards';
+import { spinnerVariants } from './spinner';
+import { stickerVariants } from './stickers';
 
 
 // The reference's complete "3D & Perspective" shelf, in the same order.
@@ -60,16 +66,21 @@ const perspective3dTemplates: Template[] = [
 export const templateList: Template[] = [
   ...perspective3dTemplates,
   ...interactiveCardsVariants,
+  ...spinnerVariants,
+  ...stickerVariants,
   ...carouselVariants,
   ...carouselRefVariants,
+  ...arcVariants,
   ...orbitVariants,
   ...orbit3dVariants,
   ...showcaseVariants.slice(1),
   ...spinVariants,
   ...stackVariants,
   ...wheelVariants,
+  ...wheelEllipseVariants,
   ...fieldVariants,
   ...wipeVariants,
+  ...wipeRevealVariants,
   ...storiesVariants,
   ...storiesFocusVariants,
   ...flickerVariants,
@@ -96,6 +107,7 @@ export const templateList: Template[] = [
   ...coverflowVariants,
   ...deckVariants,
   ...flipVariants,
+  ...rippleVariants,
   ...boxVariants,
 ];
 
@@ -105,7 +117,7 @@ export const templates: Record<string, Template> = Object.fromEntries(
 
 // Templates can remain addressable for persisted scenes while being withheld
 // from every picker until their visual quality is ready for the catalogue.
-const HIDDEN_CATALOG_GROUPS = new Set(['3D & Perspective', 'Flip']);
+const HIDDEN_CATALOG_GROUPS = new Set(['3D & Perspective', 'Dock', 'Editorial', 'Ripple']);
 export const catalogTemplateList = templateList.filter(
   (t) => !t.meta.catalogHidden && !HIDDEN_CATALOG_GROUPS.has(t.meta.group)
 );
@@ -148,4 +160,20 @@ export function defaultsFor(id: string): Record<string, any> {
 export function easingFor(id: string): EasingSpec {
   const spec = getTemplate(id).meta.defaultEasing ?? DEFAULT_EASING;
   return { ...spec }; // clone so state never shares the preset reference
+}
+
+// The number of layers a template actually wants. Everything that sizes a
+// sprite pool, a thumbnail's pose list or a demo-slot tally must ask HERE, not
+// read `values.count` directly — a lattice family derives its cell total from
+// the canvas, so the two disagree and any site still reading the control lays
+// out a different wall than the stage.
+export function layerCountFor(
+  id: string,
+  values: Record<string, any>,
+  ctx: { width: number; height: number; cardAspect?: number },
+): number {
+  const t = getTemplate(id);
+  const derived = t.layerCount?.(values, ctx);
+  if (typeof derived === 'number' && Number.isFinite(derived)) return Math.max(1, Math.round(derived));
+  return Math.max(1, Math.round(values.count ?? 6));
 }

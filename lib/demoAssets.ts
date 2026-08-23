@@ -17,7 +17,7 @@ interface DemoSet {
 
 const DEMO_SETS: Record<string, DemoSet> = {
   bundled: { dir: 'demo', prefix: 'demo', ext: 'jpg', count: 12 },
-  arqe: { dir: 'demo-arqe', prefix: 'sample', ext: 'png', count: 10 },
+  ref: { dir: 'demo-ref', prefix: 'sample', ext: 'png', count: 10 },
 };
 
 const activeSet = DEMO_SETS[process.env.NEXT_PUBLIC_DEMO_SET ?? ''] ?? DEMO_SETS.bundled;
