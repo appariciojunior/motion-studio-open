@@ -230,7 +230,7 @@ const parallax: Template = {
 // rather than a drifting one — so they get their own shelf.
 function preset(id: string, name: string, patch: Record<string, any>, easing: EasingSpec): Template {
   const t = variant(parallax, id, name, patch);
-  return { ...t, meta: { ...t.meta, defaultEasing: easing, group: 'Parallax', isNew: true } };
+  return { ...t, meta: { ...t.meta, defaultEasing: easing, group: 'Parallax' } };
 }
 
 // The reference's own authored beziers, read from its store's bezPerModeBaseline.

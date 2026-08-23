@@ -27,7 +27,7 @@ const BASE = 340;
 // ============================================================
 
 const flipgrid: Template = {
-  meta: { id: 'ripple-01', name: 'Ripple 01', group: 'Ripple', isNew: true, defaultEasing: { id: 'smooth' }, repeatAssets: true },
+  meta: { id: 'ripple-01', name: 'Ripple 01', group: 'Ripple', defaultEasing: { id: 'smooth' }, repeatAssets: true },
 
   controls: [
     { key: 'axis',         label: 'Flip Axis',     type: 'pills',  options: ['y','x'],          default: 'y' }, // y = turns left/right

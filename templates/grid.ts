@@ -59,7 +59,6 @@ const grid: Template = {
     id: 'grid-01',
     name: 'Grid 01',
     group: 'Grid',
-    isNew: true,
     defaultEasing: { id: 'glide' },
     cardAspect: 3 / 4,
     repeatAssets: true,

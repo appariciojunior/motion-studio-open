@@ -6,10 +6,12 @@ import { catalogTemplateList, getTemplate } from '@/templates';
 import { ControlRow, controlVisible } from './Controls';
 import EasingPanel from './EasingPanel';
 import TrackInspector from './TrackInspector';
+import { useUIStore } from '@/store/useUIStore';
 
 // Renders the SCENE + TIMING sections (no card wrapper — the page composes cards).
 export default function ScenePanel() {
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const toggleRightPanel = useUIStore((s) => s.toggleRightPanel);
   const activeTemplateId = useSceneStore((s) => s.activeTemplateId);
   const values = useSceneStore((s) => s.values);
   const setValue = useSceneStore((s) => s.setValue);
@@ -32,17 +34,22 @@ export default function ScenePanel() {
     <>
       <div className="section-head">
         <span className="eyebrow">Scene</span>
-        <select
-          className="badge"
-          value={activeTemplateId}
-          onChange={(e) => setActiveTemplate(e.target.value)}
-          style={{ paddingRight: 22 }}
-        >
-          {template.meta.catalogHidden && (
-            <option value={template.meta.id}>{template.meta.name} (hidden)</option>
-          )}
-          {catalogTemplateList.map((t) => <option key={t.meta.id} value={t.meta.id}>{t.meta.name}</option>)}
-        </select>
+        <div className="section-head-actions">
+          <select
+            className="badge"
+            value={activeTemplateId}
+            onChange={(e) => setActiveTemplate(e.target.value)}
+            style={{ paddingRight: 22 }}
+          >
+            {template.meta.catalogHidden && (
+              <option value={template.meta.id}>{template.meta.name} (hidden)</option>
+            )}
+            {catalogTemplateList.map((t) => <option key={t.meta.id} value={t.meta.id}>{t.meta.name}</option>)}
+          </select>
+          <button className="panel-head-toggle" onClick={toggleRightPanel} title="Collapse right panels" aria-label="Collapse right panels">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M10 3.5L5.5 8l4.5 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          </button>
+        </div>
       </div>
       <div className="section-body">
         {/* With more than one layer, make it explicit that these controls edit

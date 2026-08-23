@@ -14,7 +14,7 @@ const smooth = (n: number) => {
 const poster: Template = {
   meta: {
     id: 'poster-01', name: 'Poster 01', group: 'Stickers', repeatAssets: true,
-    engine: 'webgl', cardAspect: 4 / 5, isNew: true, defaultEasing: { id: 'smooth' },
+    engine: 'webgl', cardAspect: 4 / 5, defaultEasing: { id: 'smooth' },
   },
   controls: [
     { key: 'count', label: 'Count', type: 'slider', min: 1, max: 12, step: 1, default: 9 },
@@ -127,7 +127,7 @@ function stickerPose(frame: number, index: number, count: number, v: Record<stri
 const stickerScatter: Template = {
   meta: {
     id: 'stickers-01', name: 'Stickers 01', group: 'Stickers', repeatAssets: true,
-    engine: 'webgl', cardAspect: 1, isNew: true, defaultEasing: { id: 'smooth' },
+    engine: 'webgl', cardAspect: 1, defaultEasing: { id: 'smooth' },
   },
   controls: [
     { key: 'count', label: 'Count', type: 'slider', min: 1, max: 30, step: 1, default: 17 },
@@ -205,7 +205,7 @@ function stickerPeelPose(frame: number, index: number, count: number, v: Record<
 const stickerPeel: Template = {
   meta: {
     id: 'stickers-02', name: 'Stickers 02', group: 'Stickers', repeatAssets: true,
-    engine: 'webgl', cardAspect: 1, isNew: true, defaultEasing: { id: 'smooth' },
+    engine: 'webgl', cardAspect: 1, defaultEasing: { id: 'smooth' },
   },
   controls: [
     { key: 'count', label: 'Count', type: 'slider', min: 1, max: 30, step: 1, default: 9 },

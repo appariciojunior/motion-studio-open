@@ -56,9 +56,16 @@ export function backgroundPatchForMode(
 }
 
 export function normalizeBackgroundHex(value: string, fallback = '#101014ff'): string {
-  const normalized = value.trim().toLowerCase();
+  const raw = value.trim().toLowerCase();
+  const normalized = raw.startsWith('#') ? raw : `#${raw}`;
   if (/^#[0-9a-f]{8}$/.test(normalized)) return normalized;
   if (/^#[0-9a-f]{6}$/.test(normalized)) return `${normalized}ff`;
+  // CSS shorthand is useful when typing directly in the field: #RGB and #RGBA.
+  if (/^#[0-9a-f]{3,4}$/.test(normalized)) {
+    const digits = normalized.slice(1);
+    const expanded = digits.split('').map((digit) => `${digit}${digit}`).join('');
+    return `#${expanded}${digits.length === 3 ? 'ff' : ''}`;
+  }
   return fallback;
 }
 

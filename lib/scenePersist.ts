@@ -35,6 +35,7 @@ export function buildScenePartial(s: SceneState) {
     customW: s.customW,
     customH: s.customH,
     safeArea: s.safeArea,
+    safeAreaMargin: s.safeAreaMargin,
     // blob-backed logo/background images aren't persisted (they'd be dead on
     // reload); remote/color backgrounds and logos restore normally.
     background: s.background.imageUrl?.startsWith('blob:')

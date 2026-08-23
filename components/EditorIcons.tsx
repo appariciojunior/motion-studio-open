@@ -68,6 +68,18 @@ export function CanvasIcon(props: EditorIconProps) {
   return <svg {...iconProps(props)}><rect x="3" y="3" width="14" height="14" rx="1.5" stroke="currentColor" strokeWidth="1.5"/><path d="M7 3v14M13 3v14M3 7h14M3 13h14" stroke="currentColor" strokeWidth="1.5" opacity="0.45"/></svg>;
 }
 
+export function CurveIcon(props: EditorIconProps) {
+  return <svg {...iconProps(props)}><path d="M3 15.5C7 15.5 6.5 4.5 11 4.5c2.1 0 2.4 2.5 6 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="3" cy="15.5" r="1.15" fill="currentColor"/><circle cx="17" cy="7" r="1.15" fill="currentColor"/></svg>;
+}
+
+export function PaletteIcon(props: EditorIconProps) {
+  return <svg {...iconProps(props)}><path d="M10 3a7 7 0 100 14h1.25a1.75 1.75 0 000-3.5H10a1 1 0 01-1-1c0-.6.4-1 1-1h1.1A4.9 4.9 0 0016 6.6 3.6 3.6 0 0012.4 3H10z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><circle cx="6.5" cy="8" r=".8" fill="currentColor"/><circle cx="9" cy="5.9" r=".8" fill="currentColor"/><circle cx="12.2" cy="6.7" r=".8" fill="currentColor"/></svg>;
+}
+
+export function GradientIcon(props: EditorIconProps) {
+  return <svg {...iconProps(props)}><rect x="3" y="3" width="14" height="14" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M4.5 15.5l11-11" stroke="currentColor" strokeWidth="1.5"/><path d="M5 5h.01M15 15h.01" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/></svg>;
+}
+
 export function ExportIcon(props: EditorIconProps) {
   const { size = 14, ...rest } = props;
   return <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden focusable="false" {...rest}><path d="M8 2v8m0 0L5 7m3 3l3-3M3 13h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>;

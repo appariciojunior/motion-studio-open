@@ -165,7 +165,7 @@ function contrastScales(w: Wheel, v: Record<string, any>, count: number) {
 
 const wheelEllipse: Template = {
   meta: {
-    id: 'wheel-r01', name: 'Wheel 01', group: 'Ferris', isNew: true, repeatAssets: true,
+    id: 'wheel-r01', name: 'Wheel 01', group: 'Ferris', repeatAssets: true,
     cardAspect: 4 / 5, defaultEasing: { id: 'custom', bezier: [0.8, 0, 0.2, 1] },
   },
   controls: [

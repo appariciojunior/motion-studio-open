@@ -51,7 +51,6 @@ const framesBase: Template = {
     id: 'wall-01',
     name: 'Frames 01',
     group: 'Frames',
-    isNew: true,
     // The reference wall ships a firm in-out curve, steeper than Smooth.
     defaultEasing: { id: 'custom', bezier: [0.7, 0, 0.3, 1] },
     repeatAssets: true,

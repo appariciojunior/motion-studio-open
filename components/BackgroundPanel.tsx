@@ -14,11 +14,12 @@ import {
   type BackgroundMode,
   type HsvaColor,
 } from '../lib/backgroundPanel';
+import { GradientIcon, MediaIcon, PaletteIcon } from './EditorIcons';
 
-const TAB_LABELS: Array<{ id: BackgroundMode; label: string }> = [
-  { id: 'colour', label: 'Colour' },
-  { id: 'gradient', label: 'Gradient' },
-  { id: 'image', label: 'Image' },
+const TAB_LABELS: Array<{ id: BackgroundMode; label: string; icon: typeof PaletteIcon }> = [
+  { id: 'colour', label: 'Colour', icon: PaletteIcon },
+  { id: 'gradient', label: 'Gradient', icon: GradientIcon },
+  { id: 'image', label: 'Image', icon: MediaIcon },
 ];
 
 function pickerPosition(value: HsvaColor) {
@@ -109,7 +110,9 @@ export default function BackgroundPanel({ background, setBackground }: Backgroun
   return (
     <div className="background-panel">
       <div className="background-tabs" role="tablist" aria-label="Background type">
-        {TAB_LABELS.map((tab) => (
+        {TAB_LABELS.map((tab) => {
+          const Icon = tab.icon;
+          return (
           <button
             key={tab.id}
             type="button"
@@ -119,9 +122,11 @@ export default function BackgroundPanel({ background, setBackground }: Backgroun
             className={`background-tab ${mode === tab.id ? 'active' : ''}`}
             onClick={() => selectMode(tab.id)}
           >
+            <Icon size={13} />
             {tab.label}
           </button>
-        ))}
+          );
+        })}
       </div>
 
       {mode === 'colour' && (
@@ -134,6 +139,8 @@ export default function BackgroundPanel({ background, setBackground }: Backgroun
                 className="background-hex-field"
                 value={hexDraft}
                 spellCheck={false}
+                autoComplete="off"
+                autoCorrect="off"
                 aria-label="Background colour with alpha"
                 onChange={(event) => setHexDraft(event.target.value)}
                 onBlur={() => commitColour(hexDraft)}

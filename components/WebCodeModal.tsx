@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useWebStore } from '@/store/useWebStore';
+import { PaletteIcon, WebIcon } from './EditorIcons';
 
 // Web mode (SPIKE) — the source editor, fullscreen.
 // It opens on first entry (there is nothing to do without source) and closes
@@ -28,6 +29,7 @@ export default function WebCodeModal() {
               className={`tab tab-beta ${tab === 'source' ? 'active' : ''}`}
               onClick={() => setTab('source')}
             >
+              <WebIcon size={14} />
               JSX / TSX / HTML
               <span className="beta-tag">BETA</span>
             </button>
@@ -35,6 +37,7 @@ export default function WebCodeModal() {
               className={`tab ${tab === 'css' ? 'active' : ''}`}
               onClick={() => setTab('css')}
             >
+              <PaletteIcon size={14} />
               CSS
             </button>
           </div>

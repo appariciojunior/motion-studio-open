@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useSceneStore, ASPECTS } from '@/store/useSceneStore';
 import BackgroundPanel from './BackgroundPanel';
+import { useUIStore } from '@/store/useUIStore';
 
 const FPS_OPTIONS = [15, 25, 30, 60] as const;
 
@@ -56,6 +57,7 @@ function Collapsible({ title, children, defaultOpen = false, openKey }: {
 // `is3DMode` drops Safe area and the Background/Logo/Audio collapsibles — 3D
 // and Mockup mode have their own BackgroundFill panel and no overlay concept.
 export default function CanvasPanel({ is3DMode = false }: { is3DMode?: boolean } = {}) {
+  const toggleRightPanel = useUIStore((s) => s.toggleRightPanel);
   const aspect = useSceneStore((s) => s.aspect);
   const activeTemplateId = useSceneStore((s) => s.activeTemplateId);
   const setAspect = useSceneStore((s) => s.setAspect);
@@ -66,6 +68,8 @@ export default function CanvasPanel({ is3DMode = false }: { is3DMode?: boolean }
   const setFps = useSceneStore((s) => s.setFps);
   const safeArea = useSceneStore((s) => s.safeArea);
   const toggleSafeArea = useSceneStore((s) => s.toggleSafeArea);
+  const safeAreaMargin = useSceneStore((s) => s.safeAreaMargin);
+  const setSafeAreaMargin = useSceneStore((s) => s.setSafeAreaMargin);
   const background = useSceneStore((s) => s.background);
   const setBackground = useSceneStore((s) => s.setBackground);
   const logo = useSceneStore((s) => s.logo);
@@ -80,7 +84,7 @@ export default function CanvasPanel({ is3DMode = false }: { is3DMode?: boolean }
 
   return (
     <>
-      <div className="section-head"><span className="eyebrow">Canvas</span></div>
+      <div className="section-head"><span className="eyebrow">Canvas</span><button className="panel-head-toggle" onClick={toggleRightPanel} title="Collapse right panels" aria-label="Collapse right panels"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M10 3.5L5.5 8l4.5 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg></button></div>
       <div className="section-body">
         <div className="ctl-row">
           <label className="ctl-label">Aspect</label>
@@ -124,13 +128,23 @@ export default function CanvasPanel({ is3DMode = false }: { is3DMode?: boolean }
         </div>
 
         {!is3DMode && (
-          <div className="ctl-row">
-            <label className="ctl-label">Safe area</label>
-            <div className="segmented">
-              <button className={`seg ${!safeArea ? 'active' : ''}`} onClick={() => safeArea && toggleSafeArea()}>Off</button>
-              <button className={`seg ${safeArea ? 'active' : ''}`} onClick={() => !safeArea && toggleSafeArea()}>On</button>
+          <>
+            <div className="ctl-row">
+              <label className="ctl-label">Safe area</label>
+              <button type="button" className={`toggle-switch ${safeArea ? 'on' : ''}`} role="switch" aria-checked={safeArea} onClick={toggleSafeArea}>
+                <span className="toggle-switch-knob" />
+              </button>
             </div>
-          </div>
+            {safeArea && (
+              <div className="ctl-row safe-area-margin-row">
+                <label className="ctl-label" htmlFor="safe-area-margin">Margin</label>
+                <div className="safe-area-margin-control">
+                  <input id="safe-area-margin" className="safe-area-margin-slider" type="range" min="1" max="25" step="1" value={safeAreaMargin} style={{ '--safe-area-progress': `${((safeAreaMargin - 1) / 24) * 100}%` } as React.CSSProperties} onChange={(event) => setSafeAreaMargin(Number(event.target.value))} />
+                  <output>{safeAreaMargin}%</output>
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         {is3DMode && (

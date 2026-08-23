@@ -22,7 +22,7 @@ const BASE = 340;
 // ============================================================
 
 const coverflow: Template = {
-  meta: { id: 'coverflow-01', name: 'Coverflow 01', group: 'Coverflow', isNew: true, defaultEasing: { id: 'glide' } },
+  meta: { id: 'coverflow-01', name: 'Coverflow 01', group: 'Coverflow', defaultEasing: { id: 'glide' } },
 
   controls: [
     { key: 'axis',         label: 'Axis',          type: 'pills',  options: ['horizontal','vertical'], default: 'horizontal' },

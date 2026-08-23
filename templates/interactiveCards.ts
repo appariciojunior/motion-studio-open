@@ -111,7 +111,6 @@ const interactiveCards: Template = {
     group: 'Interactive Cards',
     engine: 'webgl',
     repeatAssets: true,
-    isNew: true,
     cardAspect: 1,
     defaultEasing: { id: 'linear' },
   },

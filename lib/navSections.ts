@@ -14,7 +14,7 @@ export interface NavSection {
 }
 
 export const NAV_SECTIONS: NavSection[] = [
-  { id: 'projects', label: 'Projects', href: '/projects' },
+  { id: 'projects', label: 'Projetos', href: '/projects' },
   { id: 'library', label: 'Library', href: '/library' },
   { id: 'mockup', label: 'Mockup', href: '/mockup' },
   { id: '3d', label: '3D', href: '/3d', experimental: true },

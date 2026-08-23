@@ -306,8 +306,8 @@ export default function AssetsPanel() {
   return (
     <>
       <div className="section-head">
-        <span className="eyebrow">Assets</span>
-        <span className="badge">{filled}/{count}</span>
+        <span className="eyebrow">Media · {rows} slots</span>
+        <span className="badge">{filled}/{rows}</span>
       </div>
       <div className="section-body">
         <div
@@ -446,6 +446,7 @@ export default function AssetsPanel() {
                 onPointerUp={onRowPointerUp}
                 onPointerCancel={onRowPointerCancel}
               >
+                <span className="asset-grip" title="Drag to reorder"><GripIcon /></span>
                 <span className="asset-idx">{i + 1}</span>
                 {!a.url ? (
                   // persisted upload still resolving from IndexedDB (or its bytes
@@ -473,26 +474,9 @@ export default function AssetsPanel() {
                   /* eslint-disable-next-line @next/next/no-img-element */
                   <img className="asset-thumb" src={a.url} alt={a.name} onClick={() => openSlotPicker(i)} title="Replace" />
                 )}
-                <span className="asset-name" title={a.name}>{a.name}</span>
-                <span className="asset-mobile-order" aria-label={`Reorder ${a.name}`}>
-                  <button
-                    className="icon-btn"
-                    title="Move up"
-                    aria-label={`Move ${a.name} up`}
-                    disabled={i === 0}
-                    onClick={() => i > 0 && reorderAssets(i, i - 1)}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 10l4-4 4 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  </button>
-                  <button
-                    className="icon-btn"
-                    title="Move down"
-                    aria-label={`Move ${a.name} down`}
-                    disabled={i >= filled - 1}
-                    onClick={() => i < filled - 1 && reorderAssets(i, i + 1)}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  </button>
+                <span className="asset-slot-copy">
+                  <strong>Slot {i + 1}</strong>
+                  <small title={a.name}>{a.name}</small>
                 </span>
                 <button
                   className={`icon-btn ${a.crop && (a.crop.x !== 0.5 || a.crop.y !== 0.5) ? 'crop-set' : ''}`}
@@ -516,11 +500,12 @@ export default function AssetsPanel() {
                 className={`asset-item asset-empty ${overIdx === i && dragIdx !== null ? 'drop-target' : ''}`}
                 onClick={() => openSlotPicker(i)}
               >
+                <span className="asset-grip asset-grip-empty" aria-hidden="true"><GripIcon /></span>
                 <span className="asset-idx">{i + 1}</span>
                 <span className="asset-thumb asset-thumb-empty">
                   <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
                 </span>
-                <span className="mobile-slot-copy"><strong>Slot {i + 1}</strong><small>Drop or click to add</small></span>
+                <span className="asset-slot-copy"><strong>Slot {i + 1}</strong><small>Drop or click to add</small></span>
               </li>
             )
           )}

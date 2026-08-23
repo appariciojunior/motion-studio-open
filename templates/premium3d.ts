@@ -15,7 +15,7 @@ const sharedFinish = [
 ];
 
 export const cardTunnel: Template = {
-  meta: { id: 'tunnel-01', name: 'Card Tunnel', group: '3D & Perspective', isNew: true, engine: 'webgl', catalog3d: true, repeatAssets: true, cardAspect: 16 / 9, defaultEasing: { id: 'linear' } },
+  meta: { id: 'tunnel-01', name: 'Card Tunnel', group: '3D & Perspective', engine: 'webgl', catalog3d: true, repeatAssets: true, cardAspect: 16 / 9, defaultEasing: { id: 'linear' } },
   controls: [
     // Direction is the only motion control the reference exposes for this
     // family — Count/Perspective/Speed below are our own additions (no
@@ -86,7 +86,7 @@ export const cardTunnel: Template = {
 };
 
 export const depthStackScroll: Template = {
-  meta: { id: 'depth-stack-01', name: 'Depth Stack Scroll', group: '3D & Perspective', isNew: true, engine: 'webgl', catalog3d: true, repeatAssets: true, cardAspect: 16 / 9, defaultEasing: { id: 'smooth' } },
+  meta: { id: 'depth-stack-01', name: 'Depth Stack Scroll', group: '3D & Perspective', engine: 'webgl', catalog3d: true, repeatAssets: true, cardAspect: 16 / 9, defaultEasing: { id: 'smooth' } },
   controls: [
     { key: 'layout', label: 'Layout', type: 'pills', options: ['fan','scatter'], default: 'fan', section: 'Layout' },
     { key: 'direction', label: 'Direction', type: 'toggle', options: ['forward','backward'], default: 'forward', section: 'Motion' },
@@ -198,7 +198,7 @@ export const depthStackScroll: Template = {
 //  clean, and re-deriving the bend formula is four lines.
 // ============================================================
 export const parallaxTotem: Template = {
-  meta: { id: 'parallax-totem-01', name: 'Parallax Totem', group: '3D & Perspective', isNew: true, engine: 'webgl', catalog3d: true, repeatAssets: true, cardAspect: 16 / 9, defaultEasing: { id: 'flow' } },
+  meta: { id: 'parallax-totem-01', name: 'Parallax Totem', group: '3D & Perspective', engine: 'webgl', catalog3d: true, repeatAssets: true, cardAspect: 16 / 9, defaultEasing: { id: 'flow' } },
   controls: [
     { key: 'columns',       label: 'Columns',        type: 'slider', min: 2, max: 5, step: 1,     default: 2, section: 'Layout' },
     { key: 'count',         label: 'Count',          type: 'slider', min: 6, max: 30, step: 1,    default: 12, section: 'Layout', advanced: true },

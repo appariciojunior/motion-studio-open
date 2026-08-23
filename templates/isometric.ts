@@ -22,7 +22,7 @@ const BASE = 340;
 // ============================================================
 
 const isometric: Template = {
-  meta: { id: 'iso-01', name: 'Isometric 01', group: 'Isometric', isNew: true, defaultEasing: { id: 'smooth' }, repeatAssets: true },
+  meta: { id: 'iso-01', name: 'Isometric 01', group: 'Isometric', defaultEasing: { id: 'smooth' }, repeatAssets: true },
 
   controls: [
     { key: 'count',        label: 'Count',         type: 'slider', min: 2, max: 60, step: 1,     default: 16 },

@@ -121,7 +121,7 @@ const showcase: Template = {
     // catalogHidden only affects catalogTemplateList (templates/index.ts).
     catalogHidden: true,
     id: 'showcase-01', name: 'Showcase Stream', group: '3D & Perspective',
-    isNew: true, engine: 'webgl', catalog3d: true, repeatAssets: true, cardAspect: 1,
+    engine: 'webgl', catalog3d: true, repeatAssets: true, cardAspect: 1,
     defaultEasing: { id: 'linear' },
   },
 

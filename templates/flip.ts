@@ -73,8 +73,7 @@ const FOLD_CAMERA = 2.21;
 
 const flip: Template = {
   meta: {
-    id: 'flip-01', name: 'Flip 01', group: 'Flip', isNew: true,
-    // The reference's own default curve, and the one every measurement above
+    id: 'flip-01', name: 'Flip 01', group: 'Flip', // The reference's own default curve, and the one every measurement above
     // was taken under.
     defaultEasing: { id: 'ease' }, repeatAssets: true, cardAspect: 3 / 4,
   },

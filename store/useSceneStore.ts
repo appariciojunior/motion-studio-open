@@ -110,6 +110,7 @@ export interface SceneState {
   customW: number;      // exact export px when aspect === 'custom'
   customH: number;
   safeArea: boolean;
+  safeAreaMargin: number; // percentage inset on each edge
   background: BackgroundSettings;
   logo: LogoSettings;
   audioUrl: string | null;
@@ -157,6 +158,7 @@ export interface SceneState {
   setCustomDims: (w: number, h: number) => void;
   setDuration: (d: number) => void;
   toggleSafeArea: () => void;
+  setSafeAreaMargin: (margin: number) => void;
   setBackground: (patch: Partial<BackgroundSettings>) => void;
   setLogo: (patch: Partial<LogoSettings>) => void;
   setAudioUrl: (url: string | null) => void;
@@ -287,6 +289,7 @@ function initialSceneState() {
     customW: initDims.width,
     customH: initDims.height,
     safeArea: false,
+    safeAreaMargin: 5,
     background: { source: 'color' as const, color: '#0d0d0d', gradient: false, color2: '#1f1f1f', imageUrl: null, blur: 28 },
     logo: { url: null, position: 'br' as const, size: 96 },
     audioUrl: null,
@@ -552,6 +555,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     }),
   setDuration: (d) => set(() => ({ duration: d })),
   toggleSafeArea: () => set((s) => ({ safeArea: !s.safeArea })),
+  setSafeAreaMargin: (margin) => set(() => ({ safeAreaMargin: Math.min(25, Math.max(1, Math.round(margin) || 1)) })),
   setBackground: (patch) => set((s) => ({
     background: { ...s.background, ...patch, userSet: true },
   })),

@@ -109,7 +109,7 @@ function surfaceTemplate(id: string, name: string, mode: SurfaceMode, lanesDefau
 
   return {
     meta: {
-      id, name, group: GROUP, isNew: true, engine: 'webgl', catalog3d: true,
+      id, name, group: GROUP, engine: 'webgl', catalog3d: true,
       repeatAssets: true, cardAspect: 16 / 9, defaultEasing: { id: 'linear' },
     },
     controls,

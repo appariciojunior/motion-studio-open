@@ -11,8 +11,7 @@ const DEG = Math.PI / 180;
 // Tilt is a property of the deck, not a motion family.
 const deck: Template = {
   meta: {
-    id: 'deck-01', name: 'Deck 01', group: 'Deck', isNew: true,
-    defaultEasing: { id: 'smooth' },
+    id: 'deck-01', name: 'Deck 01', group: 'Deck', defaultEasing: { id: 'smooth' },
   },
 
   controls: [

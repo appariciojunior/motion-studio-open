@@ -30,7 +30,7 @@ const BASE = 340;
 // ============================================================
 
 const ticker: Template = {
-  meta: { id: 'ticker-01', name: 'Ticker 01', group: 'Ticker', isNew: true, defaultEasing: { id: 'linear' }, repeatAssets: true },
+  meta: { id: 'ticker-01', name: 'Ticker 01', group: 'Ticker', defaultEasing: { id: 'linear' }, repeatAssets: true },
 
   controls: [
     { key: 'direction',    label: 'Direction',     type: 'pills',  options: ['left','right','up','down'], default: 'left' },

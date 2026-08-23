@@ -103,8 +103,7 @@ function carouselFace(index: number, travel: number, geo: { faces: number; image
 
 const box: Template = {
   meta: {
-    id: 'box-01', name: 'Box 01', group: 'Box', isNew: true,
-    // The reference component snaps each quarter turn with a spring of
+    id: 'box-01', name: 'Box 01', group: 'Box', // The reference component snaps each quarter turn with a spring of
     // stiffness 200 / damping 30 — ζ ≈ 1.06, so it is very slightly overdamped
     // and never overshoots. That is an ease-OUT, not the symmetric ease-in-out
     // `smooth` was giving; cubicOut is the closest curve in the house set

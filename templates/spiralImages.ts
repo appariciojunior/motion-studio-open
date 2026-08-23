@@ -60,7 +60,7 @@ function radiusForArc(f: number, k: number): number {
 const spiralImages: Template = {
   meta: {
     id: 'spiral-images-01', name: 'Spiral 01', group: 'Spiral',
-    isNew: true, repeatAssets: true, defaultEasing: { id: 'linear' },
+    repeatAssets: true, defaultEasing: { id: 'linear' },
   },
 
   controls: [

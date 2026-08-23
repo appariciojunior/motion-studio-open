@@ -841,7 +841,8 @@ export class SceneRenderer3D implements IRenderer {
         this.safeLine = new THREE.LineLoop(geo, mat);
         this.hud.add(this.safeLine);
       }
-      const mx = this.width * 0.05, my = this.height * 0.05;
+      const inset = Math.min(0.25, Math.max(0.01, s.safeAreaMargin / 100));
+      const mx = this.width * inset, my = this.height * inset;
       const w2 = this.width / 2 - mx, h2 = this.height / 2 - my;
       this.safeLine.geometry.setFromPoints([
         new THREE.Vector3(-w2, -h2, 0), new THREE.Vector3(w2, -h2, 0),

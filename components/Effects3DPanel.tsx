@@ -2,6 +2,7 @@
 
 import { threeEffects } from '@/three3d';
 import { use3DStore } from '@/store/use3DStore';
+import { AdjustIcon } from './EditorIcons';
 
 // Left column in 3D mode — replaces the motion-template list. Picks the active
 // 3D effect (ASCII, …). Its controls render in the right panel.
@@ -21,6 +22,7 @@ export default function Effects3DPanel() {
         <div className="tpl-head-row">
           <div className="tabs">
             <button className="tab tab-beta active">
+              <AdjustIcon size={14} />
               3D Effects
               <span className="beta-tag">BETA</span>
             </button>

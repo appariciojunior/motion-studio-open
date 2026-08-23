@@ -50,8 +50,7 @@ const BASE = 340;
 
 const wipeReveal: Template = {
   meta: {
-    id: 'wipe-r01', name: 'Wipe 01', group: 'Wipe', isNew: true,
-    cardAspect: 'canvas',
+    id: 'wipe-r01', name: 'Wipe 01', group: 'Wipe', cardAspect: 'canvas',
     defaultEasing: { id: 'custom', bezier: [0.86, 0.14, 0.14, 0.86] },
   },
 

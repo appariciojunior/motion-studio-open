@@ -20,6 +20,17 @@ const SPRITE_BASE = 340;
 // against the --frame backdrop) and its faint index label colour.
 const PLACEHOLDER_FILL = 0x242424;
 const PLACEHOLDER_LABEL = 0x6a6a6a;
+// PIXI fills accept colour and alpha separately. Keeping this conversion here
+// makes CSS-style #RRGGBBAA values render exactly like the picker preview.
+function pixiFillFromHex(value: string) {
+  const source = value.trim().replace(/^#/, '');
+  const expanded = source.length === 3 || source.length === 4
+    ? source.split('').map((digit) => `${digit}${digit}`).join('')
+    : source;
+  const rgb = /^[0-9a-f]{6,8}$/i.test(expanded) ? expanded.slice(0, 6) : '0d0d0d';
+  const alpha = /^[0-9a-f]{8}$/i.test(expanded) ? parseInt(expanded.slice(6, 8), 16) / 255 : 1;
+  return { color: parseInt(rgb, 16), alpha };
+}
 
 interface Slot {
   sprite: PIXI.Sprite;
@@ -486,18 +497,21 @@ export class SceneRenderer {
       // The Pixi canvas is initialized with backgroundAlpha: 0, so leaving this
       // layer empty preserves alpha in the preview and PNG/WebM capture paths.
     } else if (s.background.gradient) {
+      const start = pixiFillFromHex(s.background.color);
+      const end = pixiFillFromHex(s.background.color2);
       const grad = new PIXI.FillGradient(0, 0, 0, height);
-      grad.addColorStop(0, s.background.color);
-      grad.addColorStop(1, s.background.color2);
-      this.bg.rect(0, 0, width, height).fill(grad);
+      grad.addColorStop(0, start.color);
+      grad.addColorStop(1, end.color);
+      this.bg.rect(0, 0, width, height).fill({ fill: grad, alpha: Math.min(start.alpha, end.alpha) });
     } else {
-      this.bg.rect(0, 0, width, height).fill(s.background.color);
+      this.bg.rect(0, 0, width, height).fill(pixiFillFromHex(s.background.color));
     }
 
     // safe area guide
     this.safeGfx.clear();
     if (s.safeArea) {
-      const mx = width * 0.05, my = height * 0.05;
+      const inset = Math.min(0.25, Math.max(0.01, s.safeAreaMargin / 100));
+      const mx = width * inset, my = height * inset;
       this.safeGfx
         .rect(mx, my, width - mx * 2, height - my * 2)
         .stroke({ width: 2, color: 0x00e5ff, alpha: 0.6 });

@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { useSceneStore } from '@/store/useSceneStore';
+import { AdjustIcon, CurveIcon } from './EditorIcons';
 import {
   EASING_PRESETS,
   EASING_MAP,
@@ -152,8 +153,8 @@ export default function EasingPanel() {
 
         {/* ---- Defaults / Custom tabs ---- */}
         <div className="segmented ez-tabs">
-          <button className={`seg ${tab === 'defaults' ? 'active' : ''}`} onClick={() => setTab('defaults')}>Defaults</button>
-          <button className={`seg ${tab === 'custom' ? 'active' : ''}`} onClick={() => setTab('custom')}>Custom</button>
+          <button className={`seg ${tab === 'defaults' ? 'active' : ''}`} onClick={() => setTab('defaults')}><AdjustIcon size={13} />Defaults</button>
+          <button className={`seg ${tab === 'custom' ? 'active' : ''}`} onClick={() => setTab('custom')}><CurveIcon size={13} />Custom</button>
         </div>
 
         {/* ---- preset list ---- */}

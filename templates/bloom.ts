@@ -38,7 +38,6 @@ const bloom: Template = {
     id: 'bloom-01',
     name: 'Bloom 01',
     group: 'Bloom',
-    isNew: true,
     // The reference curve: an instant start and a very long settle.
     defaultEasing: { id: 'custom', bezier: [0, 0, 0, 0.99] },
     cardAspect: 'canvas',

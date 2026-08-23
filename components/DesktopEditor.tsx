@@ -15,7 +15,6 @@ import IconRail from '@/components/IconRail';
 import ModelColors from '@/components/ModelColors';
 import ModelControl from '@/components/ModelControl';
 import MockupPanel from '@/components/MockupPanel';
-import ProjectsPanel from '@/components/ProjectsPanel';
 import ScenePanel from '@/components/ScenePanel';
 import ScreenContent from '@/components/ScreenContent';
 import TemplatesCard from '@/components/TemplatesCard';
@@ -25,6 +24,7 @@ import WebCodeModal from '@/components/WebCodeModal';
 import WebScenePanel from '@/components/WebScenePanel';
 import WebSelectionPanel from '@/components/WebSelectionPanel';
 import WebSourceBar from '@/components/WebSourceBar';
+import WorkspaceDashboard from '@/components/WorkspaceDashboard';
 import { use3DStore } from '@/store/use3DStore';
 import { useUIStore } from '@/store/useUIStore';
 import { useWebStore } from '@/store/useWebStore';
@@ -58,11 +58,15 @@ export default function DesktopEditor() {
     else if (is3D && s.effectId === 'mockup') s.setEffect('cartoon');
   }, [isMockup, is3D]);
 
+  if (isProjects) {
+    return <div className="app app-dashboard"><IconRail /><WorkspaceDashboard /></div>;
+  }
+
   return (
     <div className={`app ${isWeb || isBoard ? 'app-web' : ''} ${tplCollapsed ? 'app-tpl-collapsed' : ''} ${leftCollapsed ? 'left-collapsed' : ''} ${rightCollapsed ? 'right-collapsed' : ''}`}>
       <IconRail />
 
-      {tplCollapsed ? <CollapsedStrip /> : isProjects ? <ProjectsPanel /> : is3D ? <Effects3DPanel /> : isMockup ? <MockupPanel /> : <TemplatesCard controlsInline={isBoard} />}
+      {tplCollapsed ? <CollapsedStrip /> : is3D ? <Effects3DPanel /> : isMockup ? <MockupPanel /> : <TemplatesCard controlsInline={isBoard} />}
 
       {!isWeb && !isBoard && (
         <section className="card controls card-scroll">
@@ -96,12 +100,8 @@ export default function DesktopEditor() {
           </>
         )}
         <HistoryControls />
-        <button className="panel-toggle panel-toggle-left" onClick={toggleLeftPanel} aria-expanded={!leftCollapsed} aria-label={leftCollapsed ? 'Expand left sidebar' : 'Collapse left sidebar'} title={leftCollapsed ? 'Expand left sidebar' : 'Collapse left sidebar'}>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 3.5L10.5 8 6 12.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-        </button>
-        <button className="panel-toggle panel-toggle-right" onClick={toggleRightPanel} aria-expanded={!rightCollapsed} aria-label={rightCollapsed ? 'Expand right sidebar' : 'Collapse right sidebar'} title={rightCollapsed ? 'Expand right sidebar' : 'Collapse right sidebar'}>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 3.5L10.5 8 6 12.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-        </button>
+        {leftCollapsed && <button className="stage-panel-expand stage-panel-expand-left" onClick={toggleLeftPanel} aria-label="Expand left sidebar" title="Expand left sidebar"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6 3.5L10.5 8 6 12.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg></button>}
+        {rightCollapsed && <button className="stage-panel-expand stage-panel-expand-right" onClick={toggleRightPanel} aria-label="Expand right panels" title="Expand right panels"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M10 3.5L5.5 8l4.5 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg></button>}
       </main>
 
       <section className="card right card-scroll">

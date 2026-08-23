@@ -6,6 +6,7 @@ import { use3DStore, defaultModelFor } from '@/store/use3DStore';
 import { DEVICES, findDevice, selectDevice } from '@/three3d/devices';
 import { MOCKUP_ANIMATIONS } from '@/three3d/animations';
 import { MockupAnimThumb } from './MockupThumb';
+import { MockupIcon } from './EditorIcons';
 
 const Chevron = () => (
   <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
@@ -51,7 +52,7 @@ export default function MockupPanel() {
       <div className="tpl-head">
         <div className="tpl-head-row">
           <div className="tabs">
-            <button className="tab active">Devices</button>
+            <button className="tab active"><MockupIcon size={14} />Devices</button>
           </div>
         </div>
         <p className="beta-note">

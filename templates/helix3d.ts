@@ -116,7 +116,7 @@ function helixMetrics(v: Record<string, any>, count: number, ctx: { width: numbe
 const helix3d: Template = {
   meta: {
     id: 'helix3d-01', name: 'Spiral Stream', group: '3D & Perspective',
-    catalog3d: true, isNew: true, engine: 'webgl', repeatAssets: true, cardAspect: 1,
+    catalog3d: true, engine: 'webgl', repeatAssets: true, cardAspect: 1,
     defaultEasing: { id: 'linear' },
   },
 

@@ -85,8 +85,7 @@ function globePoint(frame: number, index: number, count: number, v: Record<strin
 
 const cardGlobe: Template = {
   meta: {
-    id: 'globe-01', name: 'Card Globe', group: GROUP, isNew: true,
-    // 4:3, not 16:9. Counting the reference photograph gives roughly 20 columns
+    id: 'globe-01', name: 'Card Globe', group: GROUP, // 4:3, not 16:9. Counting the reference photograph gives roughly 20 columns
     // by 11 rows, and a lat/lon cell's aspect is 2·rows/cols — so its tiles are
     // about 1.1 wide, near square. A 16:9 tile forces a much wider cell, which
     // makes each card ~22% of the sphere's diameter; being a FLAT plane tangent

@@ -206,7 +206,7 @@ function angleAt(index: number, frame: number, arc: Arc, v: Record<string, any>,
 
 const arc: Template = {
   meta: {
-    id: 'arc-01', name: 'Arc 01', group: 'Ferris', isNew: true, repeatAssets: true,
+    id: 'arc-01', name: 'Arc 01', group: 'Ferris', repeatAssets: true,
     cardAspect: 5 / 7, defaultEasing: { id: 'custom', bezier: [0.8, 0, 0.2, 1] },
   },
   controls: [

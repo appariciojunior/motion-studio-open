@@ -323,7 +323,7 @@ function cameraFor(v: Record<string, any>, ctx: TransformCtx): CameraPose {
 const spinner: Template = {
   meta: {
     id: 'spinner-01', name: 'Spinner 01', group: 'Spinner', repeatAssets: true,
-    engine: 'webgl', cardAspect: 1, isNew: true, defaultEasing: { id: 'linear' },
+    engine: 'webgl', cardAspect: 1, defaultEasing: { id: 'linear' },
   },
   controls: [
     { key: 'direction', label: 'Direction', type: 'toggle', options: ['forward', 'reverse'], default: 'forward' },

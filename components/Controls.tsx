@@ -77,7 +77,8 @@ function SliderControl({ def, value, onChange }: RowProps) {
   };
 
   return (
-    <div
+    <div className="slider-control">
+      <div
       ref={trackRef}
       className={`strack ${mobile ? 'strack-mobile' : ''} ${dragging ? 'is-dragging' : ''}`}
       tabIndex={0}
@@ -115,6 +116,8 @@ function SliderControl({ def, value, onChange }: RowProps) {
       {signed && <div className="szero" style={{ left: `${zeroPct}%` }} />}
       <div className="shandle" style={{ left: `${pct}%` }} />
       {mobile && dragging && <output className="slider-bubble" style={{ left: `${pct}%` }}>{num.toFixed(decimals)}{def.unit ?? ''}</output>}
+      </div>
+      <div className="slider-value">
       {editing ? (
         <input
           className="sval-input"
@@ -137,6 +140,7 @@ function SliderControl({ def, value, onChange }: RowProps) {
           {num.toFixed(decimals)}{def.unit ?? ''}
         </span>
       )}
+      </div>
       {mobile && sheetOpen && (
         <MobileSheet title={def.label} onClose={() => setSheetOpen(false)}>
           <div className="mobile-number-editor">

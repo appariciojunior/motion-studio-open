@@ -8,6 +8,8 @@ import TemplateThumb from './TemplateThumb';
 import { ControlRow } from './Controls';
 import { useMobileInteractions } from './MobileInteractions';
 import { markTemplateIdsSeen, readSeenTemplateIds } from '@/lib/templateNovelty';
+import { AdjustIcon, LibraryIcon } from './EditorIcons';
+import { useUIStore } from '@/store/useUIStore';
 
 const Chevron = ({ dir = 'right' }: { dir?: 'right' | 'left' }) => (
   <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={dir === 'left' ? { transform: 'rotate(180deg)' } : undefined}>
@@ -98,6 +100,7 @@ export default function TemplatesCard({
   customPresetsEnabled?: boolean;
 }) {
   const mobile = useMobileInteractions();
+  const toggleLeftPanel = useUIStore((s) => s.toggleLeftPanel);
   const activeTemplateId = useSceneStore((s) => s.activeTemplateId);
   const setActiveTemplate = useSceneStore((s) => s.setActiveTemplate);
   const values = useSceneStore((s) => s.values);
@@ -188,10 +191,13 @@ export default function TemplatesCard({
         <div className="tpl-head-row">
           {customPresetsEnabled && (
             <div className="tabs">
-              <button className={`tab ${activeTab === 'templates' ? 'active' : ''}`} onClick={() => setTab('templates')}>Templates</button>
-              <button className={`tab ${activeTab === 'custom' ? 'active' : ''}`} onClick={() => setTab('custom')}>Custom</button>
+              <button className={`tab ${activeTab === 'templates' ? 'active' : ''}`} onClick={() => setTab('templates')}><LibraryIcon size={14} />Templates</button>
+              <button className={`tab ${activeTab === 'custom' ? 'active' : ''}`} onClick={() => setTab('custom')}><AdjustIcon size={14} />Custom</button>
             </div>
           )}
+          <button className="panel-head-toggle" onClick={toggleLeftPanel} title="Collapse sidebar" aria-label="Collapse sidebar">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M10 3.5L5.5 8l4.5 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          </button>
         </div>
 
         <div className="searchbox">

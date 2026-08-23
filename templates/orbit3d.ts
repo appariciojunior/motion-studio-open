@@ -540,8 +540,7 @@ function cameraFor(v: Record<string, any>, ctx: TransformCtx): CameraPose {
 
 const ring3d: Template = {
   meta: {
-    id: 'orbit-3d-01', name: 'Ring Stream', group: 'Orbit', isNew: true,
-    // Linear is the reference's family default, and for a ring that turns
+    id: 'orbit-3d-01', name: 'Ring Stream', group: 'Orbit', // Linear is the reference's family default, and for a ring that turns
     // continuously it is the only curve that does not lurch. The presets that
     // step (its Natural and Glide ones) carry their own curve on meta.
     defaultEasing: { id: 'linear' }, engine: 'webgl', catalog3d: true, repeatAssets: true,
