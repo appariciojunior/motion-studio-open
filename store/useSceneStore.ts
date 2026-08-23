@@ -428,13 +428,12 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       // duration * cycles; the Ring steps per CARD, so its Duration is what
       // fixes the seconds per slot. Same reasoning as Spinner and Orbit 3D.
       const REF_3D_DURATION: Record<string, number> = {
+        'ring-r01': 12.8, 'ring-r02': 16, 'ring-r03': 12.8, 'ring-r04': 15, 'ring-r05': 15,
+        'ring-r06': 12.8, 'ring-r07': 12.8, 'ring-r08': 12.8, 'ring-r09': 12.8, 'ring-r10': 16,
+        'ring-r11': 12.8, 'ring-r12': 20, 'ring-r13': 12.8, 'ring-r14': 12.8, 'ring-r15': 20,
         'coil-01': 10, 'coil-02': 10, 'coil-03': 10, 'coil-04': 15, 'coil-05': 12,
-        'coil-06': 12, 'coil-07': 20, 'coil-08': 15, 'coil-09': 24, 'ring-r01': 12.8,
-        'ring-r02': 12.8, 'ring-r03': 16, 'ring-r04': 16, 'ring-r05': 16, 'ring-r06': 16,
-        'ring-r07': 12.8, 'ring-r08': 15, 'ring-r09': 15, 'ring-r10': 12.8, 'ring-r11': 12.8,
-        'ring-r12': 12.8, 'ring-r13': 12.8, 'ring-r14': 16, 'ring-r15': 16, 'ring-r16': 12.8,
-        'ring-r17': 12.8, 'ring-r18': 12.8, 'ring-r19': 20, 'ring-r20': 20, 'ring-r21': 12.8,
-        'ring-r22': 12.8, 'ring-r23': 20, 'carousel3d-01': 8, 'carousel3d-02': 9,
+        'coil-06': 12, 'coil-07': 20, 'coil-08': 15, 'coil-09': 24, 
+        'carousel3d-01': 8, 'carousel3d-02': 9,
         'carousel3d-03': 8, 'carousel3d-04': 12, 'carousel3d-05': 20,
         'deck-r01': 7, 'deck-r02': 7, 'deck-r03': 7, 'deck-r04': 7, 'deck-r05': 10,
         'deck-r06': 7, 'deck-r07': 7, 'deck-r08': 7, 'deck-r09': 10, 'deck-r10': 10,

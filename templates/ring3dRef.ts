@@ -10,19 +10,29 @@ const BASE = 340;
 const DEG = Math.PI / 180;
 
 // ============================================================
-//  CAROUSEL RING — a wheel of cards standing on their edges
+//  ORBIT, continued — a wheel of cards standing on their edges
 //
-//  The reference's "3D" family, twenty-three presets, plus the five of its
-//  Carousel 3D. Both are the same scene branch with a different placement rule,
-//  which is why they share a file. Its Orbit family is a third branch of the
-//  same scene and is deliberately NOT here.
+//  The reference's "3D" family plus its Carousel 3D: the same scene branch
+//  with a different placement rule, which is why they share a file. Its own
+//  Orbit family is a third branch and is deliberately NOT here.
 //
-//  This is a different mechanic from our own Orbit group, which came from a
-//  different tool and is parameterized by a ring size in percent, an opening
-//  angle and a card bend. The reference authors an absolute `orbitRadius` and
-//  an absolute `planeSize` on a 1440-tall stage, with a lens that widens rather
-//  than a camera that moves — so its presets could not be expressed there
-//  without rewriting that family, and the Orbit group is left untouched.
+//  These ship INTO the Orbit group rather than beside it. Three separate
+//  shelves of rings is one too many to choose from, and the mechanic is the
+//  same family of thing as what is already there — even though the
+//  parametrisation is not: our own Orbit presets came from a different tool
+//  and are authored as a ring size in percent with an opening angle, where
+//  these carry an absolute radius and plane size on a 1440-tall stage and a
+//  lens that widens instead of a camera that moves. So the two live side by
+//  side in one group, each on its own arithmetic; nothing already there moved.
+//
+//  EIGHT of the reference's twenty-three were dropped on the way in, as
+//  redundant against presets the group already had. That is a measurement,
+//  not a matter of taste: `scripts/_dupe_scan.cjs` builds an occupancy map of
+//  where the cards actually sit across the whole loop and compares those, and
+//  a pair that is unmistakably different by eye — the same ring horizontal
+//  against vertical — scores 0.99 on it. The eight all scored under 0.80
+//  against something already in the group. Nothing scored close to a true
+//  duplicate: the nearest pair in the whole group is 0.40.
 //
 //  Read out of its scene class rather than measured:
 //
@@ -175,7 +185,10 @@ const SHARED_CONTROLS = [
 
 const ring: Template = {
   meta: {
-    id: 'ring-r01', name: 'Ring 01', group: 'Ring', engine: 'webgl', isNew: true,
+    // The family definition, never registered as a preset in its own right: the
+    // reference's 3D 01 is one of the eight dropped as redundant, and its values
+    // are what the rest are stated as deltas from.
+    id: 'ring-base', name: 'Ring', group: 'Orbit', engine: 'webgl', isNew: true, catalog3d: true,
     defaultEasing: { id: 'custom', bezier: [0.86, 0.14, 0.14, 0.86] },
     cardAspect: 3 / 4, repeatAssets: true,
   },
@@ -197,7 +210,7 @@ const ring: Template = {
 
 const carousel3d: Template = {
   meta: {
-    id: 'carousel3d-01', name: 'Carousel 3D 01', group: 'Carousel 3D', engine: 'webgl', isNew: true,
+    id: 'carousel3d-01', name: 'Carousel 3D 01', group: 'Orbit', engine: 'webgl', isNew: true, catalog3d: true,
     defaultEasing: { id: 'linear' },
     cardAspect: 3 / 4, repeatAssets: true,
   },
@@ -226,36 +239,28 @@ const carousel3d: Template = {
 const E86 = { id: 'custom' as const, bezier: [0.86, 0.14, 0.14, 0.86] as [number, number, number, number] };
 const LIN = { id: 'linear' as const };
 
-// The reference's twenty-three "3D" presets, off its own
-// `paramsPerModeBaseline`, 2026-08-23. Clip lengths pinned in
-// store/useSceneStore: its ring steps per card, so the Duration is what fixes
-// the seconds per slot.
+// The fifteen of the reference's "3D" family that earned a place, off its own
+// `paramsPerModeBaseline`, 2026-08-23, renumbered over the gaps the eight
+// dropped ones left. Its own label is kept in the comment so a value can be
+// traced back. Clip lengths are pinned in store/useSceneStore: this ring steps
+// per CARD, so its Duration is what fixes the seconds per slot.
 export const ringRefVariants: Template[] = [
-  ring, // 3D 01 — horizontal, 10 cards, plane 3015, r10915, 12.8s
-  variant(ring, 'ring-r02', 'Ring 02', { axis: 'vertical', distance: 18770 }, E86),
-  variant(ring, 'ring-r03', 'Ring 03', { count: 6, cycles: 2, distance: 15683, planeSize: 5000, orbitRadius: 7182 }, E86),
-  variant(ring, 'ring-r04', 'Ring 04', { axis: 'vertical', count: 6, cycles: 2, distance: 17570, planeSize: 5899, orbitRadius: 8581 }, E86),
-  variant(ring, 'ring-r05', 'Ring 05', { count: 4, cycles: 2, distance: 15683, planeSize: 8685, orbitRadius: 4344 }, E86),
-  variant(ring, 'ring-r06', 'Ring 06', { axis: 'vertical', count: 4, cycles: 2, distance: 15683, planeSize: 7940, orbitRadius: 5270 }, E86),
-  variant(ring, 'ring-r07', 'Ring 07', { offsetY: -3.5, rotationX: 12 }, LIN),
-  variant(ring, 'ring-r08', 'Ring 08', { axis: 'vertical', count: 15, distance: 20302, planeSize: 1566 }, E86),
-  variant(ring, 'ring-r09', 'Ring 09', { count: 15, distance: 23257, planeSize: 1566 }, E86),
-  variant(ring, 'ring-r10', 'Ring 10', { flipImage: 'on', distance: 0, planeSize: 4041, rotationY: 180, orbitRadius: 7235, perspective: 140 }, E86),
-  variant(ring, 'ring-r11', 'Ring 11', { flipImage: 'on', axis: 'vertical', distance: 0, rotationX: 180, rotationZ: 180, orbitRadius: 7587 }, E86),
-  variant(ring, 'ring-r12', 'Ring 12', { flipImage: 'on', count: 4, distance: 1511, planeSize: 3889, rotationY: 180, orbitRadius: 5934 }, E86),
-  variant(ring, 'ring-r13', 'Ring 13', { flipImage: 'on', axis: 'vertical', count: 4, distance: 1511, planeSize: 3889, rotationX: 180, rotationZ: 180, orbitRadius: 5934 }, E86),
-  variant(ring, 'ring-r14', 'Ring 14', { count: 4, cycles: 2, distance: 15683, planeSize: 7105, orbitRadius: 6556 }, E86),
-  variant(ring, 'ring-r15', 'Ring 15', { axis: 'vertical', count: 4, cycles: 2, distance: 15683, planeSize: 7105, orbitRadius: 6556 }, E86),
-  variant(ring, 'ring-r16', 'Ring 16', { axis: 'vertical', backface: 'hide', planeSize: 4460, orbitRadius: 12924 }, E86),
-  variant(ring, 'ring-r17', 'Ring 17', { count: 14, backface: 'hide', distance: 20384, planeSize: 4226, orbitRadius: 12924, perspective: 150 }, E86),
-  variant(ring, 'ring-r18', 'Ring 18', { axis: 'vertical', backface: 'hide', distance: 16706, planeSize: 4222, orbitRadius: 8662, perspective: 110 }, { id: 'custom', bezier: [0.33, 0, 0, 1] }),
-  variant(ring, 'ring-r19', 'Ring 19', { count: 16, offsetY: 5, surface: 'cylinder', distance: 20302, planeSize: 2478, rotationX: 20, rotationY: 230, rotationZ: 48, orbitRadius: 9047 }, LIN),
-  variant(ring, 'ring-r20', 'Ring 20', { count: 16, surface: 'cylinder', backface: 'hide', distance: 12909, planeSize: 2478, rotationY: 360, orbitRadius: 7073, perspective: 120 }, LIN),
-  variant(ring, 'ring-r21', 'Ring 21', { axis: 'vertical', surface: 'cylinder', distance: 16754, planeSize: 4222, orbitRadius: 8920 }, E86),
-  variant(ring, 'ring-r22', 'Ring 22', { flipImage: 'on', axis: 'vertical', surface: 'cylinder', distance: 7740, planeSize: 4222, rotationZ: 180, orbitRadius: 8920, perspective: 90 }, E86),
-  variant(ring, 'ring-r23', 'Ring 23', { flipImage: 'on', count: 16, surface: 'cylinder', distance: 4214, planeSize: 2478, rotationY: 360, orbitRadius: 7073, perspective: 120 }, LIN),
+  variant(ring, 'ring-r01', 'Ring 01', { axis: 'vertical', distance: 18770 }, E86), // 3D 02
+  variant(ring, 'ring-r02', 'Ring 02', { axis: 'vertical', count: 4, cycles: 2, distance: 15683, planeSize: 7940, orbitRadius: 5270 }, E86), // 3D 06
+  variant(ring, 'ring-r03', 'Ring 03', { offsetY: -3.5, rotationX: 12 }, LIN), // 3D 07
+  variant(ring, 'ring-r04', 'Ring 04', { axis: 'vertical', count: 15, distance: 20302, planeSize: 1566 }, E86), // 3D 08
+  variant(ring, 'ring-r05', 'Ring 05', { count: 15, distance: 23257, planeSize: 1566 }, E86), // 3D 09
+  variant(ring, 'ring-r06', 'Ring 06', { flipImage: 'on', distance: 0, planeSize: 4041, rotationY: 180, orbitRadius: 7235, perspective: 140 }, E86), // 3D 10
+  variant(ring, 'ring-r07', 'Ring 07', { flipImage: 'on', axis: 'vertical', distance: 0, rotationX: 180, rotationZ: 180, orbitRadius: 7587 }, E86), // 3D 11
+  variant(ring, 'ring-r08', 'Ring 08', { flipImage: 'on', count: 4, distance: 1511, planeSize: 3889, rotationY: 180, orbitRadius: 5934 }, E86), // 3D 12
+  variant(ring, 'ring-r09', 'Ring 09', { flipImage: 'on', axis: 'vertical', count: 4, distance: 1511, planeSize: 3889, rotationX: 180, rotationZ: 180, orbitRadius: 5934 }, E86), // 3D 13
+  variant(ring, 'ring-r10', 'Ring 10', { axis: 'vertical', count: 4, cycles: 2, distance: 15683, planeSize: 7105, orbitRadius: 6556 }, E86), // 3D 15
+  variant(ring, 'ring-r11', 'Ring 11', { axis: 'vertical', backface: 'hide', distance: 16706, planeSize: 4222, orbitRadius: 8662, perspective: 110 }, { id: 'custom', bezier: [0.33, 0, 0, 1] }), // 3D 18
+  variant(ring, 'ring-r12', 'Ring 12', { count: 16, offsetY: 5, surface: 'cylinder', distance: 20302, planeSize: 2478, rotationX: 20, rotationY: 230, rotationZ: 48, orbitRadius: 9047 }, LIN), // 3D 19
+  variant(ring, 'ring-r13', 'Ring 13', { axis: 'vertical', surface: 'cylinder', distance: 16754, planeSize: 4222, orbitRadius: 8920 }, E86), // 3D 21
+  variant(ring, 'ring-r14', 'Ring 14', { flipImage: 'on', axis: 'vertical', surface: 'cylinder', distance: 7740, planeSize: 4222, rotationZ: 180, orbitRadius: 8920, perspective: 90 }, E86), // 3D 22
+  variant(ring, 'ring-r15', 'Ring 15', { flipImage: 'on', count: 16, surface: 'cylinder', distance: 4214, planeSize: 2478, rotationY: 360, orbitRadius: 7073, perspective: 120 }, LIN), // 3D 23
 ];
-
 // Its five Carousel 3D presets. This branch runs the continuous time model, so
 // `cycles` and `cycleDeg` are what set the beat rather than the card count.
 export const carousel3dRefVariants: Template[] = [
