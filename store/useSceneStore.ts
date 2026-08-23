@@ -411,10 +411,37 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       const isRef2dPreset = ref2dDuration !== undefined;
       const wheelRefDuration = WHEEL_R_DURATION[id];
       const isWheelRefPreset = wheelRefDuration !== undefined;
+      // The reference's Globe: its continuous presets run one CYCLE per
+      // its own Duration, so the clip is duration * cycles; the stepped ones
+      // author the clip outright. Same reasoning as Pulse and Flip above.
+      const GLOBE_R_DURATION: Record<string, number> = {
+        'globe-r01': 7, 'globe-r02': 6, 'globe-r03': 15, 'globe-r04': 10,
+        'globe-r05': 10, 'globe-r06': 15, 'globe-r07': 15, 'globe-r08': 10,
+        'globe-r09': 10, 'globe-r10': 9, 'globe-r11': 15, 'globe-r12': 15,
+        'globe-r13': 15, 'globe-r14': 15, 'globe-r15': 12, 'globe-r16': 10,
+      };
+      const globeRefDuration = GLOBE_R_DURATION[id];
+      const isGlobeRefPreset = globeRefDuration !== undefined;
+      // The reference's one 3D scene, three of its branches. Coil and
+      // Carousel 3D run its continuous model, so their clip is
+      // duration * cycles; the Ring steps per CARD, so its Duration is what
+      // fixes the seconds per slot. Same reasoning as Spinner and Orbit 3D.
+      const REF_3D_DURATION: Record<string, number> = {
+        'coil-01': 10, 'coil-02': 10, 'coil-03': 10, 'coil-04': 15, 'coil-05': 12,
+        'coil-06': 12, 'coil-07': 20, 'coil-08': 15, 'coil-09': 24, 'ring-r01': 12.8,
+        'ring-r02': 12.8, 'ring-r03': 16, 'ring-r04': 16, 'ring-r05': 16, 'ring-r06': 16,
+        'ring-r07': 12.8, 'ring-r08': 15, 'ring-r09': 15, 'ring-r10': 12.8, 'ring-r11': 12.8,
+        'ring-r12': 12.8, 'ring-r13': 12.8, 'ring-r14': 16, 'ring-r15': 16, 'ring-r16': 12.8,
+        'ring-r17': 12.8, 'ring-r18': 12.8, 'ring-r19': 20, 'ring-r20': 20, 'ring-r21': 12.8,
+        'ring-r22': 12.8, 'ring-r23': 20, 'carousel3d-01': 8, 'carousel3d-02': 9,
+        'carousel3d-03': 8, 'carousel3d-04': 12, 'carousel3d-05': 20,
+      };
+      const ref3dDuration = REF_3D_DURATION[id];
+      const isRef3dPreset = ref3dDuration !== undefined;
       const referenceAspect = (isSpinnerPreset || isStickerPreset || isPosterPreset || isArcPreset) ? '4:5'
         : isOrbit3dPreset ? (ORBIT_3D_SQUARE.has(id) ? '1:1' : '4:5')
         : isWheelRefPreset ? '1:1'
-        : isRef2dPreset ? '3:4'
+        : isRef2dPreset || isGlobeRefPreset || isRef3dPreset ? '3:4'
         : null;
       const referenceCanvas = referenceAspect ? dimsFor(referenceAspect) : null;
       return {
@@ -435,7 +462,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         duration: isSpinnerPreset ? spinnerDuration : isStickerPreset ? stickerDuration : isPosterPreset ? posterDuration
           : isPulseRefPreset ? pulseDuration : isFlipPreset ? 12 : isOrbit3dPreset ? orbitDuration
           : isArcPreset ? arcDuration : isWheelRefPreset ? wheelRefDuration
-          : isRef2dPreset ? ref2dDuration : s.duration,
+          : isRef2dPreset ? ref2dDuration : isGlobeRefPreset ? globeRefDuration
+          : isRef3dPreset ? ref3dDuration : s.duration,
         ...((isSpinnerPreset || isStickerPreset || isPosterPreset) && !s.background.userSet ? {
           background: { ...s.background, source: 'color' as const, color: '#FFFFFF', gradient: false },
         } : {}),

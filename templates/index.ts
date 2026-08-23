@@ -15,6 +15,9 @@ import { fieldVariants } from './field';
 import { wipeVariants } from './wipe';
 import { wipeRevealVariants } from './wipeReveal';
 import { globeVariants } from './globe';
+import { globeRefVariants } from './globeRef';
+import { coilVariants } from './spiralRef';
+import { ringRefVariants, carousel3dRefVariants } from './ring3dRef';
 import { spiralVariants } from './spiral';
 import { spiralImagesVariants } from './spiralImages';
 import { tourVariants } from './tour';
@@ -90,6 +93,10 @@ export const templateList: Template[] = [
   ...flickerVariants,
   ...flickerRefVariants,
   ...globeVariants.slice(2),
+  ...globeRefVariants,
+  ...coilVariants,
+  ...ringRefVariants,
+  ...carousel3dRefVariants,
   ...spiralVariants,
   ...spiralImagesVariants,
   ...helix3dVariants.slice(1),
