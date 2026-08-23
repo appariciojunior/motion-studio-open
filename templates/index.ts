@@ -39,9 +39,11 @@ import { tickerVariants } from './ticker';
 import { isometricVariants } from './isometric';
 import { coverflowVariants } from './coverflow';
 import { deckVariants } from './deck';
+import { deckRefVariants } from './deckRef';
 import { rippleVariants } from './flipgrid';
 import { flipVariants } from './flip';
 import { magazineVariants } from './magazine';
+import { magazineSolidVariants } from './magazineSolid';
 import { boxVariants } from './box';
 import { surfaceVariants } from './surface';
 import { premium3dTemplates } from './premium3d';
@@ -118,8 +120,10 @@ export const templateList: Template[] = [
   ...isometricVariants,
   ...coverflowVariants,
   ...deckVariants,
+  ...deckRefVariants,
   ...flipVariants,
   ...magazineVariants,
+  ...magazineSolidVariants,
   ...rippleVariants,
   ...boxVariants,
 ];

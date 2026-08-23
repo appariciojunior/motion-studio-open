@@ -406,6 +406,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         'field-prox-01': 14.3, 'field-prox-02': 12, 'field-prox-03': 16,
         'field-prox-04': 15, 'field-prox-05': 14,
         'magazine-01': 10, 'magazine-02': 12, 'magazine-03': 10, 'magazine-04': 10,
+        'magazine-05': 10, 'magazine-06': 10, 'magazine-07': 8, 'magazine-08': 10, 'magazine-09': 10,
       };
       const ref2dDuration = REF_2D_DURATION[id];
       const isRef2dPreset = ref2dDuration !== undefined;
@@ -435,6 +436,9 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         'ring-r17': 12.8, 'ring-r18': 12.8, 'ring-r19': 20, 'ring-r20': 20, 'ring-r21': 12.8,
         'ring-r22': 12.8, 'ring-r23': 20, 'carousel3d-01': 8, 'carousel3d-02': 9,
         'carousel3d-03': 8, 'carousel3d-04': 12, 'carousel3d-05': 20,
+        'deck-r01': 7, 'deck-r02': 7, 'deck-r03': 7, 'deck-r04': 7, 'deck-r05': 10,
+        'deck-r06': 7, 'deck-r07': 7, 'deck-r08': 7, 'deck-r09': 10, 'deck-r10': 10,
+        'deck-r11': 10, 'deck-r12': 10,
       };
       const ref3dDuration = REF_3D_DURATION[id];
       const isRef3dPreset = ref3dDuration !== undefined;
