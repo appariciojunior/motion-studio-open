@@ -2,15 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { useSceneStore, ASPECTS } from '@/store/useSceneStore';
-import { ControlRow } from './Controls';
+import BackgroundPanel from './BackgroundPanel';
 
 const FPS_OPTIONS = [15, 25, 30, 60] as const;
-const BG_SOURCES: { id: 'color' | 'image' | 'card' | 'transparent'; label: string }[] = [
-  { id: 'color', label: 'Color' },
-  { id: 'image', label: 'Image' },
-  { id: 'card', label: 'From card' },
-  { id: 'transparent', label: 'Transparent' },
-];
 
 // Pixel input that commits on blur/Enter so half-typed values don't
 // resize the canvas mid-keystroke.
@@ -141,54 +135,7 @@ export default function CanvasPanel({ is3DMode = false }: { is3DMode?: boolean }
       <div className="hairline" />
       <div className="section-body" style={{ paddingTop: 4 }}>
         <Collapsible title="Background">
-          <div className="ctl-row">
-            <label className="ctl-label">Source</label>
-            <div className="pills bg-source-pills">
-              {BG_SOURCES.map((src) => (
-                <button key={src.id} className={`pill ${background.source === src.id ? 'active' : ''}`} onClick={() => setBackground({ source: src.id })}>{src.label}</button>
-              ))}
-            </div>
-          </div>
-
-          {background.source === 'color' && (
-            <>
-              <ControlRow def={{ key: 'bgc', label: 'Colour', type: 'color', default: '' }} value={background.color} onChange={(v) => setBackground({ color: v })} />
-              <div className="ctl-row">
-                <label className="ctl-label">Gradient</label>
-                <div className="segmented">
-                  <button className={`seg ${!background.gradient ? 'active' : ''}`} onClick={() => setBackground({ gradient: false })}>Off</button>
-                  <button className={`seg ${background.gradient ? 'active' : ''}`} onClick={() => setBackground({ gradient: true })}>On</button>
-                </div>
-              </div>
-              {background.gradient && (
-                <ControlRow def={{ key: 'bgc2', label: 'Colour 2', type: 'color', default: '' }} value={background.color2} onChange={(v) => setBackground({ color2: v })} />
-              )}
-            </>
-          )}
-
-          {background.source === 'image' && (
-            <>
-              <div className="ctl-row">
-                <label className="ctl-label">Image</label>
-                <label className="upload">
-                  <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) setBackground({ imageUrl: URL.createObjectURL(f) }); }} />
-                  <span>{background.imageUrl ? 'Replace…' : 'Upload…'}</span>
-                </label>
-              </div>
-              <ControlRow def={{ key: 'bgblur', label: 'Blur', type: 'slider', min: 0, max: 100, step: 1, default: 28 }} value={background.blur} onChange={(v) => setBackground({ blur: Number(v) })} />
-            </>
-          )}
-
-          {background.source === 'card' && (
-            <>
-              <div className="ctl-hint">Reflects the featured card — the background moves with the animation.</div>
-              <ControlRow def={{ key: 'bgblur', label: 'Blur', type: 'slider', min: 0, max: 100, step: 1, default: 28 }} value={background.blur} onChange={(v) => setBackground({ blur: Number(v) })} />
-            </>
-          )}
-
-          {background.source === 'transparent' && (
-            <div className="ctl-hint">The preview and WebM export preserve the transparent background.</div>
-          )}
+          <BackgroundPanel background={background} setBackground={setBackground} />
         </Collapsible>
 
         <Collapsible title="Logo">
