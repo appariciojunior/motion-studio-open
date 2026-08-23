@@ -41,15 +41,27 @@ export function refFocal(model: 'ring3d' | 'sphere' | 'spiral' | 'carousel3d', p
  * `distance` is a multiplier on the fov-derived fit distance, and the fit
  * distance IS the reference's focal length once the fov is set from it — so
  * the multiplier is just distance/focal.
+ *
+ * `reach` is how far the scene itself extends from the origin, in reference
+ * units, and it has to be stated: the renderer's default far plane is eight
+ * times the camera distance, and several of these presets park the camera AT
+ * the origin — Ring 10 and 11 at distance 0 — which puts the far plane 43
+ * units out and clips a 7235-unit ring away to nothing. Nothing rendered at
+ * all, and no assertion in the suite could see it.
  */
 export function refCamera(
   model: 'ring3d' | 'sphere' | 'spiral' | 'carousel3d',
-  perspective: number, distance: number, height: number,
+  perspective: number, distance: number, height: number, reach = 0,
 ) {
   const focal = refFocal(model, perspective, height);
+  const k = refScale(height);
   return {
     fov: (2 * Math.atan((REF_H / 2) / focal) * 180) / Math.PI,
     distance: Math.max(0.01, Math.abs(distance) / focal),
+    far: Math.max(2000, (Math.abs(distance) + reach) * k * 3),
+    // A far plane that big wants a near plane to match, or the depth buffer
+    // runs out of resolution between two cards a few units apart.
+    near: Math.max(0.1, (Math.max(2000, (Math.abs(distance) + reach) * k * 3)) / 50000),
   };
 }
 

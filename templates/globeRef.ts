@@ -2,8 +2,8 @@ import type { Template } from '@/lib/types';
 import { clamp } from '@/lib/motion';
 import { variant } from './variant';
 import {
-  REF_H, refCamera, refDepthDim, refFocal, refScale, refSpinRadians, refStopIndex,
-  radialQuat, rotateVec, mulQuat, eulerQuat, slerp, conjugate, quatFromBasis,
+  refCamera, refDepthDim, refFocal, refScale, refSpinRadians, refStopIndex,
+  radialQuat, rotateVec, mulQuat, eulerQuat, slerp, conjugate,
   type Quat, type Vec3,
 } from './refScene3d';
 
@@ -40,8 +40,10 @@ const DEG = Math.PI / 180;
 //    those cards by a golden-ratio stride through the count so consecutive
 //    stops land on opposite sides.
 //
-//  Not carried over: `flipImage`, which mirrors the texture. A pose cannot say
-//  that and only Globe 06 asks for it.
+//  `flipImage` is legibility, not decoration: Sphere 06 puts the camera at the
+//  globe's own centre, where every card is seen from behind and reads mirrored.
+//  A pose cannot mirror a texture, but a plane turned a half turn about its own
+//  vertical axis IS its mirror — what you then see is its reverse.
 // ============================================================
 
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
@@ -90,6 +92,7 @@ const globeRef: Template = {
     { key: 'fade',           label: 'Fade',           type: 'slider', min: 0, max: 100, step: 1,        default: 0, unit: '%', section: 'Depth', description: 'Darken the far side toward the background.' },
     { key: 'backface',       label: 'Backface',       type: 'pills',  options: ['show','hide'],         default: 'show', section: 'Depth' },
     { key: 'autoFaceCamera', label: 'Face Camera',    type: 'toggle', options: ['on','off'],            default: 'on', section: 'Layout', description: 'on billboards every card; off lays them flat on the sphere.' },
+    { key: 'flipImage',      label: 'Mirror',         type: 'toggle', options: ['off','on'],            default: 'off', section: 'Layout', description: 'Show every card\u2019s reverse \u2014 what the globe needs when the camera is inside it.' },
     { key: 'distance',       label: 'Distance',       type: 'slider', min: 0, max: 6000, step: 50,      default: 1000, section: 'Depth' },
     { key: 'perspective',    label: 'Perspective',    type: 'slider', min: 10, max: 300, step: 5,       default: 100, section: 'Depth', description: 'Lens width. Lower is wider; the camera does not move.' },
     { key: 'roll',           label: 'Roll',           type: 'slider', min: -180, max: 180, step: 1,     default: 0, unit: '°', section: 'Layout', description: 'Tip the whole globe about the view axis.' },
@@ -116,7 +119,7 @@ const globeRef: Template = {
     };
   },
 
-  camera: (v, ctx) => refCamera('sphere', v.perspective, v.distance, ctx.height),
+  camera: (v, ctx) => refCamera('sphere', v.perspective, v.distance, ctx.height, v.radius + 1000),
 };
 
 function globePose(
@@ -183,7 +186,9 @@ function globePose(
   const screenPx = 1000 * size * k;
   const scale = (screenPx / (BASE * aspect)) * (depth / focal);
 
-  const quat = radial ? mulQuat(total, radialQuat(d)) : { x: 0, y: 0, z: 0, w: 1 };
+  const half: Quat = { x: 0, y: 1, z: 0, w: 0 };
+  const facing: Quat = radial ? mulQuat(total, radialQuat(d)) : { x: 0, y: 0, z: 0, w: 1 };
+  const quat = v.flipImage === 'on' ? mulQuat(facing, half) : facing;
 
   // The 2D fallback has no camera. Its card size is already screen-space, so
   // only the placement needs the depth division.
@@ -229,7 +234,7 @@ export const globeRefVariants: Template[] = [
   }, LINEAR),
   // Its camera sits INSIDE this one — distance 0 against a 505 radius.
   variant(globeRef, 'globe-r06', 'Sphere 06', {
-    count: 60, radius: 505, minScale: 7, maxScale: 12, distance: 0,
+    flipImage: 'on', count: 60, radius: 505, minScale: 7, maxScale: 12, distance: 0,
     direction: 'reverse', perspective: 145, autoFaceCamera: 'off',
   }, LINEAR),
   variant(globeRef, 'globe-r07', 'Sphere 07', {

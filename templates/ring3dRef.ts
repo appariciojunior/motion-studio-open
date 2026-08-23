@@ -41,10 +41,20 @@ const DEG = Math.PI / 180;
 //    roll for, that is folded into the placement: the same picture is the ring
 //    mirrored in z with its cards turned the other way.
 //
-//  Not carried over: `flipImage`, a texture mirror no pose can state; and its
-//  lens shift, which is a projection-matrix offset — the small `offsetX/Y` two
-//  presets use land here as a plain screen nudge instead.
+//  · `flipImage` is legibility on this family, not decoration. Six of its
+//    presets put the camera INSIDE the ring, where every card is seen from
+//    behind and reads mirrored, and the flag mirrors the texture to put it
+//    back. A pose cannot mirror a texture — but a plane turned a half turn
+//    about its own vertical axis IS its mirror, because what you then see is
+//    its reverse. That is what this does, with the cylinder bow negated so
+//    its belly keeps pointing the same way.
+//
+//  Not carried over: its lens shift, a projection-matrix offset. The small
+//  `offsetX/Y` two presets use land here as a plain screen nudge instead.
 // ============================================================
+
+/** A half turn about a card's own vertical axis: its mirror, geometrically. */
+const HALF_TURN: Quat = { x: 0, y: 1, z: 0, w: 0 };
 
 type RingKind = 'ring' | 'carousel';
 
@@ -99,8 +109,11 @@ function ringPose(
     face = eulerQuat(0, c, 0);
   }
 
+  // A half turn about the card's own vertical axis shows its reverse, which is
+  // the same picture mirrored — the reference's `flipImage`.
+  const flipped = v.flipImage === 'on';
   const world = rotateVec(local, total);
-  const quat = mulQuat(total, face);
+  const quat = mulQuat(total, flipped ? mulQuat(face, HALF_TURN) : face);
 
   const gone = { x: 0, y: 0, z: 0, quat: { x: 0, y: 0, z: 0, w: 1 } as Quat, scale: 0, project: 1, alpha: 0, dim: 0, depth: -1, bend: 0 };
   const depth = camZ - world.z;
@@ -122,7 +135,7 @@ function ringPose(
   // sign puts the belly of the card AWAY from the ring's centre, i.e. toward
   // whoever is outside it.
   const bend = v.surface === 'cylinder'
-    ? -clamp(v.planeSize / (8 * radius), 0, 0.45)
+    ? (flipped ? 1 : -1) * clamp(v.planeSize / (8 * radius), 0, 0.45)
     : 0;
 
   // The 3D renderer divides by depth itself; the 2D fallback the thumbnails and
@@ -169,7 +182,8 @@ const ring: Template = {
   controls: [
     { key: 'axis', label: 'Axis', type: 'pills', options: ['horizontal','vertical'], default: 'horizontal', section: 'Motion' },
     ...SHARED_CONTROLS,
-    { key: 'surface',  label: 'Surface',  type: 'pills', options: ['flat','cylinder'], default: 'flat', section: 'Layout', description: 'cylinder bends each card onto the ring it rides.' },
+    { key: 'surface',   label: 'Surface',   type: 'pills',  options: ['flat','cylinder'], default: 'flat', section: 'Layout', description: 'cylinder bends each card onto the ring it rides.' },
+    { key: 'flipImage', label: 'Mirror',    type: 'toggle', options: ['off','on'],        default: 'off', section: 'Layout', description: 'Show every card\u2019s reverse. What a ring filmed from the inside needs, or its images read backwards.' },
     { key: 'backface', label: 'Backface', type: 'pills', options: ['show','hide'],     default: 'show', section: 'Depth' },
     { key: 'cycleDeg', label: 'Cycle Turn', type: 'slider', min: 15, max: 360, step: 15, default: 360, unit: '°', section: 'Motion', advanced: true },
   ],
@@ -178,7 +192,7 @@ const ring: Template = {
     const p = ringPose('ring', frame, index, count, v, ctx);
     return { x: p.x, y: p.y, z: p.z, quaternion: p.quat, bend: p.bend, scale: p.scale, alpha: p.alpha, dim: p.dim };
   },
-  camera: (v, ctx) => refCamera('ring3d', v.perspective, v.distance, ctx.height),
+  camera: (v, ctx) => refCamera('ring3d', v.perspective, v.distance, ctx.height, v.orbitRadius + v.planeSize),
 };
 
 const carousel3d: Template = {
@@ -198,6 +212,7 @@ const carousel3d: Template = {
                   : c.key === 'rotationY' ? { ...c, default: 38 }
                     : c
     )),
+    { key: 'flipImage', label: 'Mirror', type: 'toggle', options: ['off','on'], default: 'off', section: 'Layout' },
     { key: 'cycleDeg', label: 'Cycle Turn', type: 'slider', min: 15, max: 360, step: 15, default: 360, unit: '°', section: 'Motion' },
   ],
   transform: (frame, index, count, v, ctx) => flatFallback(ringPose('carousel', frame, index, count, v, ctx), ctx, BASE),
@@ -205,7 +220,7 @@ const carousel3d: Template = {
     const p = ringPose('carousel', frame, index, count, v, ctx);
     return { x: p.x, y: p.y, z: p.z, quaternion: p.quat, scale: p.scale, alpha: p.alpha, dim: p.dim };
   },
-  camera: (v, ctx) => refCamera('carousel3d', v.perspective, v.distance, ctx.height),
+  camera: (v, ctx) => refCamera('carousel3d', v.perspective, v.distance, ctx.height, v.orbitRadius + v.planeSize),
 };
 
 const E86 = { id: 'custom' as const, bezier: [0.86, 0.14, 0.14, 0.86] as [number, number, number, number] };
@@ -225,10 +240,10 @@ export const ringRefVariants: Template[] = [
   variant(ring, 'ring-r07', 'Ring 07', { offsetY: -3.5, rotationX: 12 }, LIN),
   variant(ring, 'ring-r08', 'Ring 08', { axis: 'vertical', count: 15, distance: 20302, planeSize: 1566 }, E86),
   variant(ring, 'ring-r09', 'Ring 09', { count: 15, distance: 23257, planeSize: 1566 }, E86),
-  variant(ring, 'ring-r10', 'Ring 10', { distance: 0, planeSize: 4041, rotationY: 180, orbitRadius: 7235, perspective: 140 }, E86),
-  variant(ring, 'ring-r11', 'Ring 11', { axis: 'vertical', distance: 0, rotationX: 180, rotationZ: 180, orbitRadius: 7587 }, E86),
-  variant(ring, 'ring-r12', 'Ring 12', { count: 4, distance: 1511, planeSize: 3889, rotationY: 180, orbitRadius: 5934 }, E86),
-  variant(ring, 'ring-r13', 'Ring 13', { axis: 'vertical', count: 4, distance: 1511, planeSize: 3889, rotationX: 180, rotationZ: 180, orbitRadius: 5934 }, E86),
+  variant(ring, 'ring-r10', 'Ring 10', { flipImage: 'on', distance: 0, planeSize: 4041, rotationY: 180, orbitRadius: 7235, perspective: 140 }, E86),
+  variant(ring, 'ring-r11', 'Ring 11', { flipImage: 'on', axis: 'vertical', distance: 0, rotationX: 180, rotationZ: 180, orbitRadius: 7587 }, E86),
+  variant(ring, 'ring-r12', 'Ring 12', { flipImage: 'on', count: 4, distance: 1511, planeSize: 3889, rotationY: 180, orbitRadius: 5934 }, E86),
+  variant(ring, 'ring-r13', 'Ring 13', { flipImage: 'on', axis: 'vertical', count: 4, distance: 1511, planeSize: 3889, rotationX: 180, rotationZ: 180, orbitRadius: 5934 }, E86),
   variant(ring, 'ring-r14', 'Ring 14', { count: 4, cycles: 2, distance: 15683, planeSize: 7105, orbitRadius: 6556 }, E86),
   variant(ring, 'ring-r15', 'Ring 15', { axis: 'vertical', count: 4, cycles: 2, distance: 15683, planeSize: 7105, orbitRadius: 6556 }, E86),
   variant(ring, 'ring-r16', 'Ring 16', { axis: 'vertical', backface: 'hide', planeSize: 4460, orbitRadius: 12924 }, E86),
@@ -237,8 +252,8 @@ export const ringRefVariants: Template[] = [
   variant(ring, 'ring-r19', 'Ring 19', { count: 16, offsetY: 5, surface: 'cylinder', distance: 20302, planeSize: 2478, rotationX: 20, rotationY: 230, rotationZ: 48, orbitRadius: 9047 }, LIN),
   variant(ring, 'ring-r20', 'Ring 20', { count: 16, surface: 'cylinder', backface: 'hide', distance: 12909, planeSize: 2478, rotationY: 360, orbitRadius: 7073, perspective: 120 }, LIN),
   variant(ring, 'ring-r21', 'Ring 21', { axis: 'vertical', surface: 'cylinder', distance: 16754, planeSize: 4222, orbitRadius: 8920 }, E86),
-  variant(ring, 'ring-r22', 'Ring 22', { axis: 'vertical', surface: 'cylinder', distance: 7740, planeSize: 4222, rotationZ: 180, orbitRadius: 8920, perspective: 90 }, E86),
-  variant(ring, 'ring-r23', 'Ring 23', { count: 16, surface: 'cylinder', distance: 4214, planeSize: 2478, rotationY: 360, orbitRadius: 7073, perspective: 120 }, LIN),
+  variant(ring, 'ring-r22', 'Ring 22', { flipImage: 'on', axis: 'vertical', surface: 'cylinder', distance: 7740, planeSize: 4222, rotationZ: 180, orbitRadius: 8920, perspective: 90 }, E86),
+  variant(ring, 'ring-r23', 'Ring 23', { flipImage: 'on', count: 16, surface: 'cylinder', distance: 4214, planeSize: 2478, rotationY: 360, orbitRadius: 7073, perspective: 120 }, LIN),
 ];
 
 // Its five Carousel 3D presets. This branch runs the continuous time model, so

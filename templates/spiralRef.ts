@@ -30,6 +30,9 @@ const DEG = Math.PI / 180;
 //    the camera alone and tipping the whole coil a quarter turn, which is what
 //    happens here — a camera pointing straight down has no defined roll for
 //    `lookAt` to resolve.
+//  · `flipImage` shows every card its reverse. Coil 09 needs it: filmed from
+//    overhead and from inside, its cards read mirrored otherwise, and a plane
+//    turned a half turn about its own vertical axis IS that mirror.
 //  · `wobble` tips the rig itself by up to 0.6 rad, in step with the spin, so
 //    the coil nutates like a spun top.
 // ============================================================
@@ -61,6 +64,7 @@ const coil: Template = {
     { key: 'height',         label: 'Height',        type: 'slider', min: 500, max: 9000, step: 50,  default: 5000, section: 'Layout' },
     { key: 'planeSize',      label: 'Plane Size',    type: 'slider', min: 30, max: 900, step: 5,     default: 250, section: 'Layout' },
     { key: 'autoFaceCamera', label: 'Face Camera',   type: 'toggle', options: ['on','off'],          default: 'on', section: 'Layout' },
+    { key: 'flipImage',      label: 'Mirror',        type: 'toggle', options: ['off','on'],          default: 'off', section: 'Layout', description: 'Show every card\u2019s reverse \u2014 what a coil filmed from the inside needs.' },
     { key: 'cameraView',     label: 'View',          type: 'pills',  options: ['side','down'],       default: 'side', section: 'Depth', description: 'down films the coil from directly above.' },
     { key: 'wobble',         label: 'Wobble',        type: 'slider', min: 0, max: 100, step: 1,      default: 0, unit: '%', section: 'Motion', description: 'Nutate the whole coil in step with its spin.' },
     { key: 'fade',           label: 'Fade',          type: 'slider', min: 0, max: 100, step: 1,      default: 0, unit: '%', section: 'Depth' },
@@ -79,7 +83,10 @@ const coil: Template = {
     return { x: p.x, y: p.y, z: p.z, quaternion: p.quat, scale: p.scale, alpha: p.alpha, dim: p.dim };
   },
 
-  camera: (v, ctx) => refCamera('spiral', v.perspective, v.distance, ctx.height),
+  camera: (v, ctx) => refCamera(
+    'spiral', v.perspective, v.distance, ctx.height,
+    Math.max(v.radius, v.height / 2) + v.planeSize,
+  ),
 };
 
 function coilPose(
@@ -112,7 +119,11 @@ function coilPose(
   const depth = camZ - world.z;
   if (depth <= 1) return gone;
 
-  let quat: Quat = { x: 0, y: 0, z: 0, w: 1 };
+  // A half turn about the card's own vertical axis shows its reverse, which is
+  // the same picture mirrored — the reference's `flipImage`.
+  const half: Quat = { x: 0, y: 1, z: 0, w: 0 };
+  const mirror = v.flipImage === 'on';
+  let quat: Quat = mirror ? half : { x: 0, y: 0, z: 0, w: 1 };
   if (v.autoFaceCamera === 'off') {
     // Outward from the axis, top still up — the reference aims each card at
     // twice its own radius, which is the same direction.
@@ -123,7 +134,8 @@ function coilPose(
     const zAxis = { x: nx.x / len, y: 0, z: nx.z / len };
     const xAxis = { x: zAxis.z, y: 0, z: -zAxis.x };
     const yAxis = { x: 0, y: 1, z: 0 };
-    quat = mulQuat(total, quatFromBasis(xAxis, yAxis, zAxis));
+    const facing = quatFromBasis(xAxis, yAxis, zAxis);
+    quat = mulQuat(total, mirror ? mulQuat(facing, half) : facing);
   }
 
   const aspect = Math.max(0.05, ctx.cardAspect ?? 3 / 4);
@@ -181,7 +193,7 @@ export const coilVariants: Template[] = [
     count: 73, turns: 2, radius: 1535, planeSize: 170, distance: 3450, cameraView: 'down',
   }, LINEAR),
   variant(coil, 'coil-09', 'Coil 09', {
-    count: 53, turns: 10, radius: 3000, planeSize: 810, cycles: 12, cycleDeg: 60,
+    flipImage: 'on', count: 53, turns: 10, radius: 3000, planeSize: 810, cycles: 12, cycleDeg: 60,
     distance: 4650, direction: 'reverse', cameraView: 'down',
     perspective: 140, autoFaceCamera: 'off',
   }, { id: 'custom', bezier: [0.8, 0.27, 0.2, 0.75] }),

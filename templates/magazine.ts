@@ -179,12 +179,13 @@ const magazine: Template = {
   transform: (frame, index, count, v, ctx) => {
     const p = pose(frame, index, v, ctx);
     // The 2D fallback (thumbnails, the pixi path) gets the same pose flattened:
-    // the turn becomes a horizontal squash about the spine, which is what a
-    // page turn looks like once the bow and the depth are gone.
+    // projected by hand, since there is no camera on that path, and with the
+    // turn as a horizontal squash about the spine — which is what a page turn
+    // looks like once the bow and the depth are gone.
     return {
-      x: p.x,
-      y: p.y,
-      scale: p.scale,
+      x: p.x * p.project,
+      y: p.y * p.project,
+      scale: p.scale * p.project,
       rotation: 0,
       alpha: p.alpha,
       scaleX: Math.abs(Math.cos(p.turn * DEG)),
@@ -240,7 +241,7 @@ function pose(frame: number, index: number, v: Record<string, any>, ctx: Ctx) {
   const full = v.style === 'full';
 
   const gone = (turn: number) =>
-    ({ x: 0, y: 0, z: 0, rotY: 0, bend: 0, dim: 0, scale: 0, alpha: 0, depth: -1, turn });
+    ({ x: 0, y: 0, z: 0, rotY: 0, bend: 0, dim: 0, scale: 0, project: 1, alpha: 0, depth: -1, turn });
   if (sheet >= n) return gone(0);
 
   const clip = Math.max(0.5, ctx.duration);
@@ -299,6 +300,11 @@ function pose(frame: number, index: number, v: Record<string, any>, ctx: Ctx) {
     x: cx + v.offset.x,
     y: v.offset.y,
     z: cz,
+    // The 3D renderer divides by depth; the flat pose the thumbnails draw does
+    // not, and this book sits 2000 units back — without this a thumbnail
+    // showed its spread at 2.4x the frame. With it, the left page lands on
+    // x=338 and the right on x=742, which is the reference's own pixel.
+    project: lens / Math.max(1, dolly - cz),
     // The back face is the same sheet stated from behind: turned a further half
     // turn so its own front points the other way, with the bow flipped to match.
     rotY: -turn * DEG + (isBack ? Math.PI : 0),

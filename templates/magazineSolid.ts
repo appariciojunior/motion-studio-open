@@ -1,10 +1,16 @@
 import type { Template } from '@/lib/types';
 import { clamp } from '@/lib/motion';
 import { variant } from './variant';
-import { flatFallback, refCamera, refFocal, refScale, mulQuat, eulerQuat, refSpinRadians } from './refScene3d';
+import {
+  flatFallback, refCamera, refFocal, refScale, mulQuat, eulerQuat, refSpinRadians, rotateVec,
+  type Quat,
+} from './refScene3d';
 
 const BASE = 340;
 const DEG = Math.PI / 180;
+
+/** A half turn about the solid's own vertical axis: front cover to back cover. */
+const HALF_TURN: Quat = { x: 0, y: 1, z: 0, w: 0 };
 
 // ============================================================
 //  MAGAZINE 05-09 — the shut magazine, turning on the spot
@@ -25,12 +31,13 @@ const DEG = Math.PI / 180;
 //    pitch/yaw/roll sit outside that on the rig — which is what makes 06 and 07
 //    read as a magazine held at an angle rather than one on a turntable.
 //
-//  Not carried over, and worth knowing before reaching for these: the reference
-//  paints FOUR different faces — cover, spine, back cover, and a generated
-//  page-edge texture on the fore-edge. A pose carries one texture and the
-//  renderer paints the sides from it, so here the cover image wraps the solid
-//  instead. The silhouette, the turn and the lighting are the reference's; the
-//  spine artwork is not.
+//  The reference paints FOUR faces — cover, spine, back cover, and a generated
+//  page-edge texture on the fore-edge. A pose carries one texture, and these
+//  presets turn a full half or whole revolution, so a single solid spends half
+//  the loop showing an unpainted back. Two solids fix it: the same box twice,
+//  the second turned to face the other way with the next image on it, and each
+//  drawn only while its own cover points at the camera. The spine and the
+//  fore-edge are still the cover's colours — that part does not carry over.
 // ============================================================
 
 function bookPose(
@@ -40,10 +47,18 @@ function bookPose(
   const k = refScale(ctx.height);
   const dir = v.direction === 'reverse' ? -1 : 1;
   const spin = dir * refSpinRadians('continuous', frame, ctx.totalFrames, ctx.easedPhase, 1, v.cycles, v.cycleDeg);
-  const quat = mulQuat(
+  const rig = mulQuat(
     eulerQuat(v.rotationX * DEG, v.rotationY * DEG, v.rotationZ * DEG),
     eulerQuat(0, spin, 0),
   );
+  // Layer 1 is the same solid turned to face the other way, so its own cover
+  // image becomes the magazine's back cover.
+  const isBack = index % 2 === 1;
+  const quat = isBack ? mulQuat(rig, HALF_TURN) : rig;
+  // Only the one whose cover points at the camera is drawn; the other would be
+  // inside it.
+  const facing = rotateVec({ x: 0, y: 0, z: 1 }, quat).z;
+  if (facing < 0) return { x: 0, y: 0, z: 0, quat, scale: 0, project: 1, alpha: 0, dim: 0, depth: -1 };
 
   const camZ = Math.abs(v.distance);
   const depth = Math.max(1, camZ);
@@ -86,7 +101,8 @@ const magazineSolid: Template = {
     { key: 'offsetY',        label: 'Shift Y',       type: 'slider', min: -50, max: 50, step: 0.5,   default: 0, unit: '%', precision: 1, section: 'Layout' },
   ],
 
-  layerCount: () => 1,
+  // One solid for the cover, one for the back cover.
+  layerCount: () => 2,
 
   transform: (frame, index, count, v, ctx) => flatFallback(bookPose(frame, index, v, ctx), ctx, BASE),
 
@@ -105,7 +121,7 @@ const magazineSolid: Template = {
     };
   },
 
-  camera: (v, ctx) => refCamera('ring3d', v.perspective, v.distance, ctx.height),
+  camera: (v, ctx) => refCamera('ring3d', v.perspective, v.distance, ctx.height, v.planeSize),
 };
 
 const E86 = { id: 'custom' as const, bezier: [0.86, 0.14, 0.14, 0.86] as [number, number, number, number] };

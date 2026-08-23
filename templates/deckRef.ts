@@ -160,7 +160,7 @@ const deckRef: Template = {
     return { x: p.x, y: p.y, z: p.z, quaternion: p.quat, scale: p.scale, alpha: p.alpha, dim: p.dim };
   },
 
-  camera: (v, ctx) => refCamera('ring3d', v.perspective, v.distance, ctx.height),
+  camera: (v, ctx) => refCamera('ring3d', v.perspective, v.distance, ctx.height, v.planeSize),
 };
 
 const E86 = { id: 'custom' as const, bezier: [0.86, 0.14, 0.14, 0.86] as [number, number, number, number] };
