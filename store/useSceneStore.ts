@@ -395,11 +395,25 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       const WHEEL_R_DURATION: Record<string, number> = {
         'wheel-r01': 20, 'wheel-r02': 12, 'wheel-r03': 12, 'wheel-r04': 10, 'wheel-r05': 12,
       };
+      // Revolve and Proximity, the reference's Spin and Proximity families.
+      // Both author their cadence as a CLIP LENGTH: Revolve turns 180 degrees
+      // every duration/count seconds, and Proximity walks its whole path once
+      // per duration. Left at whatever the previous template used, Revolve's
+      // step lands on the wrong beat and Proximity laps its tour at the wrong
+      // speed — the same reason Pulse and Flip are pinned above.
+      const REF_2D_DURATION: Record<string, number> = {
+        'revolve-01': 8, 'revolve-02': 7, 'revolve-03': 12, 'revolve-04': 10,
+        'field-prox-01': 14.3, 'field-prox-02': 12, 'field-prox-03': 16,
+        'field-prox-04': 15, 'field-prox-05': 14,
+      };
+      const ref2dDuration = REF_2D_DURATION[id];
+      const isRef2dPreset = ref2dDuration !== undefined;
       const wheelRefDuration = WHEEL_R_DURATION[id];
       const isWheelRefPreset = wheelRefDuration !== undefined;
       const referenceAspect = (isSpinnerPreset || isStickerPreset || isPosterPreset || isArcPreset) ? '4:5'
         : isOrbit3dPreset ? (ORBIT_3D_SQUARE.has(id) ? '1:1' : '4:5')
         : isWheelRefPreset ? '1:1'
+        : isRef2dPreset ? '3:4'
         : null;
       const referenceCanvas = referenceAspect ? dimsFor(referenceAspect) : null;
       return {
@@ -419,7 +433,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         cardShape: group === 'Spinner' || isOrbit3dPreset || isArcPreset || isWheelRefPreset ? 'auto' : isStickerPreset ? '1:1' : isPosterPreset ? '4:5' : s.cardShape,
         duration: isSpinnerPreset ? spinnerDuration : isStickerPreset ? stickerDuration : isPosterPreset ? posterDuration
           : isPulseRefPreset ? pulseDuration : isFlipPreset ? 12 : isOrbit3dPreset ? orbitDuration
-          : isArcPreset ? arcDuration : isWheelRefPreset ? wheelRefDuration : s.duration,
+          : isArcPreset ? arcDuration : isWheelRefPreset ? wheelRefDuration
+          : isRef2dPreset ? ref2dDuration : s.duration,
         ...((isSpinnerPreset || isStickerPreset || isPosterPreset) && !s.background.userSet ? {
           background: { ...s.background, source: 'color' as const, color: '#FFFFFF', gradient: false },
         } : {}),

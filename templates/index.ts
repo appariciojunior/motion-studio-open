@@ -7,6 +7,7 @@ import { arcVariants } from './arc';
 import { orbitVariants } from './orbit';
 import { orbit3dVariants } from './orbit3d';
 import { spinVariants } from './spin';
+import { revolveVariants } from './revolve';
 import { stackVariants } from './stack';
 import { storiesVariants } from './stories';
 import { flickerVariants, flickerRefVariants } from './flicker';
@@ -21,6 +22,7 @@ import { gravityVariants } from './gravity';
 import { parallaxVariants } from './parallax';
 import { scaleVariants } from './scale';
 import { proximityVariants } from './proximity';
+import { proximityFieldVariants } from './proximityField';
 import { storiesFocusVariants } from './storiesFocus';
 import { zoomVariants } from './zoom';
 import { bloomVariants } from './bloom';
@@ -75,6 +77,7 @@ export const templateList: Template[] = [
   ...orbit3dVariants,
   ...showcaseVariants.slice(1),
   ...spinVariants,
+  ...revolveVariants,
   ...stackVariants,
   ...wheelVariants,
   ...wheelEllipseVariants,
@@ -97,6 +100,7 @@ export const templateList: Template[] = [
   ...zoomVariants,
   ...bloomVariants,
   ...proximityVariants,
+  ...proximityFieldVariants,
   ...revealVariants,
   ...framesVariants,
   ...gridVariants,
