@@ -38,6 +38,7 @@ import { coverflowVariants } from './coverflow';
 import { deckVariants } from './deck';
 import { rippleVariants } from './flipgrid';
 import { flipVariants } from './flip';
+import { magazineVariants } from './magazine';
 import { boxVariants } from './box';
 import { surfaceVariants } from './surface';
 import { premium3dTemplates } from './premium3d';
@@ -111,6 +112,7 @@ export const templateList: Template[] = [
   ...coverflowVariants,
   ...deckVariants,
   ...flipVariants,
+  ...magazineVariants,
   ...rippleVariants,
   ...boxVariants,
 ];

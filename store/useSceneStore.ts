@@ -405,6 +405,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         'revolve-01': 8, 'revolve-02': 7, 'revolve-03': 12, 'revolve-04': 10,
         'field-prox-01': 14.3, 'field-prox-02': 12, 'field-prox-03': 16,
         'field-prox-04': 15, 'field-prox-05': 14,
+        'magazine-01': 10, 'magazine-02': 12, 'magazine-03': 10, 'magazine-04': 10,
       };
       const ref2dDuration = REF_2D_DURATION[id];
       const isRef2dPreset = ref2dDuration !== undefined;
