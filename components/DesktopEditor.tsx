@@ -117,7 +117,14 @@ export default function DesktopEditor() {
       </section>
 
       <footer className="card bottom">
-        <Timeline showExport={!isWeb && !isBoard} extra={isWeb ? <WebSourceBar /> : isBoard ? <BoardExportBar /> : undefined} />
+        <Timeline
+          showExport={!isWeb && !isBoard}
+          // Mockup is a single persisted 3D studio. Its renderer never consumes
+          // the Library's motion-track stack, so exposing Add layer here created
+          // an invisible parallax track in the wrong document.
+          showLayers={!isMockup}
+          extra={isWeb ? <WebSourceBar /> : isBoard ? <BoardExportBar /> : undefined}
+        />
       </footer>
 
       {isWeb && codeOpen && <WebCodeModal />}

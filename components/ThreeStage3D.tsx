@@ -216,7 +216,9 @@ export default function ThreeStage3D({ effectId: forcedEffectId }: { effectId?: 
         {has('enableMask') && isOn(p.enableMask) && <div className="three3d-lens three3d-mask" />}
         {has('dotGrid') && isOn(p.dotGrid) && <div className="three3d-lens three3d-dotgrid" />}
 
-        {rig && <ViewGizmo rig={rig} />}
+        {/* Mockup uses a product-shot camera and does not expose camera-axis
+            editing. Keep the orientation gizmo in the generic 3D editor only. */}
+        {rig && effectId !== 'mockup' && <ViewGizmo rig={rig} />}
       </div>
     </div>
   );
