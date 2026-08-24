@@ -174,7 +174,8 @@ export interface SceneState {
 
   // persistence (see lib/scenePersist)
   hydrate: (partial: Partial<SceneState>) => void;   // apply a loaded scene
-  resetScene: () => void;                            // back to defaults (new project)
+  resetScene: () => void;                            // back to the app defaults (demo scene)
+  blankScene: () => void;                            // back to defaults with NO layers (new project)
   rehydrateUploads: () => Promise<void>;             // rebuild upload urls from IndexedDB
 
   loadCustomPresets: () => void;
@@ -239,6 +240,14 @@ export function makeTrack(templateId: string, name: string, patch: Partial<Motio
 // track — the invariant 3D/web/board/persist depend on.
 function projectActive(tracks: MotionTrack[], activeTrackId: string) {
   const active = tracks.find((t) => t.id === activeTrackId) ?? tracks[0];
+  // A scene with NO layers is a real state: a new project starts blank so the
+  // first template is chosen rather than inherited. Nothing downstream needs a
+  // stand-in track — the renderer's forEach over an empty list draws just the
+  // background, getTemplate('') falls back on its own, and setActiveTemplate
+  // turns the first pick into the first layer.
+  if (!active) {
+    return { tracks, activeTrackId: '', activeTemplateId: '', values: {}, easing: easingFor('') };
+  }
   return {
     tracks,
     activeTrackId: active.id,
@@ -271,6 +280,22 @@ const initDims = dimsFor('3:4');
  * and hearted templates are a user-wide library, not per-project, so creating a
  * project must not wipe them.
  */
+/**
+ * What an explicitly CREATED project starts from: the same canvas, assets and
+ * clock as `initialSceneState`, with no layers at all.
+ *
+ * A new project used to open on the app's default template (`carousel`, which
+ * the UI calls "Runway") with the demo set already animating — so every new
+ * project was a copy of the last one and the list read as two of the same thing.
+ * Blank means the first template pick is the user's.
+ *
+ * First run still gets the demo scene: the store's own defaults are what boots,
+ * and a first-time visitor with an empty stage would have nothing to look at.
+ */
+export function blankSceneState() {
+  return { ...initialSceneState(), ...projectActive([], '') };
+}
+
 function initialSceneState() {
   const tracks = [makeTrack(INITIAL_TEMPLATE, 'Layer 1')];
   return {
@@ -402,8 +427,14 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         : isWheelRefPreset ? '1:1'
         : null;
       const referenceCanvas = referenceAspect ? dimsFor(referenceAspect) : null;
+      // A blank scene has no track to patch, so the first pick BECOMES Layer 1.
+      // Without this the click would land on nothing and picking a template in a
+      // new project would look broken.
+      const layers = s.tracks.length === 0
+        ? (() => { const first = makeTrack(id, 'Layer 1'); return projectActive([first], first.id); })()
+        : withTrack(s, s.activeTrackId, { templateId: id, values: defaultsFor(id), easing: easingFor(id) });
       return {
-        ...withTrack(s, s.activeTrackId, { templateId: id, values: defaultsFor(id), easing: easingFor(id) }),
+        ...layers,
         // These reconstructed families have an intrinsic source ratio, just as
         // their reference presets do. Users can still change it afterwards.
         // Spinner takes 'auto' rather than one ratio for the whole family: the
@@ -652,8 +683,10 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       // Scenes saved before motion tracks existed carry only the flat
       // activeTemplateId/values/easing triple — fold it into a single track so
       // an old autosave still opens.
-      const rawTracks: MotionTrack[] = partial.tracks?.length
-        ? partial.tracks
+      const hasTrackList = Array.isArray(partial.tracks);
+      const explicitlyBlank = hasTrackList && partial.tracks!.length === 0;
+      const rawTracks: MotionTrack[] = hasTrackList
+        ? partial.tracks!
         : [makeTrack(partial.activeTemplateId ?? s.activeTemplateId, 'Layer 1', {
             values: partial.values,
             easing: partial.easing,
@@ -680,10 +713,15 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         }));
       seedIdCounter(tracks);
 
-      const safeTracks = tracks.length > 0 ? tracks : s.tracks;
-      const activeId = safeTracks.some((t) => t.id === partial.activeTrackId)
-        ? partial.activeTrackId!
-        : safeTracks[0].id;
+      // An explicitly persisted empty list is the intentional blank-project
+      // state. Only a non-empty list made invalid by removed templates falls
+      // back to the currently loaded scene.
+      const safeTracks = tracks.length > 0 ? tracks : explicitlyBlank ? [] : s.tracks;
+      const activeId = safeTracks.length === 0
+        ? ''
+        : safeTracks.some((t) => t.id === partial.activeTrackId)
+          ? partial.activeTrackId!
+          : safeTracks[0].id;
 
       return {
         ...s,
@@ -698,6 +736,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   // IndexedDB are deliberately NOT deleted: they still belong to the scenes of
   // other projects, which reference them by asset id.
   resetScene: () => set(() => initialSceneState()),
+  blankScene: () => set(() => blankSceneState()),
 
   // Rebuild object URLs for uploaded assets from their IndexedDB bytes. Runs after
   // hydrate; assets whose bytes are gone (evicted/quota) keep an empty url and

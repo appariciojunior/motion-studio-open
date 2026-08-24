@@ -1889,17 +1889,6 @@ select.field { padding-right: 26px; }
   letter-spacing: 0.01em;
 }
 
-.editor-loading-mark {
-  width: 14px;
-  height: 14px;
-  border: 1.5px solid currentColor;
-  border-right-color: transparent;
-  border-radius: 50%;
-  animation: editor-loading-spin 0.8s linear infinite;
-}
-
-@keyframes editor-loading-spin { to { transform: rotate(360deg); } }
-
 /* 404 — borrows the loading screen's centring, stacked instead of inline. */
 .route-404 { flex-direction: column; gap: 8px; text-align: center; }
 .route-404-title { margin: 0; font-size: 18px; font-weight: 600; color: var(--fg); }
@@ -1910,9 +1899,9 @@ select.field { padding-right: 26px; }
 }
 .route-404-link:hover { background: var(--line); }
 
-@media (prefers-reduced-motion: reduce) {
-  .editor-loading-mark { animation: none; border-right-color: currentColor; }
-}
+/* The loading screen centres its row, so the loader's own top margin — which
+   exists for the standalone use — would push it off that centre line. */
+.editor-loading .ld-cards { margin-top: 0; }
 .ctl-section + .ctl-section { margin-top: 14px; }
 .ctl-section-title {
   margin: 0 0 7px;
@@ -1938,3 +1927,256 @@ select.field { padding-right: 26px; }
   font: inherit; font-size: 11px; cursor: pointer;
 }
 .ctl-advanced-toggle:hover { color: var(--text); }
+
+/* ---- Strata loader: the brand mark's layers, shuffling ---- */
+/* This IS the logo (app/icon.svg, components/IconRail.tsx) put in motion. Its
+   three rounded rects sit side by side, each smaller and fainter, all centred
+   on one line — so measured centre to centre they are offset 12 and 22 px, and
+   sized 10x15 -> 8x10 -> 6x6, at opacity 1 -> .55 -> .3.
+   Every card here runs that same path with a third of the cycle between them,
+   which means at rest the three of them ARE the mark, and the motion is the
+   front layer handing its place to the next.
+   The scale is non-uniform on purpose: the mark's layers get proportionally
+   shorter as they recede, not merely smaller, and a uniform scale is what made
+   this read as one blob shuffling instead of as layers.
+   Two knobs, no JavaScript:
+     --ink  the colour. Falls back to currentColor, so a parent can either set
+            --ink or simply set its own `color`.
+     --dir  which way the layers recede. 1 to the right (default), -1 to the left. */
+.ld-cards { position: relative; width: 42px; height: 19px; margin-top: 16px; }
+.ld-cards i {
+  position: absolute;
+  left: 1px;
+  top: 2px;
+  width: 10px;
+  height: 15px;
+  border-radius: 2.5px;
+  background: var(--ink, currentColor);
+  animation: cards 1.8s ease-in-out infinite;
+}
+.ld-cards i:nth-child(2) { animation-delay: -.6s; }
+.ld-cards i:nth-child(3) { animation-delay: -1.2s; }
+@keyframes cards {
+  0%, 100% { transform: translateX(0) scale(1, 1); opacity: 1; }
+  33.333%  { transform: translateX(calc(12px * var(--dir, 1))) scale(.8, .6667); opacity: .55; }
+  66.667%  { transform: translateX(calc(22px * var(--dir, 1))) scale(.6, .4); opacity: .3; }
+}
+/* Reduced motion: the animation stops and what is left is the mark itself —
+   the three layers frozen on the three positions the loop cycles through.
+   `animation: none` on its own would stack them into one opaque rectangle. */
+@media (prefers-reduced-motion: reduce) {
+  .ld-cards i { animation: none; }
+  .ld-cards i:nth-child(2) { transform: translateX(calc(12px * var(--dir, 1))) scale(.8, .667); opacity: .55; }
+  .ld-cards i:nth-child(3) { transform: translateX(calc(22px * var(--dir, 1))) scale(.6, .4); opacity: .3; }
+}
+
+/* ============================================================
+   PROJECTS TAB — nav: "Projects"
+   A section of its own rather than a list in the left column: the rail keeps
+   its 64px and the projects shelf takes everything else, the way Library and
+   Mockup own the middle of the screen.
+
+   The side columns and the transport are HIDDEN, not unmounted (see
+   DesktopEditor): the shared editor layout exists so the Pixi/Three canvases
+   survive a section change, and tearing the panels down here would defeat it.
+   The stage keeps drawing behind .pj, which is opaque and covers it.
+   ============================================================ */
+.app-projects {
+  grid-template-columns: var(--rail-w) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: "rail stage";
+}
+.app-projects .templates,
+.app-projects .controls,
+.app-projects .right,
+.app-projects .bottom,
+.app-projects .panel-toggle,
+.app-projects .stage-history,
+.app-projects .stage-fs { display: none; }
+
+.pj {
+  position: absolute; inset: 0; z-index: 60;
+  background: var(--card); overflow: auto;
+}
+/* A column, not the full window. Filling 1600px gave six 210px cards in one
+   thin row with a screenful of white under them — a strip, not a shelf. */
+.pj-inner { max-width: 1180px; margin: 0 auto; padding: 0 28px 40px; }
+
+.pj-head {
+  position: sticky; top: 0; z-index: 1;
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 20px;
+  padding: 26px 0 18px; margin-bottom: 22px;
+  background: var(--card); border-bottom: 1px solid var(--line);
+}
+.pj-head-titles { min-width: 0; }
+.pj-title { margin: 0; font-size: 21px; line-height: 1.15; font-weight: 500; letter-spacing: -0.01em; color: var(--fg); }
+.pj-sub { margin: 6px 0 0; font-size: var(--fs-ui); color: var(--fg-faint); }
+.pj-tools { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.pj-search { width: 190px; height: var(--ctl-h); }
+.pj-sort { width: auto; }
+.pj-sort .seg { flex: 0 0 auto; padding: 5px 12px; }
+
+.pj-grid {
+  display: grid; align-content: start; gap: 22px 20px;
+  grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+}
+
+.pj-card {
+  position: relative; display: flex; flex-direction: column; min-width: 0;
+  background: var(--card);
+}
+/* The picture is the card; the frame around it is a hairline that thickens into
+   the theme's ink when this is the project currently open. No accent colour
+   exists in this design system, so "current" is stated in weight, not in hue. */
+.pj-shot {
+  position: relative; width: 100%; aspect-ratio: 4 / 3;
+  display: grid; place-items: center; overflow: hidden;
+  background: var(--card-inset);
+  border: 1px solid var(--line);
+  transition: border-color var(--t-fast), background var(--t-fast);
+}
+.pj-card:hover .pj-shot { border-color: var(--handle); }
+.pj-card.active .pj-shot { border-color: var(--fg); }
+/* The frame carries the project's canvas ratio (sized inline, see
+   ProjectsBrowser) plus a hairline and a soft lift, so a light poster on a light
+   mat still reads as a picture with an edge instead of dissolving into it. The
+   image fills that frame absolutely: a flowed image's own min-content height can
+   push an aspect-ratio box taller than it should be — measured 278px in a 166px
+   window. Cover, not contain, because the frame is ALREADY the project's ratio;
+   the only thing it can crop is a poster taken before the canvas was resized. */
+.pj-frame {
+  position: relative; display: block;
+  outline: 1px solid var(--stage-edge); outline-offset: -1px;
+  box-shadow: 0 3px 12px var(--stage-shadow);
+}
+.pj-shot-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.pj-noshot {
+  position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+  font-size: var(--fs-meta); line-height: 1; color: var(--fg-faint);
+  background: color-mix(in srgb, var(--card) 86%, transparent);
+  padding: 4px 7px; backdrop-filter: blur(4px);
+}
+.pj-flag {
+  position: absolute; top: 8px; left: 8px;
+  font-size: var(--fs-meta); line-height: 1; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--fg); background: color-mix(in srgb, var(--card) 88%, transparent);
+  border: 1px solid var(--line); padding: 4px 7px; backdrop-filter: blur(4px);
+}
+
+/* Actions ride over the thumbnail. In the name row they collided with any name
+   longer than the card, on every card narrower than ~260px. */
+.pj-actions {
+  position: absolute; top: 7px; right: 7px; z-index: 2;
+  display: flex; gap: 1px; opacity: 0; pointer-events: none;
+  background: color-mix(in srgb, var(--card) 88%, transparent);
+  border: 1px solid var(--line); backdrop-filter: blur(4px);
+  transition: opacity var(--t-fast);
+}
+.pj-card:hover .pj-actions,
+.pj-card:focus-within .pj-actions { opacity: 1; pointer-events: auto; }
+.pj-act {
+  width: 27px; height: 27px; display: grid; place-items: center;
+  color: var(--fg-muted); transition: color var(--t-fast), background var(--t-fast);
+}
+.pj-act:hover { color: var(--fg); background: var(--card-inset); }
+.pj-act.danger { color: var(--gz-x); }
+
+.pj-foot { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 10px 1px 0; }
+.pj-name {
+  font-size: var(--fs-label); line-height: 1.3; color: var(--fg-body);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pj-card.active .pj-name { color: var(--fg); font-weight: 500; }
+.pj-meta { font-size: var(--fs-meta); color: var(--fg-faint); }
+/* The facts row is what makes a card recognisable when the poster is a dark
+   rectangle: template, layer count, saved device, canvas size. */
+.pj-facts { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.pj-fact {
+  font-size: var(--fs-meta); line-height: 1; color: var(--fg-muted);
+  background: var(--card-inset); padding: 4px 6px; white-space: nowrap;
+}
+.pj-rename { width: 100%; height: 30px; }
+
+/* Deleting is the one action here that cannot be undone, so it asks in place —
+   an armed bin icon somewhere in a grid of look-alike cards is too quiet. */
+.pj-confirm {
+  position: absolute; inset: 0; z-index: 3;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+  padding: 18px; text-align: center;
+  font-size: var(--fs-ui); line-height: 1.4; color: var(--fg-body);
+  background: color-mix(in srgb, var(--card) 94%, transparent);
+  border: 1px solid var(--fg); backdrop-filter: blur(3px);
+}
+.pj-confirm-row { display: flex; gap: 8px; }
+.btn.solid.danger { background: var(--gz-x); color: #ffffff; }
+.btn.solid.danger:hover { background: var(--gz-x); opacity: 0.88; }
+
+/* Create tile — the shelf should show where the next project comes from even
+   when it holds one card. */
+.pj-new {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  aspect-ratio: 4 / 3; width: 100%;
+  border: 1px dashed var(--handle); color: var(--fg-muted);
+  transition: border-color var(--t-fast), color var(--t-fast), background var(--t-fast);
+}
+.pj-new:hover { border-color: var(--fg); color: var(--fg); background: var(--card-soft); }
+.pj-new-mark { display: grid; place-items: center; }
+.pj-new-label { font-size: var(--fs-label); }
+.pj-new-hint { font-size: var(--fs-meta); color: var(--fg-faint); }
+.pj-empty { grid-column: 1 / -1; font-size: var(--fs-ui); color: var(--fg-faint); }
+
+/* ============================================================
+   PROJECT DOCK — the open project's name and save state, floating at the top
+   of the stage. The editor named neither before, so autosaved work looked
+   unsaved and two different projects looked like the same document.
+   ============================================================ */
+/* Undo/redo owns the stage's top-LEFT corner (63px + its own 10px inset), and
+   the stage column can be as narrow as 320px. Capping the dock against the
+   column keeps a long project name from sliding under those buttons. */
+.pdock { position: absolute; top: 10px; right: 10px; z-index: 45; max-width: calc(100% - 96px); }
+.pdock-chip {
+  display: flex; align-items: center; gap: 8px; max-width: min(320px, 100%);
+  height: 30px; padding: 0 10px;
+  background: color-mix(in srgb, var(--card) 92%, transparent);
+  border: 1px solid var(--line); border-radius: var(--r-ctrl);
+  backdrop-filter: blur(8px);
+  color: var(--fg-label); font-size: var(--fs-ui);
+  transition: color var(--t-fast), background var(--t-fast);
+}
+.pdock-chip:hover, .pdock-chip.open { background: var(--card); color: var(--fg); }
+.pdock-ico { display: grid; place-items: center; color: var(--fg-faint); flex: 0 0 auto; }
+.pdock-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pdock-state {
+  flex: 0 0 auto; padding-left: 8px; border-left: 1px solid var(--line);
+  color: var(--fg-faint); font-size: var(--fs-meta);
+}
+/* "Saving…" is the only transient state, so it is the only one that moves. */
+.pdock-state.busy { color: var(--fg-muted); animation: pdock-pulse 1.1s ease-in-out infinite; }
+@keyframes pdock-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) { .pdock-state.busy { animation: none; } }
+
+.pdock-menu {
+  position: absolute; top: 36px; right: 0; width: 264px;
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 14px; background: var(--card); border: 1px solid var(--line);
+  box-shadow: 0 14px 34px var(--stage-shadow);
+}
+.pdock-field-label {
+  font-size: var(--fs-eyebrow); letter-spacing: .12em; text-transform: uppercase;
+  color: var(--fg-faint);
+}
+.pdock-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pdock-hint { font-size: var(--fs-meta); color: var(--fg-faint); line-height: 1.4; }
+.pdock-sep { height: 1px; background: var(--line); margin: 2px 0; }
+.pdock-recents { display: flex; flex-direction: column; }
+.pdock-recent {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  padding: 7px 8px; margin: 0 -8px; min-width: 0; text-align: left;
+  transition: background var(--t-fast);
+}
+.pdock-recent:hover { background: var(--card-inset); }
+.pdock-recent-name {
+  font-size: var(--fs-ui); color: var(--fg-body); min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pdock-recent-meta { font-size: var(--fs-meta); color: var(--fg-faint); flex: 0 0 auto; }
