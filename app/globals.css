@@ -109,11 +109,16 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
 .rail-top { padding: 12px 8px 0; display: flex; flex-direction: column; align-items: stretch; flex: 1; }
 .rail-logo-wrap { display: flex; flex-direction: column; align-items: center; margin: 8px auto 16px; }
 .rail-logo {
-  width: 40px; height: 40px;
-  background: var(--inverse-bg); color: var(--inverse-fg);
+  width: 42px; height: 19px;
+  background: transparent; color: var(--fg);
   display: grid; place-items: center;
 }
-.rail-beta-tag { margin-top: 6px; }
+.beta-tag.rail-beta-tag {
+  width: 33px; height: 14px; margin-top: 6px; padding: 0;
+  display: grid; place-items: center; box-sizing: border-box;
+  background: #f3f4f6; color: #111827;
+}
+:root[data-theme="dark"] .beta-tag.rail-beta-tag { background: #2d2d2d; color: #fff; }
 /* Section items are <a> now (one route per section), so the underline and the
    UA link colour have to go — the rest of the rule already worked for buttons. */
 .rail-item {
