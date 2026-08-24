@@ -400,6 +400,11 @@ function XYPadControl({ def, value, onChange }: RowProps) {
     onChange({ x: Math.round((nx * 2 - 1) * range), y: Math.round((ny * 2 - 1) * range) });
   };
 
+  const home = def.default && typeof def.default === 'object' && 'x' in def.default
+    ? { x: Number(def.default.x) || 0, y: Number(def.default.y) || 0 }
+    : { x: 0, y: 0 };
+  const atHome = v.x === home.x && v.y === home.y;
+
   const pct = (n: number) => Math.max(0, Math.min(100, ((n / range + 1) / 2) * 100));
   const dotX = pct(v.x);
   const dotY = pct(v.y);
@@ -455,8 +460,17 @@ function XYPadControl({ def, value, onChange }: RowProps) {
           step={1}
           onCommit={(n) => onChange({ x: v.x, y: n })}
         />
+        <button
+          type="button"
+          className="xypad-zero"
+          title={`Reset to ${home.x}, ${home.y}`}
+          aria-label={`Reset ${def.label}`}
+          disabled={atHome}
+          onClick={() => onChange({ ...home })}
+        >
+          Reset
+        </button>
       </div>
-      {mobile && <button className="xypad-reset" onClick={() => onChange({ x: 0, y: 0 })}>Reset to center</button>}
     </div>
   );
 }
