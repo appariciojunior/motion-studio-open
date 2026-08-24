@@ -62,6 +62,34 @@ npm test             # the verification suites (see below)
 npx tsc --noEmit     # the only required check before a PR
 ```
 
+### Local update notifications
+
+When the editor is opened through `localhost`, the bell above the theme button
+checks the official `main` branch in the background. If new commits exist, its
+panel shows their titles and offers an **Update Git** button. Alerts can be
+turned off (and back on) from that panel; disabling them also stops automatic
+Git checks in that browser. The update is always opt-in and uses a
+fast-forward-only merge; it refuses to run outside `main`, when the checkout
+has local changes, is detached, or has diverged. After updating, restart the
+dev server (and run `npm install` when the notice says dependencies changed).
+
+The endpoint is unavailable from LAN/public hostnames, rejects cross-site and
+unconfirmed update requests, serializes concurrent updates, and is removed
+entirely from the static GitHub Pages build. It never installs dependencies or
+restarts a process. Set `MOTION_STUDIO_UPDATE_REPOSITORY` only when maintaining
+a fork that should check a different Git repository.
+
+Managed Vercel builds switch the bell to a read-only **What’s new** panel:
+deployments update those instances automatically, and their local Git endpoint
+is disabled. Other providers can opt into that behavior with
+`MOTION_STUDIO_DEPLOYMENT_MODE=hosted`.
+
+The experimental Web section intentionally executes the owner's pasted code in
+the app's same-origin context. Only paste code you trust: like any same-origin
+code, it shares the local app's browser privileges. Sandboxing that preview is
+required before treating hostile pasted components as part of the updater's
+threat model.
+
 ## Export
 
 Everything below is captured from the same deterministic clock the preview uses,

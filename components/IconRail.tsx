@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { NAV_SECTIONS, sectionFromPathname, type NavSectionId } from '@/lib/navSections';
 import { useUIStore } from '@/store/useUIStore';
 import { useProjectStore } from '@/store/useProjectStore';
+import UpdateNotifier from './UpdateNotifier';
 import { AddIcon, BoardIcon, ChevronDownIcon, ExperimentalsIcon, LibraryIcon, MockupIcon, MoonIcon, ProjectsIcon, SunIcon, ThreeDIcon, WebIcon } from './EditorIcons';
 
 const ICONS: Record<NavSectionId, React.ReactNode> = {
@@ -109,6 +110,7 @@ export default function IconRail() {
         </div>
       </div>
       <div className="rail-bottom">
+        <UpdateNotifier />
         <button
           className="rail-item rail-theme"
           onClick={toggleTheme}
