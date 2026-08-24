@@ -537,6 +537,15 @@ select.field { padding-right: 26px; }
   display: flex; align-items: center; justify-content: center; gap: 4px;
   color: var(--fg-faint); font-size: var(--fs-ui); font-variant-numeric: tabular-nums;
 }
+.xypad-zero {
+  margin-left: 4px; padding: 3px 8px; border: 1px solid transparent;
+  border-radius: var(--r-seg); background: var(--card-inset); color: var(--fg-muted);
+  font: inherit; font-size: var(--fs-ui); cursor: pointer;
+}
+.xypad-zero:hover:not(:disabled) { background: var(--card-thumb); color: var(--fg-body); }
+/* already home: shown, but visibly inert — a Reset that does nothing on click
+   reads as a broken button */
+.xypad-zero:disabled { opacity: .4; cursor: default; }
 .xypad-axis {
   font-size: var(--fs-meta); line-height: 1; color: var(--fg-faint);
   letter-spacing: .04em; padding: 0 2px;
@@ -1426,7 +1435,7 @@ select.field { padding-right: 26px; }
   .mobile-editor .xypad-field { inset: 14px; }
   .mobile-editor .xypad-dot { width: 28px; height: 28px; border: 7px solid var(--card); box-shadow: 0 0 0 1px var(--handle); }
   .mobile-editor .xypad-vals { text-align: center; font-size: 13px; }
-  .mobile-editor .xypad-reset { min-height: 44px; border-radius: var(--r-ctrl); background: var(--card-inset); color: var(--fg-muted); }
+  .mobile-editor .xypad-zero { min-height: 44px; padding: 0 14px; border-radius: var(--r-ctrl); }
   .mobile-editor .pills { overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; scroll-snap-type: x proximity; }
   .mobile-editor .pills::-webkit-scrollbar { display: none; }
   .mobile-editor .pills .pill { flex: 0 0 auto; min-width: 64px; scroll-snap-align: start; }
