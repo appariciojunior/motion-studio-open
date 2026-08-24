@@ -1133,9 +1133,11 @@ select.field { padding-right: 26px; }
 .ez-guide { stroke: var(--handle); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
 .ez-handle {
   fill: var(--fg); stroke: var(--card-inset); stroke-width: 1.2;
-  vector-effect: non-scaling-stroke; cursor: grab;
+  vector-effect: non-scaling-stroke; pointer-events: none;
 }
-.ez-handle:active { cursor: grabbing; }
+/* invisible, and the only thing the pointer talks to */
+.ez-grab { fill: transparent; cursor: grab; }
+.ez-grab:active { cursor: grabbing; }
 
 /* numeric control points — four equal boxes */
 .ez-nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }

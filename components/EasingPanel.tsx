@@ -139,14 +139,16 @@ export default function EasingPanel() {
               <>
                 <line className="ez-guide" x1={0} y1={100} x2={hx1} y2={hy1} />
                 <line className="ez-guide" x1={100} y1={0} x2={hx2} y2={hy2} />
+                <circle className="ez-handle" cx={hx1} cy={hy1} r={3.1} />
+                <circle className="ez-handle" cx={hx2} cy={hy2} r={3.1} />
                 <circle
-                  className="ez-handle"
-                  cx={hx1} cy={hy1} r={3.1}
+                  className="ez-grab"
+                  cx={hx1} cy={hy1} r={7}
                   onPointerDown={(e) => { e.stopPropagation(); dragging.current = 0; }}
                 />
                 <circle
-                  className="ez-handle"
-                  cx={hx2} cy={hy2} r={3.1}
+                  className="ez-grab"
+                  cx={hx2} cy={hy2} r={7}
                   onPointerDown={(e) => { e.stopPropagation(); dragging.current = 1; }}
                 />
               </>
