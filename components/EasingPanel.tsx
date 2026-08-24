@@ -14,10 +14,20 @@ import {
 
 // SVG unit square is 0..100; the viewBox adds padding so overshoot/spring
 // curves that leave [0,1] stay visible.
-const VB = { x: -16, y: -26, w: 132, h: 152 };
+const VB = { x: -16, y: -20, w: 132, h: 132 };
 
 // Field of marks over the unit square: step 6.25 puts one every ~10px, close to
 // the stage's 12px pitch, and 0/25/50/75/100 all fall on it.
+// The handle's own radius plus its stroke, in curve units. Clamping to the bare
+// viewBox edge left the dot centred ON the edge, so half of it fell outside a
+// box that clips — the value was right and the handle was cut in half.
+const EZ_HANDLE_R = 3.1;
+const EZ_INSET = (EZ_HANDLE_R + 0.9) / 100;
+
+// what the viewBox shows, pulled in so a handle at the limit is still whole
+const EZ_Y_MAX = 1 - VB.y / 100 - EZ_INSET;
+const EZ_Y_MIN = 1 - (VB.y + VB.h) / 100 + EZ_INSET;
+
 const EZ_STEP = 6.25;
 const EZ_MARK = 1.25;                       // ~2px, the stage's square
 const EZ_GRID = Array.from({ length: 100 / EZ_STEP + 1 }, (_, i) => i * EZ_STEP);
@@ -72,7 +82,9 @@ export default function EasingPanel() {
     const svgX = VB.x + (clientX - offX) / scale;
     const svgY = VB.y + (clientY - offY) / scale;
     const nx = Math.max(0, Math.min(1, svgX / 100));      // x locked to [0,1]
-    const ny = Math.max(-0.4, Math.min(1.4, 1 - svgY / 100)); // y may overshoot
+    // y may overshoot, but only as far as the viewBox draws — a handle dragged
+    // past the edge is a handle you cannot see
+    const ny = Math.max(EZ_Y_MIN, Math.min(EZ_Y_MAX, 1 - svgY / 100));
     return [Number(nx.toFixed(3)), Number(ny.toFixed(3))];
   };
 
@@ -139,8 +151,8 @@ export default function EasingPanel() {
               <>
                 <line className="ez-guide" x1={0} y1={100} x2={hx1} y2={hy1} />
                 <line className="ez-guide" x1={100} y1={0} x2={hx2} y2={hy2} />
-                <circle className="ez-handle" cx={hx1} cy={hy1} r={3.1} />
-                <circle className="ez-handle" cx={hx2} cy={hy2} r={3.1} />
+                <circle className="ez-handle" cx={hx1} cy={hy1} r={EZ_HANDLE_R} />
+                <circle className="ez-handle" cx={hx2} cy={hy2} r={EZ_HANDLE_R} />
                 <circle
                   className="ez-grab"
                   cx={hx1} cy={hy1} r={7}
