@@ -6,8 +6,10 @@ import { usePathname } from 'next/navigation';
 import AppTour from '@/components/AppTour';
 import { StrataLoader } from '@/components/StrataLoader';
 import WelcomeDialog from '@/components/WelcomeDialog';
-import { sectionFromPathname } from '@/lib/navSections';
-import { startSceneAutosave } from '@/lib/scenePersist';
+import { modeForSection, sectionFromPathname } from '@/lib/navSections';
+import { capturePoster } from '@/lib/projectPoster';
+import { flushScene, startSceneAutosave } from '@/lib/scenePersist';
+import { flushThreeD, startThreeDAutosave } from '@/lib/three3dPersist';
 import { useHistoryStore } from '@/store/useHistoryStore';
 import { useProjectStore } from '@/store/useProjectStore';
 import { useUIStore } from '@/store/useUIStore';
@@ -30,6 +32,10 @@ const DesktopEditor = dynamic(() => import('@/components/DesktopEditor'), {
 // grid actually fits. Keep this in step with the same breakpoint in
 // app/globals.css and components/ExportDialog.tsx.
 const MOBILE_QUERY = '(max-width: 919px)';
+
+// Belt-and-braces save interval, asked for explicitly. The autosaves are the
+// real save path; this is the floor under them.
+const SAVE_HEARTBEAT_MS = 5 * 60_000;
 type ViewportMode = 'pending' | 'mobile' | 'desktop';
 
 function useViewportMode(): ViewportMode {
@@ -68,6 +74,11 @@ export default function EditorShell({ children }: { children?: React.ReactNode }
   const pathname = usePathname();
   const section = sectionFromPathname(pathname);
   const seeded = useRef(false);
+  const projects = useProjectStore((s) => s.projects);
+  const activeProjectId = useProjectStore((s) => s.activeId);
+  const projectsBooted = useProjectStore((s) => s.booted);
+  const openProject = useProjectStore((s) => s.open);
+  const createProject = useProjectStore((s) => s.create);
 
   // Seed the store during the first render rather than in the effect below:
   // an effect lands after the editor's first paint, so a deep link to /mockup
@@ -75,27 +86,64 @@ export default function EditorShell({ children }: { children?: React.ReactNode }
   // subscriber is mounted yet — DesktopEditor is rendered by this component.
   if (!seeded.current) {
     seeded.current = true;
-    if (useUIStore.getState().nav !== section) useUIStore.setState({ nav: section });
+    // Through the action, not setState: setNav also records the last EDITING
+    // section, which the Projects tab hands back to when a project is opened.
+    if (useUIStore.getState().nav !== section) useUIStore.getState().setNav(section);
   }
 
   // Later changes — rail clicks, back/forward, a pasted URL. Rail clicks also
   // set the store optimistically, so this mostly matters for history moves.
   useEffect(() => {
-    if (useUIStore.getState().nav !== section) useUIStore.setState({ nav: section });
+    // Through the action, not setState: setNav also records the last EDITING
+    // section, which the Projects tab hands back to when a project is opened.
+    if (useUIStore.getState().nav !== section) useUIStore.getState().setNav(section);
   }, [section]);
 
   useEffect(() => {
     useUIStore.getState().hydratePreferences();
-    useProjectStore.getState().bootstrap();
+    useProjectStore.getState().bootstrap(modeForSection(section));
     const stopHistory = useHistoryStore.getState().start();
     const stopAutosave = startSceneAutosave();
-    // No 3D equivalent on purpose: the Mockup studio is saved from its own
-    // button (see MockupPanel), not on every store tick.
+    // The Mockup/3D studio autosaves too. It used to be explicit-only, which
+    // read as "the mockup doesn't save": leaving the section never wrote, so an
+    // arrangement survived only if the button in the Mockup panel was found and
+    // clicked. That button is gone; "Save now" lives in the project dock, next
+    // to the state of these two autosaves.
+    const stopThreeDAutosave = startThreeDAutosave();
+
+    // Five-minute heartbeat on top of the two autosaves. They already write
+    // within half a second of an edit, so this is a backstop, not the save
+    // path: it catches anything a dirty-check skipped, and it is the moment the
+    // project's card picture is refreshed for a long editing session that never
+    // touches the rail. Both flushes are no-ops when nothing changed, so an idle
+    // tab costs two signature comparisons every five minutes and no writes.
+    const heartbeat = setInterval(() => {
+      const wroteScene = flushScene();
+      const wroteStudio = flushThreeD();
+      if (wroteScene || wroteStudio) capturePoster(useProjectStore.getState().activeId);
+    }, SAVE_HEARTBEAT_MS);
+
     return () => {
       stopHistory();
       stopAutosave();
+      stopThreeDAutosave();
+      clearInterval(heartbeat);
     };
   }, []);
+
+  // Library and Mockup are two document modes in one project list. Entering a
+  // mode selects its most recent project; if none exists yet, it creates one.
+  // This keeps the inactive store target null, so one project can never save
+  // both documents just because the user clicked another rail tab.
+  useEffect(() => {
+    if (!projectsBooted || (section !== 'library' && section !== 'mockup')) return;
+    const wanted = modeForSection(section);
+    const active = projects.find((project) => project.id === activeProjectId);
+    if (active?.mode === wanted) return;
+    const existing = projects.find((project) => project.mode === wanted);
+    if (existing) openProject(existing.id);
+    else createProject(`Project ${projects.length + 1}`, wanted);
+  }, [activeProjectId, createProject, openProject, projects, projectsBooted, section]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
