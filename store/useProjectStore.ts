@@ -9,17 +9,21 @@ import {
   readProjectScene,
   renameProject,
   setActiveProject,
+  type ProjectMode,
   type ProjectMeta,
 } from '@/lib/projects';
+import { capturePoster, copyPoster, deletePoster } from '@/lib/projectPoster';
+import { resetSaveStatus } from '@/lib/saveStatus';
 import { flushScene, setAutosaveTarget } from '@/lib/scenePersist';
 import {
   deleteProjectThreeD,
+  flushThreeD,
   readProjectThreeD,
   setThreeDSaveTarget,
   writeProjectThreeD,
 } from '@/lib/three3dPersist';
 import { useSceneStore } from './useSceneStore';
-import { use3DStore } from './use3DStore';
+import { reset3DMemory, use3DStore } from './use3DStore';
 import { useHistoryStore } from './useHistoryStore';
 
 // Any switch of the open project drops undo history: undoing across a switch
@@ -35,11 +39,11 @@ export interface ProjectState {
   booted: boolean;
 
   // Mount-time: resolve/create the project to open and hydrate its scene.
-  bootstrap: () => void;
+  bootstrap: (mode?: ProjectMode) => void;
   refresh: () => void;
 
   open: (id: string) => void;
-  create: (name: string) => void;
+  create: (name: string, mode?: ProjectMode) => void;
   duplicate: (id: string) => void;
   rename: (id: string, name: string) => void;
   remove: (id: string) => void;
@@ -51,20 +55,51 @@ const DEFAULT_NAME = 'Default project';
 // switch below has to move it in step with the 2D scene. Restoring it is one
 // helper so the five paths cannot drift, and it RETURNS the slice it loaded so
 // each caller can seed the SAVE signature with it — opening a project is not an
-// edit. Unlike the 2D scene it is never written automatically; MockupPanel's
-// button is the only writer. A project saved before any of this existed simply
-// has no slice and falls back to the app defaults.
+// edit, and an unseeded signature would make the autosave rewrite the slice it
+// just read. A project saved before any of this existed simply has no slice and
+// falls back to the app defaults.
 function load3D(projectId: string) {
   const slice = readProjectThreeD(projectId);
+  // Release only the previous tab's object URLs. Deleting its IndexedDB rows
+  // here would corrupt the saved mockup we just left.
+  reset3DMemory();
   if (slice) {
     use3DStore.getState().hydrate3D(slice);
     // Screen media saves an id, never a blob: url — those are dead after a
     // reload. Rebuild the urls from the stored bytes.
     void use3DStore.getState().rehydrateScreenMedia();
   } else {
-    use3DStore.getState().reset3D();
+    // reset3DMemory above already established the defaults.
   }
   return slice;
+}
+
+function flushProject(meta: ProjectMeta | undefined): void {
+  if (meta?.mode === 'mockup') flushThreeD();
+  else if (meta) flushScene();
+}
+
+/** Hydrate one document and explicitly disable the other save target. */
+function loadProject(meta: ProjectMeta): void {
+  if (meta.mode === 'mockup') {
+    useSceneStore.getState().blankScene();
+    setAutosaveTarget(null);
+    const studio = load3D(meta.id);
+    if (studio?.canvas) useSceneStore.setState(studio.canvas);
+    setThreeDSaveTarget(meta.id, studio);
+    return;
+  }
+
+  const scene = readProjectScene(meta.id);
+  if (scene) {
+    useSceneStore.getState().hydrate(scene);
+    void useSceneStore.getState().rehydrateUploads();
+  } else {
+    useSceneStore.getState().blankScene();
+  }
+  setAutosaveTarget(meta.id, scene);
+  reset3DMemory();
+  setThreeDSaveTarget(null);
 }
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
@@ -74,81 +109,88 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   refresh: () => set(() => ({ projects: listProjects(), activeId: activeProjectId() })),
 
-  bootstrap: () => {
+  bootstrap: (mode = '2d') => {
     if (get().booted || typeof window === 'undefined') return;
-    const { meta, scene } = openInitialProject(DEFAULT_NAME);
-    // A migrated/saved scene hydrates; a brand-new project keeps the store's
-    // own defaults (openInitialProject returns null for it).
-    if (scene) {
-      useSceneStore.getState().hydrate(scene);
-      void useSceneStore.getState().rehydrateUploads();
-    }
-    // Seed the autosave signature with what we just loaded, so simply opening a
-    // project doesn't rewrite it and bump its updatedAt.
-    setAutosaveTarget(meta.id, scene);
-    setThreeDSaveTarget(meta.id, load3D(meta.id));
+    const { meta } = openInitialProject(DEFAULT_NAME, mode);
+    loadProject(meta);
+    // Seed the editor's save indicator with when this project was last written,
+    // not with "now" and not with nothing: a project that has been on disk for
+    // two hours must not open reading "Not saved yet".
+    resetSaveStatus(meta.updatedAt);
     set(() => ({ projects: listProjects(), activeId: meta.id, booted: true }));
   },
 
   open: (id) => {
     if (id === get().activeId) return;
-    flushScene();                       // the edits so far belong to the OLD project
-    setAutosaveTarget(null);            // ...and nothing may be written mid-swap
-    // The Mockup studio is saved by hand, so leaving a project does NOT write
-    // it — unsaved arrangement is discarded, the same as any explicit-save
-    // document. Only the target moves.
+    // The card picture of the project being left, grabbed while its stage is
+    // still the one on screen (see lib/projectPoster: the pixel read is sync).
+    const current = get().projects.find((p) => p.id === get().activeId);
+    capturePoster(get().activeId);
+    flushProject(current);              // only the document this project owns
+    setAutosaveTarget(null);            // nothing may be written mid-swap
     setThreeDSaveTarget(null);
     setActiveProject(id);
-    const scene = readProjectScene(id);
-    if (scene) {
-      useSceneStore.getState().hydrate(scene);
-      void useSceneStore.getState().rehydrateUploads();
-    } else {
-      useSceneStore.getState().resetScene();
-    }
-    setAutosaveTarget(id, scene);
-    setThreeDSaveTarget(id, load3D(id));
+    const next = listProjects().find((p) => p.id === id);
+    if (!next) return;
+    loadProject(next);
     resetHistory();
-    set(() => ({ projects: listProjects(), activeId: id }));
+    // The "saved 2 min ago" of the project just left says nothing about this
+    // one, whose true answer is when IT was last written.
+    const list = listProjects();
+    resetSaveStatus(list.find((p) => p.id === id)?.updatedAt ?? Date.now());
+    set(() => ({ projects: list, activeId: id }));
   },
 
-  create: (name) => {
-    flushScene();
+  create: (name, mode = '2d') => {
+    const current = get().projects.find((p) => p.id === get().activeId);
+    capturePoster(get().activeId);
+    flushProject(current);
     setAutosaveTarget(null);
     setThreeDSaveTarget(null);
-    const meta = createProject(name);
-    // A new project starts from the app defaults, not from whatever the previous
-    // project happened to be showing.
-    useSceneStore.getState().resetScene();
+    const meta = createProject(name, mode);
+    // A new project starts BLANK — no layers at all. It used to start from the
+    // app's default template ('carousel', shown as "Runway") with the demo set
+    // animating, so every new project was a copy of the last one and the list
+    // read as two of the same thing. The first template pick is the user's, and
+    // nothing from the library is in it until they make one.
+    useSceneStore.getState().blankScene();
     // Empty signature → the flush below actually writes, persisting the starting
     // scene now so the project isn't an empty shell if the user switches away
     // before the first autosave tick.
-    setAutosaveTarget(meta.id, null);
-    // A new project starts from the 3D defaults too. Nothing is written for it:
-    // a project with no saved studio falls back to those same defaults, so the
-    // first save is the user's.
-    use3DStore.getState().reset3D();
-    setThreeDSaveTarget(meta.id, null);
-    flushScene();
+    setAutosaveTarget(mode === '2d' ? meta.id : null, null);
+    // A new project starts from the 3D defaults too. The empty signature means
+    // the autosave's next tick writes those defaults out, which is the same
+    // state a missing slice falls back to — so either way a fresh project opens
+    // an empty studio.
+    reset3DMemory();
+    setThreeDSaveTarget(mode === 'mockup' ? meta.id : null, null);
+    if (mode === 'mockup') flushThreeD();
+    else flushScene();
     resetHistory();
+    resetSaveStatus(Date.now());
     set(() => ({ projects: listProjects(), activeId: meta.id }));
   },
 
   duplicate: (id) => {
     // Duplicating the ACTIVE project must capture its unsaved edits first.
-    if (id === get().activeId) flushScene();
+    const source = get().projects.find((p) => p.id === id);
+    if (id === get().activeId) flushProject(source);
     const meta = duplicateProject(id);
     if (!meta) return;
-    setAutosaveTarget(meta.id, readProjectScene(meta.id));
+    // Posters live outside the project record, so the copy starts blank unless
+    // its picture is copied across too.
+    copyPoster(id, meta.id);
+    setAutosaveTarget(meta.mode === '2d' ? meta.id : null, readProjectScene(meta.id));
     // duplicateProject only knows about the 2D scene, so the SAVED 3D slice is
     // copied across by hand — otherwise a duplicated mockup opens as an empty
     // studio. Unsaved arrangement is not copied, because it was never a document.
     // Both projects then resolve the same IndexedDB rows for their screen media,
     // which is intended: those rows are keyed by id and neither owns them.
-    const src = readProjectThreeD(id);
+    const src = meta.mode === 'mockup' ? readProjectThreeD(id) : null;
     if (src) writeProjectThreeD(meta.id, src);
-    setThreeDSaveTarget(meta.id, src);
+    setThreeDSaveTarget(meta.mode === 'mockup' ? meta.id : null, src);
     resetHistory();
+    resetSaveStatus(Date.now());
     set(() => ({ projects: listProjects(), activeId: meta.id }));
   },
 
@@ -165,30 +207,25 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
     deleteProject(id);
     deleteProjectThreeD(id);
+    deletePoster(id);            // nothing else would ever collect it
     const nextActive = activeProjectId();
     if (wasActive) {
       if (nextActive) {
-        const scene = readProjectScene(nextActive);
-        if (scene) {
-          useSceneStore.getState().hydrate(scene);
-          void useSceneStore.getState().rehydrateUploads();
-        } else {
-          useSceneStore.getState().resetScene();
-        }
-        setAutosaveTarget(nextActive, scene);
-        setThreeDSaveTarget(nextActive, load3D(nextActive));
+        const next = listProjects().find((p) => p.id === nextActive);
+        if (next) loadProject(next);
       } else {
-        // Deleted the last project — start a fresh default one rather than
-        // leaving the app with nowhere to save.
-        useSceneStore.getState().resetScene();
-        use3DStore.getState().reset3D();
-        const meta = createProject(DEFAULT_NAME);
+        // Deleted the last project — start a fresh one rather than leaving the
+        // app with nowhere to save. Blank, like any created project.
+        useSceneStore.getState().blankScene();
+        reset3DMemory();
+        const meta = createProject(DEFAULT_NAME, '2d');
         setAutosaveTarget(meta.id, null);
-        setThreeDSaveTarget(meta.id, null);
+        setThreeDSaveTarget(null);
         flushScene();
       }
     }
     resetHistory();
+    if (wasActive) resetSaveStatus(Date.now());
     set(() => ({ projects: listProjects(), activeId: activeProjectId() }));
   },
 }));

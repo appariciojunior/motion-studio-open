@@ -1,21 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+import { ago } from '@/lib/relativeTime';
 import { useProjectStore } from '@/store/useProjectStore';
 
-// Relative time, coarse on purpose — an exact timestamp is noise in a list you
-// scan to find "the one I was just working on".
-function ago(ms: number): string {
-  const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
-  if (s < 60) return 'just now';
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m} min ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h} h ago`;
-  const d = Math.floor(h / 24);
-  return d === 1 ? 'yesterday' : `${d} days ago`;
-}
-
+// The mobile projects sheet. On desktop the section is the full-width Projects
+// tab instead (components/ProjectsBrowser).
 export default function ProjectsPanel({ onProjectOpen }: { onProjectOpen?: () => void } = {}) {
   const projects = useProjectStore((s) => s.projects);
   const activeId = useProjectStore((s) => s.activeId);

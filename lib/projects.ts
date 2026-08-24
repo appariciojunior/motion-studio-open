@@ -22,11 +22,20 @@ export const LEGACY_SCENE_KEY = 'motion-scene-v1';
 
 const sceneKeyFor = (id: string) => `motion-project-${id}`;
 
+export type ProjectMode = '2d' | 'mockup';
+
 export interface ProjectMeta {
   id: string;
   name: string;
   createdAt: number;  // epoch ms
   updatedAt: number;
+  /** A project persists exactly one document: the 2D scene or the Mockup studio. */
+  mode: ProjectMode;
+  /**
+   * Legacy field from the short-lived model where one project carried both
+   * documents. Kept only so existing browser data can be classified safely.
+   */
+  section?: string;
 }
 
 interface ProjectsIndex {
@@ -53,9 +62,14 @@ function readIndex(): ProjectsIndex {
     const parsed = JSON.parse(raw) as ProjectsIndex;
     if (!Array.isArray(parsed.projects)) return emptyIndex();
     // Drop malformed entries rather than letting them crash the panel later.
-    const projects = parsed.projects.filter(
-      (p): p is ProjectMeta => !!p && typeof p.id === 'string' && typeof p.name === 'string',
-    );
+    const projects = parsed.projects
+      .filter((p): p is ProjectMeta => !!p && typeof p.id === 'string' && typeof p.name === 'string')
+      .map((p) => ({
+        ...p,
+        // Existing mixed projects reopen in the last section they used. This
+        // selects one active document without deleting the other legacy key.
+        mode: p.mode === 'mockup' || p.section === 'mockup' ? 'mockup' as const : '2d' as const,
+      }));
     return { activeId: typeof parsed.activeId === 'string' ? parsed.activeId : null, projects };
   } catch {
     return emptyIndex();
@@ -86,8 +100,14 @@ export function readProjectScene(id: string): ScenePartial | null {
   }
 }
 
+export function projectMode(id: string): ProjectMode | null {
+  return readIndex().projects.find((p) => p.id === id)?.mode ?? null;
+}
+
 // Persist a project's scene and stamp it as the most recently touched.
 export function writeProjectScene(id: string, partial: ScenePartial): void {
+  // Defence in depth: only a 2D project may own a scene key.
+  if (projectMode(id) !== '2d') return;
   try { localStorage.setItem(sceneKeyFor(id), JSON.stringify(partial)); } catch { return; }
   const ix = readIndex();
   const i = ix.projects.findIndex((p) => p.id === id);
@@ -96,16 +116,36 @@ export function writeProjectScene(id: string, partial: ScenePartial): void {
   writeIndex(ix);
 }
 
-export function createProject(name: string, scene?: ScenePartial | null): ProjectMeta {
+/**
+ * Stamp a mockup project as just edited without touching a 2D scene. The 3D/Mockup
+ * slice lives in its own key (lib/three3dPersist) and its writer has no scene to
+ * hand to writeProjectScene, so it calls this instead — otherwise a session
+ * spent entirely in Mockup never updates the date the projects list sorts by.
+ */
+export function touchProject(id: string): void {
+  const ix = readIndex();
+  const i = ix.projects.findIndex((p) => p.id === id);
+  if (i < 0 || ix.projects[i].mode !== 'mockup') return;
+  ix.projects[i] = { ...ix.projects[i], updatedAt: Date.now() };
+  writeIndex(ix);
+}
+
+export function createProject(
+  name: string,
+  mode: ProjectMode = '2d',
+  scene?: ScenePartial | null,
+): ProjectMeta {
   const now = Date.now();
-  const meta: ProjectMeta = { id: newId(), name: name.trim() || 'Untitled', createdAt: now, updatedAt: now };
+  const meta: ProjectMeta = {
+    id: newId(), name: name.trim() || 'Untitled', createdAt: now, updatedAt: now, mode,
+  };
   const ix = readIndex();
   ix.projects.push(meta);
   ix.activeId = meta.id;
   writeIndex(ix);
   // No scene → the app keeps its current state / built-in defaults. Writing an
   // empty object here would hydrate a blank scene over the defaults.
-  if (scene) {
+  if (mode === '2d' && scene) {
     try { localStorage.setItem(sceneKeyFor(meta.id), JSON.stringify(scene)); } catch { /* quota */ }
   }
   return meta;
@@ -123,7 +163,11 @@ export function duplicateProject(id: string): ProjectMeta | null {
   const ix = readIndex();
   const src = ix.projects.find((p) => p.id === id);
   if (!src) return null;
-  return createProject(`${src.name} copy`, readProjectScene(id));
+  return createProject(
+    `${src.name} copy`,
+    src.mode,
+    src.mode === '2d' ? readProjectScene(id) : null,
+  );
 }
 
 // Removing the active project hands the active slot to the next most recent one,
@@ -153,7 +197,10 @@ export function setActiveProject(id: string): void {
  * Runs once on mount. Non-destructive by design: a pre-projects scene is COPIED
  * into a project and the legacy key is left in place as a backup.
  */
-export function openInitialProject(defaultName: string): { meta: ProjectMeta; scene: ScenePartial | null } {
+export function openInitialProject(
+  defaultName: string,
+  defaultMode: ProjectMode = '2d',
+): { meta: ProjectMeta; scene: ScenePartial | null } {
   const ix = readIndex();
 
   if (ix.projects.length === 0) {
@@ -163,7 +210,8 @@ export function openInitialProject(defaultName: string): { meta: ProjectMeta; sc
       if (raw) legacy = JSON.parse(raw) as ScenePartial;
     } catch { /* corrupt legacy blob — start fresh instead of failing to boot */ }
     // A migrated scene keeps its own name so the user recognizes their work.
-    const meta = createProject(legacy ? 'My project' : defaultName, legacy);
+    const mode: ProjectMode = legacy ? '2d' : defaultMode;
+    const meta = createProject(legacy ? 'My project' : defaultName, mode, legacy);
     return { meta, scene: legacy };
   }
 
@@ -171,5 +219,5 @@ export function openInitialProject(defaultName: string): { meta: ProjectMeta; sc
   const sorted = ix.projects.slice().sort((a, b) => b.updatedAt - a.updatedAt);
   const meta = ix.projects.find((p) => p.id === wanted) ?? sorted[0];
   if (meta.id !== ix.activeId) setActiveProject(meta.id);
-  return { meta, scene: readProjectScene(meta.id) };
+  return { meta, scene: meta.mode === '2d' ? readProjectScene(meta.id) : null };
 }
