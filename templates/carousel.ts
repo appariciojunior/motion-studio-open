@@ -203,16 +203,33 @@ const FLOW: EasingSpec = { id: 'flow' };
 // Runway the only family whose presets were declared outside its own file — and
 // invisible to scripts/genExportSources.mjs, since that walks templates/*.ts and
 // skips index.ts. So "export scene as code" silently omitted Runway 02-05.
+/** Keeps a preset addressable for saved scenes while taking it out of the pickers. */
+const hidden = (t: Template): Template => ({ ...t, meta: { ...t.meta, catalogHidden: true } });
+
 export const carouselVariants: Template[] = [
   { ...carousel, meta: { ...carousel.meta, name: 'Runway 01' } },
-  variant(carousel, 'carousel-02', 'Runway 02', {
-    gap: 140, bigScale: 145, perspective: 0, fade: 45, speed: 0.4,
-  }),
-  variant(carousel, 'carousel-03', 'Runway 03', {
-    tiltStyle: 'fan', tiltAmount: 10, gap: 300, bigScale: 130, speed: 0.5,
-  }),
+  // Runway 02 and 03 are WITHDRAWN from the catalogue. Both were written here
+  // rather than ported, and both had a pitch narrower than the card, so their
+  // strips piled up instead of travelling — 02 buried two thirds of every
+  // neighbour. Neither of the three tools this family is modelled on can even
+  // express that (all three add a separation TO the card, so the tightest strip
+  // they can build is cards touching), and with the pitch corrected 02 landed on
+  // the same look as the ported Runway 08 while 03 landed near Runway 01. So
+  // there was nothing left for them to be that the ports do not already cover.
+  //
+  // Withdrawn, not deleted: `catalogHidden` keeps them out of every picker while
+  // a scene somebody already saved on one of them still loads. Their values are
+  // left corrected rather than broken for exactly that reason. Same treatment
+  // globe.ts gives its own legacy pair.
+  hidden(variant(carousel, 'carousel-02', 'Runway 02', {
+    gap: 340, bigScale: 145, perspective: 0, fade: 45, speed: 0.4,
+  })),
+  hidden(variant(carousel, 'carousel-03', 'Runway 03', {
+    tiltStyle: 'fan', tiltAmount: 10, gap: 440, bigScale: 130, speed: 0.5,
+  })),
   variant(carousel, 'carousel-04', 'Runway 04', {
-    scaleFocus: 'start', bigScale: 160, gap: 260, fade: 30, direction: 'right',
+    // Same floor again: 260 buried a quarter of every card.
+    scaleFocus: 'start', bigScale: 160, gap: 400, fade: 30, direction: 'right',
   }),
   variant(carousel, 'carousel-05', 'Runway 05', {
     tiltStyle: 'alternate', tiltAmount: 6, direction: 'up', gap: 420, cornerRadius: 24,
