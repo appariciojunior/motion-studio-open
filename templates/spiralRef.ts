@@ -10,11 +10,16 @@ const BASE = 340;
 const DEG = Math.PI / 180;
 
 // ============================================================
-//  COIL — a corkscrew of cards climbing a turning axis
+//  HELIX 05-13 — a corkscrew of cards climbing a turning axis
 //
-//  The reference's Spiral family, nine presets. Our Helix group is a flat
-//  2D spiral of images and our withheld Spiral Stream came from another tool;
-//  this is the reference's own, in its numbers, so it ships under a third name.
+//  The reference's Spiral family, nine presets, shipped INTO the Helix group
+//  rather than beside it. They are the same family by the only test that
+//  settles it, which is the control surface and not the name: both place
+//  cards on a helix from a radius, a number of turns, a card size and a
+//  vertical extent — Helix states that extent as a per-card pitch and these
+//  state it as a total height, which is the same quantity divided by the
+//  count. Helix 01-04 are the flat version of it and these are the spatial
+//  one, so one shelf holds both.
 //
 //  Read out of its scene class:
 //
@@ -47,8 +52,8 @@ function coilPoint(i: number, n: number, radius: number, turns: number, height: 
 const coil: Template = {
   meta: {
     id: 'coil-01',
-    name: 'Coil 01',
-    group: 'Coil',
+    name: 'Helix 05',
+    group: 'Helix',
     engine: 'webgl',
     isNew: true,
     defaultEasing: { id: 'linear' },
@@ -160,39 +165,41 @@ function coilPose(
 }
 
 // The reference's nine presets, off its own `paramsPerModeBaseline`,
-// 2026-08-23. Height is 5000 on every one of them.
+// 2026-08-23, renumbered to follow the four Helix presets already on the
+// shelf. Height is 5000 on every one of them. Its own label is kept per line
+// so a value can be traced back.
 const LINEAR = { id: 'linear' as const };
 
 export const coilVariants: Template[] = [
-  coil, // Spiral 01 — 70 cards, 6 turns, r1060, plane 250, 10s
-  variant(coil, 'coil-02', 'Coil 02', {
+  coil, // its Spiral 01 — 70 cards, 6 turns, r1060, plane 250, 10s
+  variant(coil, 'coil-02', 'Helix 06', {
     count: 72, turns: 3.5, radius: 1435, planeSize: 265, fade: 43,
     distance: 3150, direction: 'reverse', autoFaceCamera: 'off',
   }, LINEAR),
-  variant(coil, 'coil-03', 'Coil 03', {
+  variant(coil, 'coil-03', 'Helix 07', {
     count: 33, turns: 2, radius: 1195, planeSize: 320, distance: 3100, direction: 'reverse',
   }, LINEAR),
   // Its camera sits at the origin on this one, inside the coil.
-  variant(coil, 'coil-04', 'Coil 04', {
+  variant(coil, 'coil-04', 'Helix 08', {
     count: 55, turns: 10, radius: 915, planeSize: 300, distance: 0,
     direction: 'reverse', perspective: 215,
   }, LINEAR),
-  variant(coil, 'coil-05', 'Coil 05', {
+  variant(coil, 'coil-05', 'Helix 09', {
     count: 120, turns: 3, radius: 955, planeSize: 145, fade: 29,
     distance: 1200, perspective: 300,
   }, LINEAR),
-  variant(coil, 'coil-06', 'Coil 06', {
+  variant(coil, 'coil-06', 'Helix 10', {
     count: 120, turns: 2, radius: 450, planeSize: 50, cycles: 12, cycleDeg: 60,
     distance: 700, perspective: 260,
   }, LINEAR),
-  variant(coil, 'coil-07', 'Coil 07', {
+  variant(coil, 'coil-07', 'Helix 11', {
     count: 73, turns: 7.5, radius: 1595, planeSize: 235, wobble: 50,
     distance: 3450, cameraView: 'down',
   }, LINEAR),
-  variant(coil, 'coil-08', 'Coil 08', {
+  variant(coil, 'coil-08', 'Helix 12', {
     count: 73, turns: 2, radius: 1535, planeSize: 170, distance: 3450, cameraView: 'down',
   }, LINEAR),
-  variant(coil, 'coil-09', 'Coil 09', {
+  variant(coil, 'coil-09', 'Helix 13', {
     flipImage: 'on', count: 53, turns: 10, radius: 3000, planeSize: 810, cycles: 12, cycleDeg: 60,
     distance: 4650, direction: 'reverse', cameraView: 'down',
     perspective: 140, autoFaceCamera: 'off',
