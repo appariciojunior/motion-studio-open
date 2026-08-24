@@ -31,9 +31,11 @@ function buildRuler(duration: number) {
 // its source controls there rather than spending a sidebar column on them.
 export default function Timeline({
   showExport = true,
+  showLayers = true,
   extra,
 }: {
   showExport?: boolean;
+  showLayers?: boolean;
   extra?: React.ReactNode;
 }) {
   const frame = useSceneStore((s) => s.frame);
@@ -51,6 +53,15 @@ export default function Timeline({
 
   const shellRef = useRef<HTMLDivElement>(null);
   const scrubberRef = useRef<HTMLDivElement>(null);
+
+  // The shell survives section navigation. If a user leaves Library while the
+  // lane editor is expanded, close it before entering a mode whose renderer
+  // does not consume motion tracks (Mockup currently owns one 3D studio, not a
+  // stack of 2D tracks). Otherwise the open lane editor leaks into that mode
+  // and its Add layer button writes an invisible Library track.
+  useEffect(() => {
+    if (!showLayers) setLanesOpen(false);
+  }, [showLayers]);
 
   // Publish the scrubber's geometry as CSS vars on the shell, so the lane bars
   // below sit in the SAME coordinate space as the ruler above. The transport row
@@ -142,16 +153,18 @@ export default function Timeline({
       </label>
 
       {/* Motion layers: the stack of tracks sharing this one timeline. */}
-      <button
-        className={`tl-lanes-btn ${lanesOpen ? 'active' : ''}`}
-        onClick={() => setLanesOpen((v) => !v)}
-        aria-expanded={lanesOpen}
-        title="Motion layers"
-      >
-        <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 1.8l6 3-6 3-6-3 6-3z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M2 8.2l6 3 6-3" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
-        Layers
-        <span className="tl-lanes-count">{tracks.length}</span>
-      </button>
+      {showLayers && (
+        <button
+          className={`tl-lanes-btn ${lanesOpen ? 'active' : ''}`}
+          onClick={() => setLanesOpen((v) => !v)}
+          aria-expanded={lanesOpen}
+          title="Motion layers"
+        >
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 1.8l6 3-6 3-6-3 6-3z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M2 8.2l6 3 6-3" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+          Layers
+          <span className="tl-lanes-count">{tracks.length}</span>
+        </button>
+      )}
 
       {extra}
 
@@ -165,7 +178,7 @@ export default function Timeline({
       {showExport && showExportDialog && <ExportDialog onClose={() => setShowExportDialog(false)} />}
     </div>
 
-    {lanesOpen && (
+    {showLayers && lanesOpen && (
       <div className="tl-lanes">
         {/* Topmost lane = topmost layer, so the list reads like the stack looks:
             the store's array is bottom-to-top, the UI shows it reversed. */}

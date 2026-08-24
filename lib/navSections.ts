@@ -1,3 +1,5 @@
+import type { ProjectMode } from './projects';
+
 // The editor's sections in one place: the IconRail renders its buttons from
 // this list, the route folders under app/(editor) are named after the slugs,
 // and EditorShell maps the current URL back to the nav id every panel reads
@@ -42,4 +44,15 @@ const SECTION_IDS = new Set<string>(NAV_SECTIONS.map((section) => section.id));
 export function sectionFromPathname(pathname: string | null | undefined): NavSectionId {
   const segment = (pathname ?? '').split('?')[0].split('/').filter(Boolean)[0];
   return segment && SECTION_IDS.has(segment) ? (segment as NavSectionId) : DEFAULT_SECTION;
+}
+
+/** Convert the current editor tab into the type of document it creates. */
+export function modeForSection(section: string | null | undefined): ProjectMode {
+  return section === 'mockup' ? 'mockup' : '2d';
+}
+
+/** A project's mode is fixed, so its route no longer depends on navigation history. */
+export function sectionForProject(mode: ProjectMode): NavSection {
+  const id: NavSectionId = mode === 'mockup' ? 'mockup' : 'library';
+  return NAV_SECTIONS.find((section) => section.id === id)!;
 }

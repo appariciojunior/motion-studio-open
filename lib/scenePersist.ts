@@ -1,5 +1,6 @@
 import { useSceneStore, type SceneState } from '@/store/useSceneStore';
 import { writeProjectScene } from './projects';
+import { markPending, markSaved, markSettled } from './saveStatus';
 
 // Client-side scene persistence. Settings live in localStorage; uploaded media
 // bytes live in IndexedDB (see lib/assetDb). A refresh restores the full working
@@ -77,17 +78,21 @@ export function setAutosaveTarget(projectId: string | null, seedSig?: SceneParti
 /**
  * Write the live scene into the active project now, bypassing the throttle.
  * Call before switching projects, or the last edits land in the wrong one.
+ * Returns whether it actually wrote — the autosave uses that to settle the
+ * "saving…" state when the slice turned out to be unchanged.
  */
-export function flushScene(): void {
-  if (!autosaveTarget) return;
+export function flushScene(): boolean {
+  if (!autosaveTarget) return false;
   try {
     const partial = buildScenePartial(useSceneStore.getState());
     const sig = JSON.stringify(partial);
-    if (sig === lastSig) return;
+    if (sig === lastSig) return false;
     lastSig = sig;
     writeProjectScene(autosaveTarget, partial);
+    markSaved();
+    return true;
   } catch {
-    /* quota exceeded or serialize error — skip this write, non-fatal */
+    return false; /* quota exceeded or serialize error — skip this write, non-fatal */
   }
 }
 
@@ -96,13 +101,44 @@ export function flushScene(): void {
 // changed — so play/scrub (frame churn) produces zero writes.
 export function startSceneAutosave(): () => void {
   let scheduled = false;
+  let announced = false;
   const flush = () => {
     scheduled = false;
-    flushScene();
+    const wrote = flushScene();          // reports markSaved itself
+    if (announced && !wrote) markSettled();
+    announced = false;
   };
-  return useSceneStore.subscribe(() => {
+  return useSceneStore.subscribe((state, prev) => {
+    // The write is scheduled on EVERY tick, exactly as before — the signature
+    // check inside flushScene is what makes that cheap, and nothing may depend
+    // on the guess below to decide whether to save.
+    //
+    // The editor's save indicator is a different question: during playback
+    // `frame` changes ~60×/s, so a pending flag set on every tick meant the chip
+    // read "Saving…" forever while the preview played, which is a lie about a
+    // scene nobody is editing. So the SIGNAL is announced only when a persisted
+    // field changed identity — cheap, and it cannot suppress a write.
+    if (!announced && documentTouched(state, prev)) {
+      announced = true;
+      markPending();
+    }
     if (scheduled) return;
     scheduled = true;
     setTimeout(flush, 500);
   });
+}
+
+// Every field buildScenePartial reads. Compared by identity: the store replaces
+// these rather than mutating them, so a changed reference means a changed
+// document — and the clock (frame/playing), which is not in the partial at all,
+// can never look like one.
+const DOC_KEYS = [
+  'tracks', 'activeTrackId', 'activeTemplateId', 'values', 'easing', 'fps', 'duration',
+  'aspect', 'width', 'height', 'customW', 'customH', 'safeArea', 'background', 'logo',
+  'cardShape', 'videoEnd', 'effects', 'assets',
+] as const satisfies readonly (keyof SceneState)[];
+
+function documentTouched(a: SceneState, b: SceneState): boolean {
+  for (const k of DOC_KEYS) if (a[k] !== b[k]) return true;
+  return false;
 }
