@@ -53,11 +53,18 @@ export default function EasingPanel() {
   const fn = resolveEasing(easing);
 
   // ---- handle dragging ----
+  // The plot fits its box with xMidYMid meet, so the drawn area is centred and
+  // usually smaller than the element: undo exactly that, from the element's own
+  // client rect. getScreenCTM() looks like the tidy way to do this and is not —
+  // inside this scrolling panel its matrix disagreed with clientY by 2974px.
   const pointFromEvent = (clientX: number, clientY: number): [number, number] => {
     const svg = svgRef.current!;
     const rect = svg.getBoundingClientRect();
-    const svgX = VB.x + ((clientX - rect.left) / rect.width) * VB.w;
-    const svgY = VB.y + ((clientY - rect.top) / rect.height) * VB.h;
+    const scale = Math.min(rect.width / VB.w, rect.height / VB.h);
+    const offX = rect.left + (rect.width - VB.w * scale) / 2;
+    const offY = rect.top + (rect.height - VB.h * scale) / 2;
+    const svgX = VB.x + (clientX - offX) / scale;
+    const svgY = VB.y + (clientY - offY) / scale;
     const nx = Math.max(0, Math.min(1, svgX / 100));      // x locked to [0,1]
     const ny = Math.max(-0.4, Math.min(1.4, 1 - svgY / 100)); // y may overshoot
     return [Number(nx.toFixed(3)), Number(ny.toFixed(3))];
@@ -104,7 +111,7 @@ export default function EasingPanel() {
             ref={svgRef}
             className="ez-svg"
             viewBox={`${VB.x} ${VB.y} ${VB.w} ${VB.h}`}
-            preserveAspectRatio="none"
+            preserveAspectRatio="xMidYMid meet"
           >
             {/* dotted grid */}
             {[0, 25, 50, 75, 100].map((gx) =>
