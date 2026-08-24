@@ -59,6 +59,13 @@ export interface AsciiOptions {
     renderFrame: (frame: number) => void;
     captureFrame: (frame: number) => string;
     setCaptureScale: (k: number) => void;
+    // Mockup screen video only — the same three hooks IRenderer exposes for
+    // video cards. A <video> plays on wall-clock, so an export that only steps
+    // the frame counter captures whatever the clip happened to be showing;
+    // these bind it to the export clock instead.
+    beginVideoExport?: () => Promise<void>;
+    seekVideos?: (frame: number) => Promise<void>;
+    endVideoExport?: () => void;
   } | null) => void;
 }
 

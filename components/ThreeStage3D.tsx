@@ -22,6 +22,9 @@ export default function ThreeStage3D({ effectId: forcedEffectId }: { effectId?: 
     renderFrame: (frame: number) => void;
     setCaptureScale: (k: number) => void;
     captureFrame: (frame: number) => string;
+    beginVideoExport?: () => Promise<void>;
+    seekVideos?: (frame: number) => Promise<void>;
+    endVideoExport?: () => void;
   } | null>(null);
   const storeEffectId = use3DStore((s) => s.effectId);
   // Mockup mode forces 'mockup' regardless of the 3D-effects picker's own
@@ -107,6 +110,13 @@ export default function ThreeStage3D({ effectId: forcedEffectId }: { effectId?: 
           threeEngineRef.current.setCaptureScale(k);
         }
       },
+      // Mockup screen video: ExportDialog awaits these around every captured
+      // frame. Without them the export only steps the frame counter and the
+      // clip on the device screen keeps running on wall-clock. Absent on
+      // effects that have no screen video, hence the optional forwarding.
+      beginVideoExport: async () => { await threeEngineRef.current?.beginVideoExport?.(); },
+      seekVideos: async (f) => { await threeEngineRef.current?.seekVideos?.(f); },
+      endVideoExport: () => { threeEngineRef.current?.endVideoExport?.(); },
       extractCanvas: () => canvasRef.current!,
       syncAssets: () => {},
       destroy: () => {},

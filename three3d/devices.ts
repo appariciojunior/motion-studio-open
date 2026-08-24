@@ -28,6 +28,14 @@ export interface DeviceDef {
   screenAspect: number;    // the "Screen" mesh's own w/h — used to cover-fit uploaded media
   screenCornerFrac: number; // corner radius as a fraction of the screen's short side
   screenTextureFlipY?: boolean; // bundled meshes do not all share the same UV vertical direction
+  // Some bundled meshes were authored with the screen's UV axes SWAPPED, which
+  // lands the content sideways — and mirrored, because swapping axes is a
+  // reflection, not a rotation. `screenTextureFlipY` cannot express that. The
+  // fix reflects the composite back along the same diagonal ('main': u<->v) or
+  // the anti-diagonal ('anti'), which is self-inverse, so applying the measured
+  // reflection cancels it. Measured per device with an orientation target —
+  // see scripts/_probe_screen_orientation.cjs.
+  screenTextureTranspose?: 'main' | 'anti';
   statusBarScaleX?: number; // compensates authored screen-UV stretching for the system overlay only
   slot: ScreenSlot;
   // The panel's real native pixels, shown in the UI so a screenshot can be
@@ -53,7 +61,7 @@ export const DEVICES: DeviceDef[] = [
   },
   {
     key: 'macbook14', label: 'MacBook Pro 14"', modelUrl: '/3d/devices/macbook14-clean.glb', fitHeight: 1.3,
-    screenAspect: 1.538, screenCornerFrac: 0.0086, slot: 'laptop', screenPx: [3024, 1964],
+    screenAspect: 1.538, screenCornerFrac: 0.0086, screenTextureFlipY: false, slot: 'laptop', screenPx: [3024, 1964],
     finishes: [
       { key: 'spaceblack', label: 'Space Black', hex: '#565457' },
       { key: 'silver', label: 'Silver', hex: '#c6c7c8' },
@@ -61,7 +69,7 @@ export const DEVICES: DeviceDef[] = [
   },
   {
     key: 'ipadpro', label: 'iPad Pro', modelUrl: '/3d/devices/ipadpro.glb', fitHeight: 1.7,
-    screenAspect: 1.33, screenCornerFrac: 0.014, slot: 'tablet', screenPx: [2752, 2064],
+    screenAspect: 1.33, screenCornerFrac: 0.014, screenTextureTranspose: 'anti', slot: 'tablet', screenPx: [2752, 2064],
     finishes: [
       { key: 'silver', label: 'Silver', hex: '#c6c7c8' },
       { key: 'spaceblack', label: 'Space Black', hex: '#565457' },
@@ -69,7 +77,7 @@ export const DEVICES: DeviceDef[] = [
   },
   {
     key: 'ipadair', label: 'iPad Air', modelUrl: '/3d/devices/ipadair.glb', fitHeight: 1.7,
-    screenAspect: 1.34, screenCornerFrac: 0.007, slot: 'tablet', screenPx: [2732, 2048],
+    screenAspect: 1.34, screenCornerFrac: 0.007, screenTextureTranspose: 'main', slot: 'tablet', screenPx: [2732, 2048],
     finishes: [{ key: 'blue', label: 'Blue', hex: '#8f9fb5' }],
   },
   {
@@ -79,7 +87,7 @@ export const DEVICES: DeviceDef[] = [
   },
   {
     key: 'studiodisplay', label: 'Studio Display', modelUrl: '/3d/devices/studiodisplay.glb', fitHeight: 1.5,
-    screenAspect: 1.78, screenCornerFrac: 0.012, slot: 'display', screenPx: [5120, 2880],
+    screenAspect: 1.78, screenCornerFrac: 0.012, screenTextureFlipY: false, slot: 'display', screenPx: [5120, 2880],
     finishes: [{ key: 'silver', label: 'Silver', hex: '#d8d8da' }],
   },
 ];
