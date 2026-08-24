@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useRef, useState, useMemo } from 'react';
 import { useSceneStore } from '@/store/useSceneStore';
 import {
   EASING_PRESETS,
@@ -15,6 +15,12 @@ import {
 // SVG unit square is 0..100; the viewBox adds padding so overshoot/spring
 // curves that leave [0,1] stay visible.
 const VB = { x: -16, y: -26, w: 132, h: 152 };
+
+// Field of marks over the unit square: step 6.25 puts one every ~10px, close to
+// the stage's 12px pitch, and 0/25/50/75/100 all fall on it.
+const EZ_STEP = 6.25;
+const EZ_MARK = 1.25;                       // ~2px, the stage's square
+const EZ_GRID = Array.from({ length: 100 / EZ_STEP + 1 }, (_, i) => i * EZ_STEP);
 
 // Build an SVG polyline path for a curve fn across x∈[0,1].
 function curvePath(fn: (t: number) => number, n = 48): string {
@@ -89,6 +95,17 @@ export default function EasingPanel() {
   const standard = EASING_PRESETS.filter((p) => p.group === 'standard');
   const physics = EASING_PRESETS.filter((p) => p.group === 'physics');
 
+  const grid = useMemo(() => EZ_GRID.flatMap((gx) => EZ_GRID.map((gy) => (
+    <rect
+      key={`${gx}-${gy}`}
+      className="ez-grid-dot"
+      x={gx - EZ_MARK / 2}
+      y={gy - EZ_MARK / 2}
+      width={EZ_MARK}
+      height={EZ_MARK}
+    />
+  ))), []);
+
   // handle pixel positions in viewBox units
   const hx1 = (bezier?.[0] ?? 0) * 100, hy1 = (1 - (bezier?.[1] ?? 0)) * 100;
   const hx2 = (bezier?.[2] ?? 1) * 100, hy2 = (1 - (bezier?.[3] ?? 1)) * 100;
@@ -113,12 +130,8 @@ export default function EasingPanel() {
             viewBox={`${VB.x} ${VB.y} ${VB.w} ${VB.h}`}
             preserveAspectRatio="xMidYMid meet"
           >
-            {/* dotted grid */}
-            {[0, 25, 50, 75, 100].map((gx) =>
-              [0, 25, 50, 75, 100].map((gy) => (
-                <circle key={`${gx}-${gy}`} className="ez-grid-dot" cx={gx} cy={gy} r={0.9} />
-              ))
-            )}
+            {/* field of squares, same mark as the stage behind the preview */}
+            <g className="ez-grid">{grid}</g>
             {/* curve */}
             <path className="ez-curve" d={curvePath(fn)} />
             {/* handles (bezier curves only) */}
@@ -128,12 +141,12 @@ export default function EasingPanel() {
                 <line className="ez-guide" x1={100} y1={0} x2={hx2} y2={hy2} />
                 <circle
                   className="ez-handle"
-                  cx={hx1} cy={hy1} r={4.2}
+                  cx={hx1} cy={hy1} r={3.1}
                   onPointerDown={(e) => { e.stopPropagation(); dragging.current = 0; }}
                 />
                 <circle
                   className="ez-handle"
-                  cx={hx2} cy={hy2} r={4.2}
+                  cx={hx2} cy={hy2} r={3.1}
                   onPointerDown={(e) => { e.stopPropagation(); dragging.current = 1; }}
                 />
               </>

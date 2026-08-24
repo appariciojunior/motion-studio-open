@@ -1128,11 +1128,11 @@ select.field { padding-right: 26px; }
   touch-action: none; overflow: hidden;
 }
 .ez-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-.ez-grid-dot { fill: var(--fg-faint); opacity: 0.35; }
+.ez-grid-dot { fill: var(--stage-dot); }
 .ez-curve { fill: none; stroke: var(--fg-body); stroke-width: 1.6; vector-effect: non-scaling-stroke; }
 .ez-guide { stroke: var(--handle); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
 .ez-handle {
-  fill: var(--fg); stroke: var(--card-inset); stroke-width: 1.4;
+  fill: var(--fg); stroke: var(--card-inset); stroke-width: 1.2;
   vector-effect: non-scaling-stroke; cursor: grab;
 }
 .ez-handle:active { cursor: grabbing; }
