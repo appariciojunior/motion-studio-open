@@ -56,6 +56,13 @@ function SliderControl({ def, value, onChange }: RowProps) {
   const zeroPct = signed ? (-min / (max - min)) * 100 : 0;
   const fillLeft = signed ? Math.min(pct, zeroPct) : 0;
   const fillWidth = signed ? Math.abs(pct - zeroPct) : pct;
+  // The reference keeps the 2px marker six pixels inside the filled box
+  // instead of putting it directly on the fill's leading edge. For negative
+  // signed values the fill runs the other way, so the inset changes side.
+  const handleInset = signed && pct < zeroPct ? 6 : -6;
+  const handleLeft = signed && pct === zeroPct
+    ? `${pct}%`
+    : `clamp(6px, calc(${pct}% + ${handleInset}px), calc(100% - 6px))`;
   const decimals = def.precision ?? (step < 1 ? Math.min(3, Math.ceil(-Math.log10(step))) : 0);
 
   const setFromX = (clientX: number, fine = false) => {
@@ -149,7 +156,7 @@ function SliderControl({ def, value, onChange }: RowProps) {
           as "half on" rather than "neutral". */}
       <div className="sfill" style={{ left: `${fillLeft}%`, width: `${fillWidth}%` }} />
       {signed && <div className="szero" style={{ left: `${zeroPct}%` }} />}
-      <div className="shandle" style={{ left: `${pct}%` }} />
+      <div className="shandle" style={{ left: handleLeft }} />
       {mobile && dragging && <output className="slider-bubble" style={{ left: `${pct}%` }}>{num.toFixed(decimals)}{def.unit ?? ''}</output>}
       {editing ? (
         <input
