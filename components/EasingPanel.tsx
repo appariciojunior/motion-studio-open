@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useRef, useState, useMemo } from 'react';
 import { useSceneStore } from '@/store/useSceneStore';
 import {
   EASING_PRESETS,
@@ -14,7 +14,23 @@ import {
 
 // SVG unit square is 0..100; the viewBox adds padding so overshoot/spring
 // curves that leave [0,1] stay visible.
-const VB = { x: -16, y: -26, w: 132, h: 152 };
+const VB = { x: -16, y: -20, w: 132, h: 132 };
+
+// Field of marks over the unit square: step 6.25 puts one every ~10px, close to
+// the stage's 12px pitch, and 0/25/50/75/100 all fall on it.
+// The handle's own radius plus its stroke, in curve units. Clamping to the bare
+// viewBox edge left the dot centred ON the edge, so half of it fell outside a
+// box that clips — the value was right and the handle was cut in half.
+const EZ_HANDLE_R = 3.1;
+const EZ_INSET = (EZ_HANDLE_R + 0.9) / 100;
+
+// what the viewBox shows, pulled in so a handle at the limit is still whole
+const EZ_Y_MAX = 1 - VB.y / 100 - EZ_INSET;
+const EZ_Y_MIN = 1 - (VB.y + VB.h) / 100 + EZ_INSET;
+
+const EZ_STEP = 6.25;
+const EZ_MARK = 1.25;                       // ~2px, the stage's square
+const EZ_GRID = Array.from({ length: 100 / EZ_STEP + 1 }, (_, i) => i * EZ_STEP);
 
 // Build an SVG polyline path for a curve fn across x∈[0,1].
 function curvePath(fn: (t: number) => number, n = 48): string {
@@ -53,14 +69,27 @@ export default function EasingPanel() {
   const fn = resolveEasing(easing);
 
   // ---- handle dragging ----
+  // The plot fits its box with xMidYMid meet, so the drawn area is centred and
+  // usually smaller than the element: undo exactly that, from the element's own
+  // client rect. getScreenCTM() looks like the tidy way to do this and is not —
+  // inside this scrolling panel its matrix disagreed with clientY by 2974px.
   const pointFromEvent = (clientX: number, clientY: number): [number, number] => {
     const svg = svgRef.current!;
     const rect = svg.getBoundingClientRect();
-    const svgX = VB.x + ((clientX - rect.left) / rect.width) * VB.w;
-    const svgY = VB.y + ((clientY - rect.top) / rect.height) * VB.h;
+    const scale = Math.min(rect.width / VB.w, rect.height / VB.h);
+    const offX = rect.left + (rect.width - VB.w * scale) / 2;
+    const offY = rect.top + (rect.height - VB.h * scale) / 2;
+    const svgX = VB.x + (clientX - offX) / scale;
+    const svgY = VB.y + (clientY - offY) / scale;
     const nx = Math.max(0, Math.min(1, svgX / 100));      // x locked to [0,1]
-    const ny = Math.max(-0.4, Math.min(1.4, 1 - svgY / 100)); // y may overshoot
+    // y may overshoot, but only as far as the viewBox draws — a handle dragged
+    // past the edge is a handle you cannot see
+    const ny = Math.max(EZ_Y_MIN, Math.min(EZ_Y_MAX, 1 - svgY / 100));
     return [Number(nx.toFixed(3)), Number(ny.toFixed(3))];
+  };
+
+  const capture = (e: React.PointerEvent<SVGCircleElement>) => {
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* no live pointer */ }
   };
 
   const updateHandle = (which: 0 | 1, clientX: number, clientY: number) => {
@@ -82,6 +111,17 @@ export default function EasingPanel() {
   const standard = EASING_PRESETS.filter((p) => p.group === 'standard');
   const physics = EASING_PRESETS.filter((p) => p.group === 'physics');
 
+  const grid = useMemo(() => EZ_GRID.flatMap((gx) => EZ_GRID.map((gy) => (
+    <rect
+      key={`${gx}-${gy}`}
+      className="ez-grid-dot"
+      x={gx - EZ_MARK / 2}
+      y={gy - EZ_MARK / 2}
+      width={EZ_MARK}
+      height={EZ_MARK}
+    />
+  ))), []);
+
   // handle pixel positions in viewBox units
   const hx1 = (bezier?.[0] ?? 0) * 100, hy1 = (1 - (bezier?.[1] ?? 0)) * 100;
   const hx2 = (bezier?.[2] ?? 1) * 100, hy2 = (1 - (bezier?.[3] ?? 1)) * 100;
@@ -98,20 +138,17 @@ export default function EasingPanel() {
             updateHandle(dragging.current, e.clientX, e.clientY);
           }}
           onPointerUp={() => { dragging.current = null; }}
-          onPointerLeave={() => { dragging.current = null; }}
+          onPointerCancel={() => { dragging.current = null; }}
+          onLostPointerCapture={() => { dragging.current = null; }}
         >
           <svg
             ref={svgRef}
             className="ez-svg"
             viewBox={`${VB.x} ${VB.y} ${VB.w} ${VB.h}`}
-            preserveAspectRatio="none"
+            preserveAspectRatio="xMidYMid meet"
           >
-            {/* dotted grid */}
-            {[0, 25, 50, 75, 100].map((gx) =>
-              [0, 25, 50, 75, 100].map((gy) => (
-                <circle key={`${gx}-${gy}`} className="ez-grid-dot" cx={gx} cy={gy} r={0.9} />
-              ))
-            )}
+            {/* field of squares, same mark as the stage behind the preview */}
+            <g className="ez-grid">{grid}</g>
             {/* curve */}
             <path className="ez-curve" d={curvePath(fn)} />
             {/* handles (bezier curves only) */}
@@ -119,15 +156,17 @@ export default function EasingPanel() {
               <>
                 <line className="ez-guide" x1={0} y1={100} x2={hx1} y2={hy1} />
                 <line className="ez-guide" x1={100} y1={0} x2={hx2} y2={hy2} />
+                <circle className="ez-handle" cx={hx1} cy={hy1} r={EZ_HANDLE_R} />
+                <circle className="ez-handle" cx={hx2} cy={hy2} r={EZ_HANDLE_R} />
                 <circle
-                  className="ez-handle"
-                  cx={hx1} cy={hy1} r={4.2}
-                  onPointerDown={(e) => { e.stopPropagation(); dragging.current = 0; }}
+                  className="ez-grab"
+                  cx={hx1} cy={hy1} r={7}
+                  onPointerDown={(e) => { e.stopPropagation(); dragging.current = 0; capture(e); }}
                 />
                 <circle
-                  className="ez-handle"
-                  cx={hx2} cy={hy2} r={4.2}
-                  onPointerDown={(e) => { e.stopPropagation(); dragging.current = 1; }}
+                  className="ez-grab"
+                  cx={hx2} cy={hy2} r={7}
+                  onPointerDown={(e) => { e.stopPropagation(); dragging.current = 1; capture(e); }}
                 />
               </>
             )}
