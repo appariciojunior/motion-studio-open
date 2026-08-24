@@ -11,7 +11,7 @@ const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 // Spiral — the camera corkscrews through a helix of cards (DNA / spiral
 // staircase): continuous rotation around the axis plus looping vertical travel.
 const spiral: Template = {
-  meta: { id: 'spiral-01', name: 'Helix 01', group: 'Helix', repeatAssets: true, defaultEasing: { id: 'linear' } },
+  meta: { id: 'spiral-01', name: 'Helix 01', group: 'Helix & Spiral', repeatAssets: true, defaultEasing: { id: 'linear' } },
 
   controls: [
     { key: 'direction',    label: 'Direction',     type: 'toggle', options: ['forward','reverse'], default: 'forward' },
