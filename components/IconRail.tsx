@@ -3,9 +3,10 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { NAV_SECTIONS, sectionFromPathname, type NavSectionId } from '@/lib/navSections';
+import { modeForSection, NAV_SECTIONS, sectionFromPathname, type NavSectionId } from '@/lib/navSections';
 import { useUIStore } from '@/store/useUIStore';
 import { useProjectStore } from '@/store/useProjectStore';
+import { capturePoster } from '@/lib/projectPoster';
 import { AddIcon, BoardIcon, ChevronDownIcon, ExperimentalsIcon, LibraryIcon, MockupIcon, MoonIcon, ProjectsIcon, SunIcon, ThreeDIcon, WebIcon } from './EditorIcons';
 
 const ICONS: Record<NavSectionId, React.ReactNode> = {
@@ -34,10 +35,19 @@ export default function IconRail() {
   const [experimentalsOpen, setExperimentalsOpen] = useState(false);
   const experimentalActive = EXPERIMENTAL_NAV.some((item) => item.id === active);
 
+  // Leaving a section is the one moment the stage still shows what the user was
+  // working on AND we know they're about to look elsewhere — so that is when the
+  // project's card picture is grabbed. Reading the id at click time keeps the
+  // rail from re-rendering on every project switch.
+  const leaveSection = (next: NavSectionId) => {
+    if (next !== active) capturePoster(useProjectStore.getState().activeId);
+    setNav(next);
+  };
+
   // An ACTION, not a nav section — so it never takes the active state. The +
   // icon at the top of the rail now creates what it looks like it creates.
   const newProject = () => {
-    createProject(`Project ${projectCount + 1}`);
+    createProject(`Project ${projectCount + 1}`, modeForSection(active));
     setNav('projects');
     router.push('/projects');
   };
@@ -68,7 +78,7 @@ export default function IconRail() {
             // Setting the store on click as well as on the URL change keeps the
             // panel swap on the same frame as the click: the mirror in
             // EditorShell is an effect, which lands a frame later.
-            onClick={() => setNav(n.id)}
+            onClick={() => leaveSection(n.id)}
             aria-current={active === n.id ? 'page' : undefined}
             className={`rail-item ${active === n.id ? 'active' : ''}`}
           >
@@ -97,7 +107,7 @@ export default function IconRail() {
                 key={n.id}
                 href={n.href}
                 tabIndex={experimentalsOpen ? 0 : -1}
-                onClick={() => setNav(n.id)}
+                onClick={() => leaveSection(n.id)}
                 aria-current={active === n.id ? 'page' : undefined}
                 className={`rail-item rail-subitem ${active === n.id ? 'active' : ''}`}
               >

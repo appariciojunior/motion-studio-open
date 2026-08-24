@@ -15,7 +15,8 @@ import IconRail from '@/components/IconRail';
 import ModelColors from '@/components/ModelColors';
 import ModelControl from '@/components/ModelControl';
 import MockupPanel from '@/components/MockupPanel';
-import ProjectsPanel from '@/components/ProjectsPanel';
+import ProjectDock from '@/components/ProjectDock';
+import ProjectsBrowser from '@/components/ProjectsBrowser';
 import ScenePanel from '@/components/ScenePanel';
 import ScreenContent from '@/components/ScreenContent';
 import TemplatesCard from '@/components/TemplatesCard';
@@ -59,12 +60,18 @@ export default function DesktopEditor() {
   }, [isMockup, is3D]);
 
   return (
-    <div className={`app ${isWeb || isBoard ? 'app-web' : ''} ${tplCollapsed ? 'app-tpl-collapsed' : ''} ${leftCollapsed ? 'left-collapsed' : ''} ${rightCollapsed ? 'right-collapsed' : ''}`}>
+    <div className={`app ${isWeb || isBoard ? 'app-web' : ''} ${isProjects ? 'app-projects' : ''} ${tplCollapsed ? 'app-tpl-collapsed' : ''} ${leftCollapsed ? 'left-collapsed' : ''} ${rightCollapsed ? 'right-collapsed' : ''}`}>
       <IconRail />
 
-      {tplCollapsed ? <CollapsedStrip /> : isProjects ? <ProjectsPanel /> : is3D ? <Effects3DPanel /> : isMockup ? <MockupPanel /> : <TemplatesCard controlsInline={isBoard} />}
+      {/* Projects is a tab of its own: it takes the middle of the screen (see
+          the stage below) instead of listing files in the left column while the
+          stage keeps showing whichever project happens to be open. The side
+          columns and the transport are hidden by .app-projects rather than
+          unmounted — the whole point of the shared editor layout is that the
+          Pixi/Three canvases survive a section change. */}
+      {isProjects ? null : tplCollapsed ? <CollapsedStrip /> : is3D ? <Effects3DPanel /> : isMockup ? <MockupPanel /> : <TemplatesCard controlsInline={isBoard} />}
 
-      {!isWeb && !isBoard && (
+      {!isWeb && !isBoard && !isProjects && (
         <section className="card controls card-scroll">
           {is3D || isMockup ? (
             <>
@@ -87,6 +94,7 @@ export default function DesktopEditor() {
       )}
 
       <main className="stage-col">
+        {isProjects && <ProjectsBrowser />}
         {isBoard ? <BoardStage /> : isWeb ? <WebStage /> : is3D || isMockup ? <ThreeStage3D effectId={isMockup ? 'mockup' : undefined} /> : (
           <>
             <PreviewStage />
@@ -95,6 +103,9 @@ export default function DesktopEditor() {
             </button>
           </>
         )}
+        {/* Which project is open, and whether it is saved. Not in the Projects
+            tab: there the whole screen is that answer. */}
+        {!isProjects && <ProjectDock />}
         <HistoryControls />
         <button className="panel-toggle panel-toggle-left" onClick={toggleLeftPanel} aria-expanded={!leftCollapsed} aria-label={leftCollapsed ? 'Expand left sidebar' : 'Collapse left sidebar'} title={leftCollapsed ? 'Expand left sidebar' : 'Collapse left sidebar'}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 3.5L10.5 8 6 12.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
@@ -105,7 +116,7 @@ export default function DesktopEditor() {
       </main>
 
       <section className="card right card-scroll">
-        {isBoard ? <BoardPanel /> : isWeb ? (
+        {isProjects ? null : isBoard ? <BoardPanel /> : isWeb ? (
           <><WebSelectionPanel /><div className="hairline" /><WebScenePanel /></>
         ) : is3D ? (
           <><CanvasPanel is3DMode /><div className="hairline" /><BackgroundFill /></>

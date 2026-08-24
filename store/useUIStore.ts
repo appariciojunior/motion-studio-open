@@ -4,6 +4,10 @@ import { create } from 'zustand';
 // the 2D scene store so 3D mode doesn't couple to motion/template state.
 export interface UIState {
   nav: string;              // active IconRail section id
+  // Where "open project" goes back to. Projects is a launcher, not a place you
+  // work in, so opening a project from it should return to the section you came
+  // from rather than always dropping you in the library.
+  lastEditorNav: string;
   theme: 'light' | 'dark';
   leftCollapsed: boolean;
   rightCollapsed: boolean;
@@ -39,6 +43,7 @@ function savePreferences(prefs: UIPreferences) {
 
 export const useUIStore = create<UIState>((set) => ({
   nav: 'library',
+  lastEditorNav: 'library',
   theme: 'light',
   leftCollapsed: false,
   rightCollapsed: false,
@@ -46,7 +51,7 @@ export const useUIStore = create<UIState>((set) => ({
   mobileTab: 'templates',
   mobileProjectsOpen: false,
   mobilePanelOpen: false,
-  setNav: (nav) => set({ nav }),
+  setNav: (nav) => set(nav === 'projects' ? { nav } : { nav, lastEditorNav: nav }),
   toggleTheme: () => set((state) => {
     const next = { ...state, theme: state.theme === 'dark' ? 'light' as const : 'dark' as const };
     savePreferences(next);

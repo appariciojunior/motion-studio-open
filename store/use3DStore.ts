@@ -84,6 +84,7 @@ export interface ThreeDState {
   hydrate3D: (partial: Partial<ThreeDState>) => void;
   // Back to the app's own defaults — what a brand-new project starts from.
   reset3D: () => void;
+  // Forget the live studio without deleting bytes owned by another project.
   // Rebuild screen-media urls from IndexedDB after hydrate3D.
   rehydrateScreenMedia: () => Promise<void>;
   setScreenFit: (fit: 'cover' | 'width' | 'contain') => void;
@@ -370,3 +371,15 @@ export const use3DStore = create<ThreeDState>((set) => ({
   setSunMaskScale: (v) => set({ sunMaskScale: v }),
   setSunMaskOffset: (x, y) => set({ sunMaskOffsetX: x, sunMaskOffsetY: y }),
 }));
+
+/**
+ * Clear only the live Mockup state while preserving its IndexedDB media.
+ * This stays outside the Zustand state shape so hot reload cannot leave an
+ * older store instance without the cleanup action during development.
+ */
+export function reset3DMemory(): void {
+  for (const media of Object.values(use3DStore.getState().screenMedia)) {
+    if (media?.url?.startsWith('blob:')) URL.revokeObjectURL(media.url);
+  }
+  use3DStore.setState(() => initial3DState());
+}
