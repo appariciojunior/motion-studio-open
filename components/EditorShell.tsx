@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { usePathname } from 'next/navigation';
 import AppTour from '@/components/AppTour';
+import { StrataLoader } from '@/components/StrataLoader';
 import WelcomeDialog from '@/components/WelcomeDialog';
 import { sectionFromPathname } from '@/lib/navSections';
 import { startSceneAutosave } from '@/lib/scenePersist';
@@ -48,8 +49,7 @@ function useViewportMode(): ViewportMode {
 function EditorLoading() {
   return (
     <main className="editor-loading" aria-label="Loading editor" aria-busy="true">
-      <span className="editor-loading-mark" aria-hidden="true" />
-      <span>Loading editor...</span>
+      <StrataLoader />
     </main>
   );
 }
