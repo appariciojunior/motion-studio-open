@@ -74,21 +74,8 @@ export const carousel: Template = {
     scale *= 1 - (1 - p.depthNorm) * 0.35 * persp;
     const skew = -Math.sign(offset) * (1 - p.depthNorm) * 0.18 * persp;
 
-    // Fade is DEPTH, so it darkens the card rather than dissolving it.          ← Fade
-    // Runway 02 is where the difference is unmissable: its 140px gap against a
-    // 340px card means neighbours overlap by two thirds, and at 45% alpha each
-    // one showed the card behind it straight through — a stack of glass sheets
-    // instead of a queue of photographs. The reference does not do that either:
-    // its own renderer paints an opaque rectangle of the BACKGROUND colour at
-    // the card's place and then draws the image over it at reduced alpha, which
-    // is a blend toward the background with nothing showing through. `dim` is
-    // exactly that, and it is what lib/types.ts says this axis is for.
-    //
-    // Only the two fades below stay on alpha, and correctly: a card wrapping to
-    // the other end of the strip or leaving the frame IS appearing and
-    // disappearing, which is when transparency is the right tool.
-    const dim = clamp((v.fade / 100) * (1 - p.depthNorm), 0, 1);
-    let alpha = 1;
+    // Edge fade                                                                  ← Fade
+    let alpha = 1 - (v.fade / 100) * (1 - p.depthNorm);
 
     // A wrapped card teleports from one end of the strip to the other. Make
     // that hand-off fully transparent even when a small gap keeps the final
@@ -115,7 +102,6 @@ export const carousel: Template = {
       scale,
       rotation,
       alpha,
-      dim,
       skewX: horiz ? skew : 0,
       skewY: horiz ? 0 : skew,
       depth: p.depthNorm + featured,                             // featured card always wins the draw order
@@ -133,29 +119,16 @@ export const carousel: Template = {
       : v.tiltStyle === 'alternate' ? (index % 2 ? -1 : 1)
       : v.tiltStyle === 'uniform' ? 1 : 0;
     const angle = signed * v.tiltAmount * Math.PI / 180;
-    const persp = v.perspective / 100;
-    const depth = -(1 - path.depthNorm) * persp * v.cardSize * 0.65;
+    const depth = -(1 - path.depthNorm) * (v.perspective / 100) * v.cardSize * 0.65;
     return {
       x: flat.x,
       y: flat.y,
       z: depth,
-      // The tilt is a roll IN the plane of the strip: the reference turns its
-      // cards with a plain 2D rotate, and the flat path here does the same.
-      // This path used to spend it as a turn OUT of the plane and set the roll
-      // to zero, which is why Runway 03 showed no fan at all — a 10 degree turn
-      // with no perspective narrows a card by 1.5% and does nothing else. The
-      // family renders through WebGL, so that flat 1.5% was the whole of what
-      // four presets were asking for.
-      rotationZ: flat.rotation,
-      // The out-of-plane turn is this family's own extension past the reference,
-      // and it belongs to Perspective: at 0 there is no depth for it to read
-      // against. No shipped preset sets Perspective, so gating it there changes
-      // nothing that exists and stops two controls fighting over one angle.
-      rotationX: horiz ? 0 : -angle * persp,
-      rotationY: horiz ? angle * persp : 0,
+      rotationX: horiz ? 0 : -angle,
+      rotationY: horiz ? angle : 0,
+      rotationZ: 0,
       scale: flat.scale,
       alpha: flat.alpha,
-      dim: flat.dim,
     };
   },
 };
@@ -208,11 +181,7 @@ function refCarousel(r: RefCarousel): Record<string, any> {
     bigScale: Math.round((r.centerScale ?? 1) * 100),
     scaleFocus: r.focus ?? 'center',
     tiltStyle: r.tilt ? 'alternate' : 'off',
-    // Its `tilt` is 0-100 mapped onto 60 degrees, not degrees: 25 is 15 degrees
-    // there, and reading it as 25 overtilts by two thirds. That went unnoticed
-    // while this family spent the angle on an out-of-plane turn nobody could
-    // see; the moment the roll started rendering, so did the wrong number.
-    tiltAmount: Math.round(Math.abs(r.tilt ?? 0) * 0.6),
+    tiltAmount: Math.abs(r.tilt ?? 0),
     fade: r.fade ?? 0,
     cornerRadius: 0,
     perspective: 0,
