@@ -88,6 +88,10 @@ export default function EasingPanel() {
     return [Number(nx.toFixed(3)), Number(ny.toFixed(3))];
   };
 
+  const capture = (e: React.PointerEvent<SVGCircleElement>) => {
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* no live pointer */ }
+  };
+
   const updateHandle = (which: 0 | 1, clientX: number, clientY: number) => {
     const b: Bezier = (bezier ?? [0.25, 0.25, 0.75, 0.75]).slice() as Bezier;
     const [nx, ny] = pointFromEvent(clientX, clientY);
@@ -134,7 +138,8 @@ export default function EasingPanel() {
             updateHandle(dragging.current, e.clientX, e.clientY);
           }}
           onPointerUp={() => { dragging.current = null; }}
-          onPointerLeave={() => { dragging.current = null; }}
+          onPointerCancel={() => { dragging.current = null; }}
+          onLostPointerCapture={() => { dragging.current = null; }}
         >
           <svg
             ref={svgRef}
@@ -156,12 +161,12 @@ export default function EasingPanel() {
                 <circle
                   className="ez-grab"
                   cx={hx1} cy={hy1} r={7}
-                  onPointerDown={(e) => { e.stopPropagation(); dragging.current = 0; }}
+                  onPointerDown={(e) => { e.stopPropagation(); dragging.current = 0; capture(e); }}
                 />
                 <circle
                   className="ez-grab"
                   cx={hx2} cy={hy2} r={7}
-                  onPointerDown={(e) => { e.stopPropagation(); dragging.current = 1; }}
+                  onPointerDown={(e) => { e.stopPropagation(); dragging.current = 1; capture(e); }}
                 />
               </>
             )}
