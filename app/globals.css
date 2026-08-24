@@ -176,9 +176,9 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
 }
 .rail-item.rail-subitem { width: 100%; height: 52px; margin-bottom: 2px; }
 .rail-bottom { padding: 8px; border-top: 1px solid var(--line); }
-.rail-update { width: 100%; margin: 0 0 4px; }
-.news-bell-icon { position: relative; }
-.news-bell-dot {
+.rail-update, .rail-news { width: 100%; margin: 0 0 4px; }
+.update-bell-icon, .news-bell-icon { position: relative; }
+.update-bell-dot, .news-bell-dot {
   position: absolute; top: -2px; right: -2px; width: 7px; height: 7px;
   border: 1.5px solid var(--card); border-radius: 50%; background: var(--gz-x, #ef4444);
 }
