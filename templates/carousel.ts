@@ -206,13 +206,24 @@ const FLOW: EasingSpec = { id: 'flow' };
 export const carouselVariants: Template[] = [
   { ...carousel, meta: { ...carousel.meta, name: 'Runway 01' } },
   variant(carousel, 'carousel-02', 'Runway 02', {
-    gap: 140, bigScale: 145, perspective: 0, fade: 45, speed: 0.4,
+    // Gap here is the PITCH, and it has a floor nobody had written down: the
+    // card itself. Below that the strip stops being a strip and the cards pile
+    // up — this one ran a 140 pitch against a 340 card, so neighbours buried
+    // two thirds of each other and the 45% fade was what kept it looking
+    // deliberate. None of the three tools this family is modelled on can even
+    // express that: all three author a SEPARATION added to the card, so their
+    // tightest possible strip is cards touching. 340 is that strip, which is
+    // also what the reference's own Carousel 15 and 16 ship (gap 0).
+    gap: 340, bigScale: 145, perspective: 0, fade: 45, speed: 0.4,
   }),
   variant(carousel, 'carousel-03', 'Runway 03', {
-    tiltStyle: 'fan', tiltAmount: 10, gap: 300, bigScale: 130, speed: 0.5,
+    // Same floor. 440 is where the featured card at 130% stops overlapping
+    // its neighbours too, so nothing collides at any point in the cycle.
+    tiltStyle: 'fan', tiltAmount: 10, gap: 440, bigScale: 130, speed: 0.5,
   }),
   variant(carousel, 'carousel-04', 'Runway 04', {
-    scaleFocus: 'start', bigScale: 160, gap: 260, fade: 30, direction: 'right',
+    // Same floor again: 260 buried a quarter of every card.
+    scaleFocus: 'start', bigScale: 160, gap: 400, fade: 30, direction: 'right',
   }),
   variant(carousel, 'carousel-05', 'Runway 05', {
     tiltStyle: 'alternate', tiltAmount: 6, direction: 'up', gap: 420, cornerRadius: 24,
