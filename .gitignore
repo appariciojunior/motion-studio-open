@@ -9,6 +9,7 @@ public/exports/*
 
 # machine-local
 .claude/settings.local.json
+.vercel/
 .DS_Store
 *.log
 

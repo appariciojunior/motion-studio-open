@@ -56,6 +56,10 @@ export function MoonIcon(props: EditorIconProps) {
   return <svg {...iconProps(props)}><path d="M15.7 12.6A6 6 0 017.4 4.3 6.1 6.1 0 1015.7 12.6z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>;
 }
 
+export function BellIcon(props: EditorIconProps) {
+  return <svg {...iconProps(props)}><path d="M5.25 8.4a4.75 4.75 0 019.5 0v3.1l1.35 2.1H3.9l1.35-2.1V8.4z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M8.15 15.2a2 2 0 003.7 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>;
+}
+
 export function MediaIcon(props: EditorIconProps) {
   return <svg {...iconProps(props)}><rect x="2.75" y="3.5" width="14.5" height="13" rx="1.5" stroke="currentColor" strokeWidth="1.5"/><circle cx="7" cy="8" r="1.5" stroke="currentColor" strokeWidth="1.5"/><path d="M4.5 14l3.2-3 2.4 2 2.1-2.1 3.3 3.1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>;
 }
