@@ -273,7 +273,7 @@ export default function TemplatesCard({
               >
                 <span className="tpl-fav-ico"><Heart filled={favorites.length > 0} /></span>
                 <span className="tpl-name">{FAVORITES_GROUP}</span>
-                {favorites.length > 0 && <span className="tpl-fav-count">{favorites.length}</span>}
+                {favorites.length > 0 && <span className="tpl-group-count">{favorites.length}</span>}
                 <span className="tpl-accordion-chevron"><Chevron /></span>
               </button>
               {favoritesOpen && (
@@ -315,6 +315,7 @@ export default function TemplatesCard({
                     {/* A family is new if any of its presets is, so the marker
                         shows on the collapsed list without opening the group. */}
                     {items.some((t) => t.meta.isNew) && <span className="tpl-new-inline">NEW</span>}
+                    <span className="tpl-group-count">{items.length}</span>
                     <span className="tpl-accordion-chevron"><Chevron /></span>
                   </button>
                   {isOpen && (
