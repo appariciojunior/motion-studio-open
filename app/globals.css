@@ -266,6 +266,12 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
 .tpl-item:hover:not(:disabled) { background: var(--card-inset); color: var(--fg); }
 .tpl-item.active { background: var(--card-inset); color: var(--fg); }
 .tpl-name { flex: 1; }
+.tpl-group-count {
+  flex: 0 0 auto; min-width: 2ch; text-align: right;
+  font-size: var(--fs-micro); font-variant-numeric: tabular-nums;
+  padding: 2px 5px; border-radius: var(--r-chip);
+  background: var(--card-inset); color: var(--fg-muted);
+}
 .tpl-chevron { width: 12px; height: 12px; color: var(--fg-faint); display: grid; place-items: center; }
 .tpl-accordion { width: 100%; }
 .tpl-accordion-chevron {
