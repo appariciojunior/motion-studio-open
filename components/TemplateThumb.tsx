@@ -4,12 +4,23 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { LayerTransform, Template } from '@/lib/types';
 import { defaultsFor, easingFor, layerCountFor } from '@/templates';
 import { resolveEasing } from '@/lib/easing';
+import dynamic from 'next/dynamic';
+
+// three only loads for the catalogues that actually show a webgl preset. Client
+// only: it opens a GL context on mount, which SSR cannot do.
+const TemplateThumb3D = dynamic(() => import('@/components/TemplateThumb3D'), { ssr: false });
+// Pixi likewise: it initialises a GL context on mount.
+const TemplateThumb2DGL = dynamic(() => import('@/components/TemplateThumb2DGL'), { ssr: false });
 
 // Live template thumbnail: run the template's own transform at a fixed frame
 // and render the resulting card layout as plain divs. Because it uses the real
 // transform + declared defaults, thumbs always match the actual motion.
 const THUMB_FRAME = 40;              // ~1.3s in — useful idle pose
-const PREVIEW_FPS = 30;
+// Half the clip rate on purpose: the clip is 240 frames at 30fps (8s), and a
+// thumbnail runs it in 16s instead. At ~180px across, motion at full speed
+// reads as a flicker — you see that something moved, not what it did. Both
+// thumbnail paths use this same number so the catalogue has one rhythm.
+const PREVIEW_FPS = 15;
 const CTX_BASE = { fps: 30, width: 810, height: 1080, duration: 8, totalFrames: 240 }; // 3:4 preview space, nominal 8s clip
 const TEX_LONG = 600;                 // placeholder long edge
 const DRAW_BUDGET = 28;              // max cards a thumbnail paints; layout still uses the real count
@@ -35,6 +46,46 @@ interface CardPose {
 }
 
 export default function TemplateThumb({
+  template,
+  autoPreview = false,
+}: {
+  template: Template;
+  autoPreview?: boolean;
+}) {
+  // A GL context is a limited resource. If the three path cannot get one, this
+  // card degrades to the Pixi path rather than showing an empty box.
+  const [no3d, setNo3d] = useState(false);
+  const [noGl, setNoGl] = useState(false);
+  // A webgl preset poses through transform3d, and a fifth of them are defined by
+  // mesh deformation that no DOM pose can express — the Sticker's paper has to
+  // actually fold. Those render with real three, sharing one context across the
+  // whole catalogue. Everything else keeps the div path, which is exact for a 2D
+  // pose and costs no GPU.
+  if (template.meta.engine === 'webgl' && template.transform3d && !no3d) {
+    return (
+      <TemplateThumb3D
+        template={template}
+        autoPreview={autoPreview}
+        onUnavailable={() => setNo3d(true)}
+      />
+    );
+  }
+  // Everything else renders through the shared Pixi Application, and falls back
+  // to the div path if even that cannot get a context. The divs are the only
+  // path needing no GPU, and verify-contexts pins the pose maths against them.
+  if (!noGl) {
+    return (
+      <TemplateThumb2DGL
+        template={template}
+        autoPreview={autoPreview}
+        onUnavailable={() => setNoGl(true)}
+      />
+    );
+  }
+  return <TemplateThumb2D template={template} autoPreview={autoPreview} />;
+}
+
+function TemplateThumb2D({
   template,
   autoPreview = false,
 }: {
