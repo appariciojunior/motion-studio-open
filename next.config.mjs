@@ -11,13 +11,6 @@ const basePath = isStatic
 // The managed Vercel app is updated by deployments; a downloaded/local copy
 // updates its own Git checkout. Other hosting providers can opt into the same
 // managed behaviour with MOTION_STUDIO_DEPLOYMENT_MODE=hosted.
-const requestedDeploymentMode = process.env.MOTION_STUDIO_DEPLOYMENT_MODE;
-const deploymentMode = requestedDeploymentMode === 'hosted' || requestedDeploymentMode === 'self-hosted'
-  ? requestedDeploymentMode
-  : process.env.VERCEL === '1'
-    ? 'hosted'
-    : 'self-hosted';
-
 // Vercel serves the editorial News feed. A downloaded/local checkout instead
 // checks GitHub for Updates and can fast-forward only after explicit consent.
 const requestedDeploymentMode = process.env.MOTION_STUDIO_DEPLOYMENT_MODE;
@@ -26,6 +19,8 @@ const deploymentMode = requestedDeploymentMode === 'hosted' || requestedDeployme
   : process.env.VERCEL === '1'
     ? 'hosted'
     : 'self-hosted';
+
+
 
 const nextConfig = {
   reactStrictMode: false, // avoid double Pixi mount in dev
