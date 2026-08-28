@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { getTemplate, layerCountFor } from '@/templates';
 import { useSceneStore } from '@/store/useSceneStore';
+import { getEffect } from '@/effects';
+import { applyThreeUniforms, disposeThreeMaterials, threeMaterialFor } from '@/effects/adapters/three';
 import { resolveEasing } from '@/lib/easing';
 import { assetIndexForSlot, clamp, lerp } from '@/lib/motion';
 import { loadImage } from '@/lib/textureLoad';
@@ -369,7 +371,9 @@ export class SceneRenderer3D implements IRenderer {
   private composeCam = new THREE.OrthographicCamera(-1, 1, 1, -1, -1, 1);
   private composeQuad!: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
   private outputScene = new THREE.Scene();
+  private fxScene = new THREE.Scene();
   private outputQuad!: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
+  private fxQuad!: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
   private cardPlaneGeometry = new THREE.PlaneGeometry(1, 1);
   private cardBodyGeometry = new RoundedBoxGeometry(1, 1, 1, 3, 0.055);
   private bentCardGeometries = new Map<string, THREE.BufferGeometry>();
@@ -518,30 +522,30 @@ export class SceneRenderer3D implements IRenderer {
     this.composeQuad = new THREE.Mesh(geometry, composeMaterial);
     this.composeScene.add(this.composeQuad);
 
+    // The output pass is now a plain copy to the canvas. It used to carry the
+    // pixelate maths itself — that moved into effects/pixelate.ts, where both
+    // engines read it from one place.
     const outputMaterial = new THREE.ShaderMaterial({
       depthTest: false,
       depthWrite: false,
-      uniforms: {
-        map: { value: null },
-        resolution: { value: new THREE.Vector2(this.width, this.height) },
-        pixelSize: { value: 1 },
-      },
+      uniforms: { map: { value: null } },
       vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0); }`,
       fragmentShader: `
         uniform sampler2D map;
-        uniform vec2 resolution;
-        uniform float pixelSize;
         varying vec2 vUv;
         void main(){
-          vec2 size = max(vec2(1.0), vec2(pixelSize));
-          vec2 uv = (floor(vUv * resolution / size) + 0.5) * size / resolution;
-          gl_FragColor = texture2D(map, uv);
+          gl_FragColor = texture2D(map, vUv);
           #include <colorspace_fragment>
         }
       `,
     });
     this.outputQuad = new THREE.Mesh(geometry.clone(), outputMaterial);
     this.outputScene.add(this.outputQuad);
+
+    // The quad every effect pass renders through. Its material is swapped per
+    // effect; the geometry and the scene are built once.
+    this.fxQuad = new THREE.Mesh(geometry.clone(), outputMaterial);
+    this.fxScene.add(this.fxQuad);
   }
 
   // Cover-fit via UV window (repeat/offset) on a clone sharing the decoded
@@ -1371,13 +1375,38 @@ export class SceneRenderer3D implements IRenderer {
       [read, write] = [write, read];
     });
 
-    const pixelate = s.effects.find((effect) => effect.enabled && effect.effectId === 'pixelate');
+    // Effects, as further passes on the SAME ping-pong the tracks just used.
+    // Until now this pass looked pixelate up by id and folded it into the output
+    // quad, so the other effects in effects/ simply did not exist for the webgl
+    // presets. Each active effect is now a pass, applied in the order the panel
+    // lists them — the same order the 2D path gives PIXI.Container.filters.
+    //
+    // The resolution handed to the shader is the RENDER TARGET's, not the
+    // scene's: during export the whole chain runs supersampled, and an effect
+    // measured in scene pixels would come out proportionally finer in the
+    // exported frame than on screen.
+    const fxCtx = {
+      width: this.width * this.resolution,
+      height: this.height * this.resolution,
+      time: frame / Math.max(1, s.fps),
+    };
+    for (const active of s.effects) {
+      if (!active.enabled) continue;
+      const def = getEffect(active.effectId);
+      if (!def) continue;
+      try {
+        const material = threeMaterialFor(def);
+        applyThreeUniforms(material, def, active.values, fxCtx);
+        material.uniforms.map.value = read.texture;
+        this.fxQuad.material = material;
+        this.renderer.setRenderTarget(write);
+        this.renderer.clear(true, false, false);
+        this.renderer.render(this.fxScene, this.composeCam);
+        [read, write] = [write, read];
+      } catch { /* a shader that will not compile must not take the scene down */ }
+    }
+
     this.outputQuad.material.uniforms.map.value = read.texture;
-    this.outputQuad.material.uniforms.resolution.value.set(
-      this.width * this.resolution,
-      this.height * this.resolution,
-    );
-    this.outputQuad.material.uniforms.pixelSize.value = Number(pixelate?.values.size ?? 1) * this.resolution;
     this.renderer.setRenderTarget(null);
     this.renderer.setClearColor(0x000000, 1);
     this.renderer.clear(true, true, true);
@@ -1425,6 +1454,7 @@ export class SceneRenderer3D implements IRenderer {
     this.composeQuad?.material.dispose();
     this.outputQuad?.geometry.dispose();
     this.outputQuad?.material.dispose();
+    disposeThreeMaterials();
     this.cardPlaneGeometry.dispose();
     this.cardBodyGeometry.dispose();
     this.bentCardGeometries.forEach((geometry) => geometry.dispose());
