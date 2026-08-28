@@ -1,27 +1,15 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { useSceneStore } from '@/store/useSceneStore';
+import EasingCurveEditor from '@/components/EasingCurveEditor';
 import {
   EASING_PRESETS,
   EASING_MAP,
   resolveEasing,
-  easingBezier,
   sampleEasing,
-  type Bezier,
   type EasingSpec,
 } from '@/lib/easing';
-
-// SVG unit square is 0..100; the viewBox adds padding so overshoot/spring
-// curves that leave [0,1] stay visible.
-const VB = { x: -16, y: -26, w: 132, h: 152 };
-
-// Build an SVG polyline path for a curve fn across x∈[0,1].
-function curvePath(fn: (t: number) => number, n = 48): string {
-  return sampleEasing(fn, n)
-    .map(([x, y], i) => `${i === 0 ? 'M' : 'L'} ${(x * 100).toFixed(2)} ${((1 - y) * 100).toFixed(2)}`)
-    .join(' ');
-}
 
 // A small preset preview curve (own tiny viewBox with padding).
 function MiniCurve({ spec }: { spec: EasingSpec }) {
@@ -46,109 +34,17 @@ export default function EasingPanel() {
     activePreset?.group === 'signature' ? 'defaults' : 'custom';
   const [tab, setTab] = useState<'defaults' | 'custom'>(initialTab);
 
-  const svgRef = useRef<SVGSVGElement>(null);
-  const dragging = useRef<0 | 1 | null>(null);
-
-  const bezier = easingBezier(easing);        // null for physics curves
-  const fn = resolveEasing(easing);
-
-  // ---- handle dragging ----
-  const pointFromEvent = (clientX: number, clientY: number): [number, number] => {
-    const svg = svgRef.current!;
-    const rect = svg.getBoundingClientRect();
-    const svgX = VB.x + ((clientX - rect.left) / rect.width) * VB.w;
-    const svgY = VB.y + ((clientY - rect.top) / rect.height) * VB.h;
-    const nx = Math.max(0, Math.min(1, svgX / 100));      // x locked to [0,1]
-    const ny = Math.max(-0.4, Math.min(1.4, 1 - svgY / 100)); // y may overshoot
-    return [Number(nx.toFixed(3)), Number(ny.toFixed(3))];
-  };
-
-  const updateHandle = (which: 0 | 1, clientX: number, clientY: number) => {
-    const b: Bezier = (bezier ?? [0.25, 0.25, 0.75, 0.75]).slice() as Bezier;
-    const [nx, ny] = pointFromEvent(clientX, clientY);
-    if (which === 0) { b[0] = nx; b[1] = ny; } else { b[2] = nx; b[3] = ny; }
-    setEasing({ id: 'custom', bezier: b });
-  };
-
-  const onInput = (i: number, raw: string) => {
-    const val = Number(raw);
-    if (Number.isNaN(val)) return;
-    const b: Bezier = (bezier ?? [0.25, 0.25, 0.75, 0.75]).slice() as Bezier;
-    b[i] = i % 2 === 0 ? Math.max(0, Math.min(1, val)) : val; // clamp x, free y
-    setEasing({ id: 'custom', bezier: b });
-  };
-
   const signature = EASING_PRESETS.filter((p) => p.group === 'signature');
   const standard = EASING_PRESETS.filter((p) => p.group === 'standard');
   const physics = EASING_PRESETS.filter((p) => p.group === 'physics');
-
-  // handle pixel positions in viewBox units
-  const hx1 = (bezier?.[0] ?? 0) * 100, hy1 = (1 - (bezier?.[1] ?? 0)) * 100;
-  const hx2 = (bezier?.[2] ?? 1) * 100, hy2 = (1 - (bezier?.[3] ?? 1)) * 100;
 
   return (
     <>
       <div className="section-head"><span className="eyebrow">Easing</span></div>
       <div className="section-body ez-body">
-        {/* ---- curve editor ---- */}
-        <div
-          className="ez-editor"
-          onPointerMove={(e) => {
-            if (dragging.current === null) return;
-            updateHandle(dragging.current, e.clientX, e.clientY);
-          }}
-          onPointerUp={() => { dragging.current = null; }}
-          onPointerLeave={() => { dragging.current = null; }}
-        >
-          <svg
-            ref={svgRef}
-            className="ez-svg"
-            viewBox={`${VB.x} ${VB.y} ${VB.w} ${VB.h}`}
-            preserveAspectRatio="none"
-          >
-            {/* dotted grid */}
-            {[0, 25, 50, 75, 100].map((gx) =>
-              [0, 25, 50, 75, 100].map((gy) => (
-                <circle key={`${gx}-${gy}`} className="ez-grid-dot" cx={gx} cy={gy} r={0.9} />
-              ))
-            )}
-            {/* curve */}
-            <path className="ez-curve" d={curvePath(fn)} />
-            {/* handles (bezier curves only) */}
-            {bezier && (
-              <>
-                <line className="ez-guide" x1={0} y1={100} x2={hx1} y2={hy1} />
-                <line className="ez-guide" x1={100} y1={0} x2={hx2} y2={hy2} />
-                <circle
-                  className="ez-handle"
-                  cx={hx1} cy={hy1} r={4.2}
-                  onPointerDown={(e) => { e.stopPropagation(); dragging.current = 0; }}
-                />
-                <circle
-                  className="ez-handle"
-                  cx={hx2} cy={hy2} r={4.2}
-                  onPointerDown={(e) => { e.stopPropagation(); dragging.current = 1; }}
-                />
-              </>
-            )}
-          </svg>
-        </div>
-
-        {/* ---- numeric control points ---- */}
-        <div className="ez-nums">
-          {[0, 1, 2, 3].map((i) => (
-            <input
-              key={i}
-              className="ez-num"
-              type="number"
-              step={0.01}
-              value={bezier ? bezier[i].toFixed(2) : ''}
-              placeholder="—"
-              disabled={!bezier}
-              onChange={(e) => onInput(i, e.target.value)}
-            />
-          ))}
-        </div>
+        {/* The curve plot and its four numbers live in EasingCurveEditor, which
+            holds no store — the same widget the docs mount with local state. */}
+        <EasingCurveEditor spec={easing} onChange={setEasing} />
 
         {/* ---- Defaults / Custom tabs ---- */}
         <div className="segmented ez-tabs">

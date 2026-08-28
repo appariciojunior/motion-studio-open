@@ -59,7 +59,7 @@ function radiusForArc(f: number, k: number): number {
 
 const spiralImages: Template = {
   meta: {
-    id: 'spiral-images-01', name: 'Spiral 01', group: 'Spiral',
+    id: 'spiral-images-01', name: 'Spiral 01', group: 'Helix & Spiral',
     isNew: true, repeatAssets: true, defaultEasing: { id: 'linear' },
   },
 
@@ -144,24 +144,25 @@ const spiralImages: Template = {
   },
 };
 
+// Keep the removed preset addressable for projects that already reference its
+// id, but withhold it from every picker so the catalogue does not repeat the
+// same inward-vortex composition as Spiral 01.
+const legacySpiral02 = variant(spiralImages, 'spiral-images-02', 'Spiral 02 (Legacy)', {
+  turns: 4, count: 50, cardSize: 135, spread: 75, spacing: 110, cardGap: 20, speed: 0.15, fadeIn: 12,
+});
+
 export const spiralImagesVariants: Template[] = [
   spiralImages, // Spiral 01 — the component defaults: a dense ribbon down the drain
-  // Tighter, with the whole coil inside the frame. Turns and Count
-  // move together for a reason: the radial gap between laps is Spread/Turns,
-  // and it has to clear the card's SHORT edge or the coils grow into each other
-  // and the spiral stops reading as one. At 4 turns that leaves ~44px.
-  variant(spiralImages, 'spiral-images-02', 'Spiral 02', {
-    turns: 4, count: 50, cardSize: 135, spread: 75, spacing: 110, cardGap: 20, speed: 0.15, fadeIn: 12,
-  }),
+  { ...legacySpiral02, meta: { ...legacySpiral02.meta, catalogHidden: true } },
   // Reversed — cards bloom out of the centre and fade off at the rim.
-  variant(spiralImages, 'spiral-images-03', 'Spiral 03', {
+  variant(spiralImages, 'spiral-images-03', 'Spiral 02', {
     direction: 'outward', turns: 2.5, count: 22, cardSize: 240, spread: 75,
     fadeIn: 25, fadeOut: 25, taper: 1.4,
   }),
   // Flat ribbon: no taper, upright cards — a coiled contact sheet. With every
   // card the same size there is no depth cue left to separate the laps, so this
   // one buys its clearance with a wide, shallow coil instead.
-  variant(spiralImages, 'spiral-images-04', 'Spiral 04', {
+  variant(spiralImages, 'spiral-images-04', 'Spiral 03', {
     align: 'upright', taper: 0, turns: 3.5, count: 46, cardSize: 110,
     spread: 70, spacing: 110, cardGap: 30, speed: 0.1, fadeIn: 10, fadeOut: 10,
   }),

@@ -63,6 +63,7 @@ export default function MockupPanel() {
                 aria-controls={panelId}
               >
                 <span className="tpl-name">{d.label}</span>
+                <span className="tpl-group-count">{MOCKUP_ANIMATIONS.length}</span>
                 <span className="tpl-accordion-chevron"><Chevron /></span>
               </button>
               {isOpen && (

@@ -343,7 +343,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       const isSpinnerPreset = group === 'Spinner';
       const posterDuration = id === 'poster-04' || id === 'poster-05' ? 13
         : id === 'poster-06' ? 22 : 21;
-      const stickerDuration = id === 'stickers-01' ? 36 : 13;
+      const stickerDuration = id === 'stickers-01' ? 36 : id === 'stickers-02' ? 5 : 13;
       // The reference authors a Duration per spinner preset, and what that
       // really pins is the SECONDS PER CARD: its belt advances one slot per
       // step, so the cadence is duration/count and the same 18s clip is a third

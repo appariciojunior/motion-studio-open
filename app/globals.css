@@ -171,6 +171,12 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
 }
 .rail-item.rail-subitem { width: 100%; height: 52px; margin-bottom: 2px; }
 .rail-bottom { padding: 8px; border-top: 1px solid var(--line); }
+.rail-update { width: 100%; margin: 0 0 4px; }
+.update-bell-icon { position: relative; }
+.update-bell-dot {
+  position: absolute; top: -2px; right: -2px; width: 7px; height: 7px;
+  border: 1.5px solid var(--card); border-radius: 50%; background: var(--gz-x, #ef4444);
+}
 .rail-theme { width: 100%; margin: 0; }
 
 /* ============================================================
@@ -255,6 +261,12 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
 .tpl-item:hover:not(:disabled) { background: var(--card-inset); color: var(--fg); }
 .tpl-item.active { background: var(--card-inset); color: var(--fg); }
 .tpl-name { flex: 1; }
+.tpl-group-count {
+  flex: 0 0 auto; min-width: 2ch; text-align: right;
+  font-size: var(--fs-micro); font-variant-numeric: tabular-nums;
+  padding: 2px 5px; border-radius: var(--r-chip);
+  background: var(--card-inset); color: var(--fg-muted);
+}
 .tpl-chevron { width: 12px; height: 12px; color: var(--fg-faint); display: grid; place-items: center; }
 .tpl-accordion { width: 100%; }
 .tpl-accordion-chevron {
@@ -457,9 +469,15 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
   font-size: var(--fs-ui); line-height: var(--lh-ui); color: var(--fg-value);
   font-variant-numeric: tabular-nums; padding: 2px 6px; border-radius: var(--r-seg); cursor: text;
 }
+/* the readout is a click target, so it has to look like one on hover — an
+   unmarked number reads as a label, not as something you can type into */
+.sval:hover { background: var(--card-thumb); color: var(--fg-body); }
+/* mid-drag the cursor crosses the readout; lighting it up there suggests a
+   click target that is not what the gesture is doing */
+.strack.is-dragging .sval:hover { background: none; color: var(--fg-value); }
 .sval-input {
   position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
-  width: 64px; text-align: right; background: var(--card-thumb); border: none; border-radius: var(--r-seg);
+  max-width: calc(100% - 8px); text-align: right; background: var(--card-thumb); border: none; border-radius: var(--r-seg);
   color: var(--fg-body); font-size: var(--fs-ui); padding: 2px 6px;
   font-variant-numeric: tabular-nums;
 }
@@ -501,6 +519,27 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
 }
 select.field { padding-right: 26px; }
 
+/* Direction picker — the sticker's loose edge is spatial, so show it in the
+   same 3×3 geometry instead of hiding nine choices in a native dropdown. */
+.direction-picker {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px;
+  width: 100%; padding: var(--seg-pad); border-radius: var(--r-ctrl);
+  background: var(--card-inset);
+}
+.direction-cell {
+  height: 29px; min-width: 0; border-radius: var(--r-seg);
+  color: var(--fg-faint); font-size: 16px; line-height: 1;
+  display: grid; place-items: center;
+  transition: background var(--t-fast), color var(--t-fast), transform var(--t-fast);
+}
+.direction-cell:hover:not(.active) { color: var(--fg-muted); background: var(--card-thumb); }
+.direction-cell:active { transform: scale(.96); }
+.direction-cell.active { background: var(--seg-active-bg); color: var(--seg-active-fg); }
+.direction-cell.is-random {
+  font-size: 9px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+}
+.direction-cell:focus-visible { outline: 1px solid var(--handle); outline-offset: -2px; }
+
 /* color */
 .color { display: flex; gap: 8px; align-items: center; width: 100%; }
 .color input[type=color] {
@@ -509,16 +548,48 @@ select.field { padding-right: 26px; }
 }
 
 /* xypad */
-.xypad-wrap { display: flex; gap: 10px; align-items: center; }
+.xypad-wrap { display: flex; flex-direction: column; gap: 8px; width: 100%; align-items: stretch; }
 .xypad {
-  position: relative; width: 112px; height: 92px;
+  position: relative; width: 100%; aspect-ratio: 1 / 1;
   background: var(--card-inset); border-radius: var(--r-ctrl);
   touch-action: none; cursor: crosshair;
 }
-.xypad-cross-h { position: absolute; top: 50%; left: 8px; right: 8px; height: 1px; background: var(--line); }
-.xypad-cross-v { position: absolute; left: 50%; top: 8px; bottom: 8px; width: 1px; background: var(--line); }
+.xypad-grid { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.xypad-line { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; opacity: 0.5; }
+.xypad-mid { stroke: var(--handle); stroke-width: 1; vector-effect: non-scaling-stroke; }
+/* which way is which, without having to nudge the dot to find out */
+.xypad-tag {
+  position: absolute; font-size: var(--fs-meta); line-height: 1; color: var(--fg-faint);
+  pointer-events: none; letter-spacing: .04em;
+}
+.xypad-tag-x { right: 5px; top: 50%; transform: translateY(-50%); }
+.xypad-tag-y { left: 50%; top: 5px; transform: translateX(-50%); }
+.xypad-field { position: absolute; inset: 5px; pointer-events: none; }
 .xypad-dot { position: absolute; width: 10px; height: 10px; border-radius: 50%; background: var(--fg-label); transform: translate(-50%, -50%); }
-.xypad-vals { color: var(--fg-faint); font-size: var(--fs-ui); font-variant-numeric: tabular-nums; }
+.xypad-vals {
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+  color: var(--fg-faint); font-size: var(--fs-ui); font-variant-numeric: tabular-nums;
+}
+.xypad-zero {
+  margin-left: 4px; padding: 3px 8px; border: 1px solid transparent;
+  border-radius: var(--r-seg); background: var(--card-inset); color: var(--fg-muted);
+  font: inherit; font-size: var(--fs-ui); cursor: pointer;
+}
+.xypad-zero:hover:not(:disabled) { background: var(--card-thumb); color: var(--fg-body); }
+/* already home: shown, but visibly inert — a Reset that does nothing on click
+   reads as a broken button */
+.xypad-zero:disabled { opacity: .4; cursor: default; }
+.xypad-axis {
+  font-size: var(--fs-meta); line-height: 1; color: var(--fg-faint);
+  letter-spacing: .04em; padding: 0 2px;
+}
+.exact-num {
+  text-align: center; background: var(--card-inset); border: 1px solid transparent;
+  border-radius: var(--r-seg); color: var(--fg-value); font-size: var(--fs-ui); padding: 3px 4px;
+  font-variant-numeric: tabular-nums; cursor: text;
+}
+.exact-num:hover { background: var(--card-thumb); color: var(--fg-body); }
+.exact-num:focus { outline: 1px solid var(--ink); outline-offset: 1px; color: var(--fg-body); }
 
 /* upload / dropzone — Figma: flat #f3f4f6 button, 12px #6b7280 */
 .upload, .dropzone {
@@ -1089,6 +1160,49 @@ select.field { padding-right: 26px; }
 }
 
 /* ============================================================
+   LOCAL UPDATE NOTICE — checks official main and fast-forwards on consent
+   ============================================================ */
+.update-notice {
+  position: fixed; z-index: 190;
+  width: min(380px, calc(100vw - 100px)); max-height: calc(100dvh - 24px); padding: 18px;
+  display: flex; flex-direction: column; gap: 10px;
+  overflow-y: auto;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r-card);
+  box-shadow: 0 18px 55px rgba(0,0,0,0.2); color: var(--fg);
+}
+.update-notice-close {
+  position: absolute; top: 10px; right: 12px; width: 28px; height: 28px;
+  display: grid; place-items: center; border-radius: var(--r-chip);
+  color: var(--fg-faint); font-size: 20px; line-height: 1;
+}
+.update-notice-close:hover { background: var(--card-inset); color: var(--fg); }
+.update-notice-eyebrow {
+  padding-right: 28px; color: var(--fg-faint); font-size: var(--fs-eyebrow);
+  font-weight: 600; letter-spacing: 1.2px; line-height: 1.2; text-transform: uppercase;
+}
+.update-notice strong { font-size: 15px; line-height: 1.35; }
+.update-notice p { margin: 0; color: var(--fg-label); font-size: var(--fs-label); line-height: 1.5; }
+.update-notice code { padding: 2px 5px; background: var(--card-inset); border-radius: 4px; color: var(--fg); }
+.update-notice-list {
+  margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 5px;
+  color: var(--fg-label); font-size: var(--fs-ui); line-height: 1.4;
+}
+.update-notice-warning { padding: 9px 10px; background: var(--card-inset); border-radius: var(--r-ctrl); }
+.update-notice-info { padding: 9px 10px; background: var(--card-inset); border-radius: var(--r-ctrl); }
+.update-notice-actions { margin-top: 3px; display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.update-notice-primary { min-width: 112px; height: 34px; padding: 0 14px; }
+.update-notice-optout {
+  align-self: flex-start; color: var(--fg-faint); font-size: var(--fs-ui); text-decoration: underline;
+  text-decoration-color: transparent; text-underline-offset: 3px;
+}
+.update-notice-optout:hover { color: var(--fg-label); text-decoration-color: currentColor; }
+.update-notice button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+@media (max-width: 919px) {
+  .update-notice { left: 12px !important; right: 12px; bottom: 12px !important; width: auto; }
+}
+
+/* ============================================================
    EASING PANEL — bezier curve editor + preset library
    ============================================================ */
 .ez-body { gap: 12px; }
@@ -1099,14 +1213,16 @@ select.field { padding-right: 26px; }
   touch-action: none; overflow: hidden;
 }
 .ez-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-.ez-grid-dot { fill: var(--fg-faint); opacity: 0.35; }
+.ez-grid-dot { fill: var(--stage-dot); }
 .ez-curve { fill: none; stroke: var(--fg-body); stroke-width: 1.6; vector-effect: non-scaling-stroke; }
 .ez-guide { stroke: var(--handle); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
 .ez-handle {
-  fill: var(--fg); stroke: var(--card-inset); stroke-width: 1.4;
-  vector-effect: non-scaling-stroke; cursor: grab;
+  fill: var(--fg); stroke: var(--card-inset); stroke-width: 1.2;
+  vector-effect: non-scaling-stroke; pointer-events: none;
 }
-.ez-handle:active { cursor: grabbing; }
+/* invisible, and the only thing the pointer talks to */
+.ez-grab { fill: transparent; cursor: grab; }
+.ez-grab:active { cursor: grabbing; }
 
 /* numeric control points — four equal boxes */
 .ez-nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
@@ -1392,9 +1508,10 @@ select.field { padding-right: 26px; }
   .mobile-composed-panel .icon-btn { width: 44px; height: 44px; }
   .mobile-editor .xypad-wrap { width: 100%; align-items: stretch; flex-direction: column; gap: 8px; }
   .mobile-editor .xypad { width: 100%; min-height: 180px; }
+  .mobile-editor .xypad-field { inset: 14px; }
   .mobile-editor .xypad-dot { width: 28px; height: 28px; border: 7px solid var(--card); box-shadow: 0 0 0 1px var(--handle); }
   .mobile-editor .xypad-vals { text-align: center; font-size: 13px; }
-  .mobile-editor .xypad-reset { min-height: 44px; border-radius: var(--r-ctrl); background: var(--card-inset); color: var(--fg-muted); }
+  .mobile-editor .xypad-zero { min-height: 44px; padding: 0 14px; border-radius: var(--r-ctrl); }
   .mobile-editor .pills { overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; scroll-snap-type: x proximity; }
   .mobile-editor .pills::-webkit-scrollbar { display: none; }
   .mobile-editor .pills .pill { flex: 0 0 auto; min-width: 64px; scroll-snap-align: start; }

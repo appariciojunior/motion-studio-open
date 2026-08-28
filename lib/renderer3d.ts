@@ -93,13 +93,66 @@ function makeCurlPlaneGeometry(angle: number): THREE.PlaneGeometry {
   return geometry;
 }
 
+// Continuous cylindrical sticker roll. This is deliberately a different
+// primitive from the page/corner peel below: vinyl does not lift as a rigid
+// triangular flap. Once a point crosses `front`, it travels around a cylinder;
+// after half a turn it continues behind the attached face at a constant depth.
+function makeStickerRollGeometry(
+  front: number,
+  radius: number,
+  directionDeg: number,
+): THREE.PlaneGeometry {
+  // 32×32 is already sub-pixel smooth at the editor's card sizes and keeps
+  // animated geometry caching bounded enough for Sticker 01's 36-second loop.
+  const geometry = new THREE.PlaneGeometry(1, 1, 32, 32);
+  const position = geometry.attributes.position;
+  const direction = directionDeg * Math.PI / 180;
+  const dx = Math.cos(direction);
+  const dy = Math.sin(direction);
+  const nx = -dy;
+  const ny = dx;
+  const safeRadius = Math.max(0.0001, radius);
+
+  for (let i = 0; i < position.count; i++) {
+    const x = position.getX(i);
+    const y = position.getY(i);
+    let along = x * dx + y * dy;
+    const across = x * nx + y * ny;
+    let z = 0;
+    const loose = along - front;
+
+    if (loose > 0) {
+      const theta = loose / safeRadius;
+      if (theta <= Math.PI) {
+        along = front + safeRadius * Math.sin(theta);
+        z = safeRadius * (1 - Math.cos(theta));
+      } else {
+        along = front - (loose - Math.PI * safeRadius);
+        z = 2 * safeRadius;
+      }
+    }
+
+    position.setXYZ(i, dx * along + nx * across, dy * along + ny * across, z);
+  }
+
+  position.needsUpdate = true;
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 // Directional page peel. The moving fold begins at the edge/corner selected by
 // the direction vector and travels through the sheet to the opposite side.
 // Cardinal directions become straight page flips; diagonals become corner
 // peels. These are the two silhouettes used across Poster 01-06.
 const CORNER_PEEL_SEGMENTS = 32;
 
-function makeCornerPeelGeometry(progress: number, angle: number, curl: number, directionDeg: number): THREE.BufferGeometry {
+function makeCornerPeelGeometry(
+  progress: number,
+  angle: number,
+  curl: number,
+  directionDeg: number,
+  softness = 0,
+): THREE.BufferGeometry {
   const p = clamp(progress, 0, 1);
   if (p < 0.0001) return new THREE.PlaneGeometry(1, 1, 1, 1);
   const raw = ((directionDeg % 360) + 360) % 360;
@@ -109,11 +162,21 @@ function makeCornerPeelGeometry(progress: number, angle: number, curl: number, d
   const edgeN = 0.5 * (Math.abs(nx) + Math.abs(ny));
   const foldDistance = p * edgeN * 2;
   const foldN = edgeN - foldDistance;
+  // Soft diagonal sticker peels grow from the chosen CORNER as a circular
+  // patch. Pages keep the straight travelling fold below. A circular boundary
+  // is what removes the cut-paper triangle from the image while leaving
+  // cardinal edge peels predictable.
+  const roundedCorner = softness > 0.5 && Math.abs(nx) > 0.35 && Math.abs(ny) > 0.35;
+  const cornerX = nx >= 0 ? 0.5 : -0.5;
+  const cornerY = ny >= 0 ? 0.5 : -0.5;
+  const peelRadius = Math.max(0.001, Math.min(Math.SQRT2, p * 1.75));
 
   type PeelVertex = { x: number; y: number; u: number; v: number };
   const positions: number[] = [];
   const uvs: number[] = [];
-  const signedDistance = (vertex: PeelVertex) => vertex.x * nx + vertex.y * ny - foldN;
+  const signedDistance = (vertex: PeelVertex) => roundedCorner
+    ? peelRadius - Math.hypot(vertex.x - cornerX, vertex.y - cornerY)
+    : vertex.x * nx + vertex.y * ny - foldN;
   const intersection = (a: PeelVertex, b: PeelVertex): PeelVertex => {
     const da = signedDistance(a), db = signedDistance(b);
     const t = da / (da - db);
@@ -141,13 +204,35 @@ function makeCornerPeelGeometry(progress: number, angle: number, curl: number, d
     if (folded) {
       const normal = x * nx + y * ny;
       const tangent = x * tx + y * ty;
-      const distanceBehindFold = Math.max(0, normal - foldN);
-      const across = clamp(distanceBehindFold / Math.max(0.001, foldDistance), 0, 1);
-      const localAngle = angle + curl * Math.sin(across * Math.PI);
-      const foldedN = foldN + distanceBehindFold * Math.cos(localAngle);
-      x = foldedN * nx + tangent * tx;
-      y = foldedN * ny + tangent * ty;
-      z = distanceBehindFold * Math.sin(localAngle);
+      const distanceBehindFold = Math.max(0, signedDistance(vertex));
+      const activeDistance = roundedCorner ? peelRadius : foldDistance;
+      const across = clamp(distanceBehindFold / Math.max(0.001, activeDistance), 0, 1);
+      // A poster/page wants a crisp moving crease. Stickers use a soft peel:
+      // the angle grows continuously from zero at the attached edge to the
+      // authored Peel value at the loose corner, avoiding a rigid triangular
+      // flap while keeping both profiles on the same directional geometry.
+      const firstEase = across * across * (3 - 2 * across);
+      // A second smoothstep keeps more of the sticker attached and gathers
+      // the curvature near the loose corner. This reads as flexible vinyl
+      // instead of a triangular sheet rotating around one straight hinge.
+      const ramp = firstEase * firstEase * (3 - 2 * firstEase);
+      const localAngle = angle * ((1 - softness) + softness * ramp)
+        + curl * Math.sin(across * Math.PI);
+      if (roundedCorner) {
+        // Vinyl bends through a short radius rather than reflecting the full
+        // triangular corner. The loose tip moves inward and upward, while the
+        // circular attachment boundary stays exactly in place.
+        const bendDistance = distanceBehindFold * 0.36;
+        const inward = bendDistance * (1 - Math.cos(localAngle));
+        x -= inward * nx;
+        y -= inward * ny;
+        z = bendDistance * Math.sin(localAngle);
+      } else {
+        const foldedN = foldN + distanceBehindFold * Math.cos(localAngle);
+        x = foldedN * nx + tangent * tx;
+        y = foldedN * ny + tangent * ty;
+        z = distanceBehindFold * Math.sin(localAngle);
+      }
     }
     positions.push(x, y, z);
     uvs.push(vertex.u, vertex.v);
@@ -628,7 +713,16 @@ export class SceneRenderer3D implements IRenderer {
         depthWrite: true,
         side: THREE.DoubleSide,
       });
-      const backMaterial = new THREE.MeshStandardMaterial({ color: 0x17171b, roughness: 0.9, metalness: 0, transparent: true });
+      const backMaterial = new THREE.MeshStandardMaterial({
+        color: 0x17171b,
+        roughness: 0.9,
+        metalness: 0,
+        transparent: true,
+        // Render the underside of the same deformed surface. Rotating a copy
+        // of the mesh by 180 degrees mirrors the peel geometry, making the
+        // coloured reverse appear on the opposite corner.
+        side: THREE.BackSide,
+      });
       frontMaterial.alphaToCoverage = true;
       backMaterial.alphaToCoverage = true;
       const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x24242a, roughness: 0.88, metalness: 0, transparent: true });
@@ -638,7 +732,6 @@ export class SceneRenderer3D implements IRenderer {
       const back = new THREE.Mesh(this.cardPlaneGeometry, backMaterial);
       front.position.z = 0.501;
       back.position.z = -0.501;
-      back.rotation.y = Math.PI;
       front.castShadow = front.receiveShadow = true;
       back.castShadow = back.receiveShadow = true;
       body.castShadow = body.receiveShadow = true;
@@ -987,7 +1080,11 @@ export class SceneRenderer3D implements IRenderer {
     const curled = Math.abs(curl) > 0.001;
     const cornerPeel = clamp(t.cornerPeel ?? 0, 0, 1);
     const peeling = cornerPeel > 0.0001;
-    const physical = thickness > 0.05 && !bent && !curled && !peeling;
+    const stickerRolling = Number.isFinite(t.stickerPeelFront)
+      && Number.isFinite(t.stickerCurlRadius)
+      && (t.stickerCurlRadius ?? 0) > 0;
+    const peelSoftness = clamp(t.peelSoftness ?? 0, 0, 1);
+    const physical = thickness > 0.05 && !bent && !curled && !peeling && !stickerRolling;
     const exposure = clamp(t.materialExposure ?? 1, 0.25, 2.5);
     const shadow = (t.shadowStrength ?? 0) > 0.02;
     const customBackface = typeof t.backfaceColor === 'string' && t.backfaceColor.length > 0;
@@ -1002,18 +1099,37 @@ export class SceneRenderer3D implements IRenderer {
     slot.root.scale.set(
       cardWidth,
       slot.texH * norm * t.scale,
-      (bent || curled || peeling) ? cardWidth : physical ? thickness : 1,
+      (bent || curled || peeling || stickerRolling) ? cardWidth : physical ? thickness : 1,
     );
-    if (peeling) {
+    if (stickerRolling) {
+      const quantizedFront = Math.round((t.stickerPeelFront ?? 0) * 180) / 180;
+      const quantizedRadius = Math.round((t.stickerCurlRadius ?? 0.15) * 180) / 180;
+      const quantizedDirection = Math.round((t.peelDirection ?? 50) * 2) / 2;
+      const key = `sticker-roll:${quantizedFront.toFixed(4)}:${quantizedRadius.toFixed(4)}:${quantizedDirection.toFixed(1)}`;
+      let geometry = this.bentCardGeometries.get(key);
+      if (!geometry) {
+        geometry = makeStickerRollGeometry(quantizedFront, quantizedRadius, quantizedDirection);
+        this.bentCardGeometries.set(key, geometry);
+      }
+      slot.front.geometry = geometry;
+      slot.back.geometry = geometry;
+    } else if (peeling) {
       const progressSteps = 180;
       const quantizedProgress = Math.round(cornerPeel * progressSteps) / progressSteps;
       const quantizedAngle = Math.round((t.peelAngle ?? Math.PI * 0.78) * 64) / 64;
       const quantizedCurl = Math.round(curl * 64) / 64;
       const quantizedDirection = Math.round((t.peelDirection ?? 50) * 2) / 2;
-      const key = `peel:${quantizedProgress.toFixed(3)}:${quantizedAngle.toFixed(3)}:${quantizedCurl.toFixed(3)}:${quantizedDirection.toFixed(1)}`;
+      const quantizedSoftness = Math.round(peelSoftness * 32) / 32;
+      const key = `peel:${quantizedProgress.toFixed(3)}:${quantizedAngle.toFixed(3)}:${quantizedCurl.toFixed(3)}:${quantizedDirection.toFixed(1)}:${quantizedSoftness.toFixed(3)}`;
       let geometry = this.bentCardGeometries.get(key);
       if (!geometry) {
-        geometry = makeCornerPeelGeometry(quantizedProgress, quantizedAngle, quantizedCurl, quantizedDirection);
+        geometry = makeCornerPeelGeometry(
+          quantizedProgress,
+          quantizedAngle,
+          quantizedCurl,
+          quantizedDirection,
+          quantizedSoftness,
+        );
         this.bentCardGeometries.set(key, geometry);
       }
       slot.front.geometry = geometry;
@@ -1080,7 +1196,10 @@ export class SceneRenderer3D implements IRenderer {
     const solid = physical && alpha > 0.995;
     slot.body.visible = solid;
     slot.back.visible = solid || (customBackface && alpha > 0.001);
-    slot.back.position.z = physical ? -0.501 : (bent || curled) ? -0.004 : -0.02;
+    // A peeled reverse is the underside of the same sheet. Keep it flush with
+    // the deformed front; the generic -0.02 plane offset is multiplied by the
+    // card width on this path and visibly detached the colour as a second card.
+    slot.back.position.z = physical ? -0.501 : (bent || curled || peeling || stickerRolling) ? -0.0005 : -0.02;
     if (customBackface) slot.back.material.color.set(t.backfaceColor!);
     slot.body.material.opacity = alpha;
     slot.back.material.opacity = alpha;
