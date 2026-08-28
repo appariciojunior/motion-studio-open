@@ -1,4 +1,3 @@
-import type * as PIXI from 'pixi.js';
 import type { EasingSpec } from './easing';
 
 // ----- Control vocabulary. Templates may ONLY use these types. -----
@@ -188,8 +187,47 @@ export interface Template {
 }
 
 // ----- An effect (SEAM 2) -----
+// ----- Effects: one shader, both engines -----
+// An effect is a fragment shader plus its controls — deliberately NOT a
+// PIXI.Filter. Returning a Filter tied this whole seam to Pixi, and the webgl
+// path could not consume it: renderer3d looked the pixelate up BY ID and folded
+// it into its output pass by hand. So an effect written once reached 143 of the
+// 223 catalogue presets and never the other 80.
+//
+// The shader is written against ONE canonical space and each renderer wraps it:
+//
+//   vec4 fxMain(vec2 p)      p is in PIXELS, origin top-left, inside the
+//                            effect's own area — not normalized, because most
+//                            effects (grain size, pixel size, split distance)
+//                            are authored in pixels and would otherwise have to
+//                            undo an aspect ratio by hand.
+//   fxSample(vec2 p)         reads the scene at a pixel coordinate. Each engine
+//                            supplies its own body: Pixi has to unmap through
+//                            uInputSize (its filter texture can be padded),
+//                            three just divides by the resolution.
+//   uResolution (vec2)       the area's size in pixels.
+//   uTime (float)            seconds, DERIVED FROM THE FRAME, never the wall
+//                            clock — or an animated effect would sample a
+//                            different phase on every export and the same clip
+//                            would never render twice the same.
+export interface EffectContext {
+  width: number;
+  height: number;
+  time: number; // seconds = frame / fps
+}
+
+export interface EffectShader {
+  // The body: must define `vec4 fxMain(vec2 p)`. Helpers and uniforms above are
+  // injected by the adapter, so declaring them here is a redefinition error.
+  fragment: string;
+  // Uniforms this effect owns, as name -> GLSL type ('float', 'vec2', ...).
+  uniformTypes?: Record<string, 'float' | 'vec2' | 'vec3' | 'vec4'>;
+  // Control values -> uniform values, once per frame.
+  uniforms: (values: Record<string, any>, ctx: EffectContext) => Record<string, number | number[]>;
+}
+
 export interface Effect {
   meta: { id: string; name: string };
   controls: ControlDef[];
-  createFilter: (values: Record<string, any>) => PIXI.Filter;
+  shader: EffectShader;
 }

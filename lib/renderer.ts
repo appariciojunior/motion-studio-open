@@ -1,8 +1,8 @@
 import * as PIXI from 'pixi.js';
-import { PixelateFilter } from 'pixi-filters';
 import type { LayerTransform } from '@/lib/types';
 import { getTemplate, layerCountFor } from '@/templates';
 import { getEffect } from '@/effects';
+import { applyPixiUniforms, pixiFilterFor } from '@/effects/adapters/pixi';
 import { useSceneStore, type SceneState } from '@/store/useSceneStore';
 import { resolveEasing } from '@/lib/easing';
 import { assetIndexForSlot, clamp } from '@/lib/motion';
@@ -457,22 +457,46 @@ export class SceneRenderer {
   }
 
   // ---- effects ----
-  private syncEffects() {
+  // Two different rates, deliberately separated.
+  //
+  // The FILTER LIST only changes when an effect is added, removed, reordered or
+  // toggled — so it is rebuilt against a signature of exactly that, and the
+  // programs behind it are compiled once and cached by effect id.
+  //
+  // The UNIFORMS change every frame (uTime advances even when nothing else
+  // does), so they are written unconditionally, and writing them is just moving
+  // floats. The old code lumped the two together and rebuilt filters whenever
+  // any VALUE changed, which under the old contract cost nothing and under this
+  // one would recompile a shader on every pixel of a dragged slider.
+  private syncEffects(frame: number) {
     const s = useSceneStore.getState();
     const active = s.effects.filter((e) => e.enabled);
-    const sig = active.map((e) => e.instanceId + ':' + e.effectId + ':' + JSON.stringify(e.values)).join('|');
-    if (sig === this.lastFxSig) return;
-    this.lastFxSig = sig;
 
-    const filters: PIXI.Filter[] = [];
+    const sig = active.map((e) => e.instanceId + ':' + e.effectId).join('|');
+    if (sig !== this.lastFxSig) {
+      this.lastFxSig = sig;
+      const filters: PIXI.Filter[] = [];
+      for (const e of active) {
+        const def = getEffect(e.effectId);
+        if (!def) continue;
+        try {
+          filters.push(pixiFilterFor(def));
+        } catch { /* a shader that will not compile must not take the scene down */ }
+      }
+      this.content.filters = filters.length ? filters : [];
+    }
+
+    // Time comes from the FRAME, never from the clock: an animated effect has to
+    // land on the same phase every time a given frame is rendered, or the same
+    // clip would export differently twice.
+    const ctx = { width: s.width, height: s.height, time: frame / Math.max(1, s.fps) };
     for (const e of active) {
       const def = getEffect(e.effectId);
       if (!def) continue;
       try {
-        filters.push(def.createFilter(e.values));
-      } catch { /* skip bad filter */ }
+        applyPixiUniforms(pixiFilterFor(def), def, e.values, ctx);
+      } catch { /* a bad uniform must not take the scene down either */ }
     }
-    this.content.filters = filters.length ? filters : [];
   }
 
   // ---- overlays ----
@@ -573,7 +597,7 @@ export class SceneRenderer {
     // live loop/hold behaviour follows the scene setting (non-loop <video>
     // naturally freezes on its last frame when it ends)
     this.videoEls.forEach((v) => { v.loop = s.videoEnd !== 'hold'; });
-    this.syncEffects();
+    this.syncEffects(frame);
     this.drawOverlays(s);
 
     const totalFrames = Math.max(1, Math.round(s.duration * s.fps));
