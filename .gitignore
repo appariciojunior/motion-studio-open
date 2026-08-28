@@ -12,6 +12,9 @@ public/exports/*
 .DS_Store
 *.log
 
+# Vercel CLI (local project link and generated metadata)
+.vercel/
+
 # demo source originals (compressed copies live in public/demo)
 demo-images/
 out/
@@ -28,3 +31,7 @@ public/demo-ref/
 .shots/
 # scratch dir genExportSources.mjs leaves behind if esbuild fails mid-run
 .exp-*/
+
+# Landing page: repositorio git proprio (motion-studio-landing), versionado a parte
+design/
+design-concepts/
