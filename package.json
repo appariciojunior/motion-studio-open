@@ -4,7 +4,7 @@
   "description": "Motion Studio — an open-source factory for quick videos and GIFs.",
   "main": "index.js",
   "scripts": {
-    "test": "node scripts/verify-tilt.cjs && node scripts/verify-catalogue.cjs && node scripts/verify-contexts.cjs && node scripts/verify-reference.cjs",
+    "test": "node scripts/verify-tilt.cjs && node scripts/verify-catalogue.cjs && node scripts/verify-contexts.cjs && node scripts/verify-reference.cjs && node scripts/verify-effects.cjs",
     "dev": "next dev",
     "dev:network": "next dev -H 0.0.0.0",
     "build": "next build",
@@ -29,7 +29,6 @@
     "mediabunny": "^1.54.0",
     "mp4-muxer": "^5.2.2",
     "next": "^16.2.10",
-    "pixi-filters": "^6.1.5",
     "pixi.js": "^8.19.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
