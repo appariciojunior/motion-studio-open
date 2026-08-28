@@ -10,7 +10,6 @@ export interface UpdateCommit {
   hash: string;
   subject: string;
 }
-
 export interface LocalUpdateStatus {
   supported: true;
   updateAvailable: boolean;

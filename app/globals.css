@@ -109,11 +109,16 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
 .rail-top { padding: 12px 8px 0; display: flex; flex-direction: column; align-items: stretch; flex: 1; }
 .rail-logo-wrap { display: flex; flex-direction: column; align-items: center; margin: 8px auto 16px; }
 .rail-logo {
-  width: 40px; height: 40px;
-  background: var(--inverse-bg); color: var(--inverse-fg);
+  width: 42px; height: 19px;
+  background: transparent; color: var(--fg);
   display: grid; place-items: center;
 }
-.rail-beta-tag { margin-top: 6px; }
+.beta-tag.rail-beta-tag {
+  width: 33px; height: 14px; margin-top: 6px; padding: 0;
+  display: grid; place-items: center; box-sizing: border-box;
+  background: #f3f4f6; color: #111827;
+}
+:root[data-theme="dark"] .beta-tag.rail-beta-tag { background: #2d2d2d; color: #fff; }
 /* Section items are <a> now (one route per section), so the underline and the
    UA link colour have to go — the rest of the rule already worked for buttons. */
 .rail-item {
@@ -171,9 +176,9 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
 }
 .rail-item.rail-subitem { width: 100%; height: 52px; margin-bottom: 2px; }
 .rail-bottom { padding: 8px; border-top: 1px solid var(--line); }
-.rail-update { width: 100%; margin: 0 0 4px; }
-.update-bell-icon { position: relative; }
-.update-bell-dot {
+.rail-update, .rail-news { width: 100%; margin: 0 0 4px; }
+.update-bell-icon, .news-bell-icon { position: relative; }
+.update-bell-dot, .news-bell-dot {
   position: absolute; top: -2px; right: -2px; width: 7px; height: 7px;
   border: 1.5px solid var(--card); border-radius: 50%; background: var(--gz-x, #ef4444);
 }
@@ -1160,9 +1165,11 @@ select.field { padding-right: 26px; }
 }
 
 /* ============================================================
-   LOCAL UPDATE NOTICE — checks official main and fast-forwards on consent
+   LOCAL UPDATE NOTICE + NEWS NOTICE
+   update: verifica a main oficial e atualiza com consentimento
+   news:   anuncios do deploy de producao (somente leitura)
    ============================================================ */
-.update-notice {
+.update-notice, .news-notice {
   position: fixed; z-index: 190;
   width: min(380px, calc(100vw - 100px)); max-height: calc(100dvh - 24px); padding: 18px;
   display: flex; flex-direction: column; gap: 10px;
@@ -1170,7 +1177,7 @@ select.field { padding-right: 26px; }
   background: var(--card); border: 1px solid var(--line); border-radius: var(--r-card);
   box-shadow: 0 18px 55px rgba(0,0,0,0.2); color: var(--fg);
 }
-.update-notice-close {
+.update-notice-close, .news-notice-close {
   position: absolute; top: 10px; right: 12px; width: 28px; height: 28px;
   display: grid; place-items: center; border-radius: var(--r-chip);
   color: var(--fg-faint); font-size: 20px; line-height: 1;
@@ -1200,6 +1207,38 @@ select.field { padding-right: 26px; }
 
 @media (max-width: 919px) {
   .update-notice { left: 12px !important; right: 12px; bottom: 12px !important; width: auto; }
+}
+
+.news-notice-close:hover { background: var(--card-inset); color: var(--fg); }
+.news-notice-eyebrow {
+  padding-right: 28px; color: var(--fg-faint); font-size: var(--fs-eyebrow);
+  font-weight: 600; letter-spacing: 1.2px; line-height: 1.2; text-transform: uppercase;
+}
+.news-notice strong { font-size: 15px; line-height: 1.35; }
+.news-notice p { margin: 0; color: var(--fg-label); font-size: var(--fs-label); line-height: 1.5; }
+.news-notice-list {
+  display: flex; flex-direction: column; gap: 8px;
+}
+.news-notice-item {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 5px; padding: 10px;
+  background: var(--card-inset); border: 1px solid var(--line); border-radius: var(--r-ctrl);
+}
+.news-notice-item strong { font-size: var(--fs-label); }
+.news-notice-kind {
+  color: var(--fg-faint); font-size: var(--fs-eyebrow); font-weight: 600;
+  letter-spacing: 1px; text-transform: uppercase;
+}
+.news-notice-actions { margin-top: 3px; display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.news-notice-primary { min-width: 112px; height: 34px; padding: 0 14px; }
+.news-notice-optout {
+  align-self: flex-start; color: var(--fg-faint); font-size: var(--fs-ui); text-decoration: underline;
+  text-decoration-color: transparent; text-underline-offset: 3px;
+}
+.news-notice-optout:hover { color: var(--fg-label); text-decoration-color: currentColor; }
+.news-notice button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+@media (max-width: 919px) {
+  .news-notice { left: 12px !important; right: 12px; bottom: 12px !important; width: auto; }
 }
 
 /* ============================================================
@@ -2083,7 +2122,7 @@ select.field { padding-right: 26px; }
    `animation: none` on its own would stack them into one opaque rectangle. */
 @media (prefers-reduced-motion: reduce) {
   .ld-cards i { animation: none; }
-  .ld-cards i:nth-child(2) { transform: translateX(calc(12px * var(--dir, 1))) scale(.8, .667); opacity: .55; }
+  .ld-cards i:nth-child(2) { transform: translateX(calc(12px * var(--dir, 1))) scale(.8, .6667); opacity: .55; }
   .ld-cards i:nth-child(3) { transform: translateX(calc(22px * var(--dir, 1))) scale(.6, .4); opacity: .3; }
 }
 

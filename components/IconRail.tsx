@@ -8,6 +8,8 @@ import LogoMark from '@/components/LogoMark';
 import { useUIStore } from '@/store/useUIStore';
 import { useProjectStore } from '@/store/useProjectStore';
 import { capturePoster } from '@/lib/projectPoster';
+import { IS_HOSTED_DEPLOYMENT } from '@/lib/deployment';
+import NewsNotifier from './NewsNotifier';
 import UpdateNotifier from './UpdateNotifier';
 import { AddIcon, BoardIcon, ChevronDownIcon, ExperimentalsIcon, LibraryIcon, MockupIcon, MoonIcon, ProjectsIcon, SunIcon, ThreeDIcon, WebIcon } from './EditorIcons';
 
@@ -117,7 +119,7 @@ export default function IconRail() {
         </div>
       </div>
       <div className="rail-bottom">
-        <UpdateNotifier />
+        {IS_HOSTED_DEPLOYMENT ? <NewsNotifier /> : <UpdateNotifier />}
         <button
           className="rail-item rail-theme"
           onClick={toggleTheme}

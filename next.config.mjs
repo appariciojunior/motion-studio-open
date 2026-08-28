@@ -18,6 +18,15 @@ const deploymentMode = requestedDeploymentMode === 'hosted' || requestedDeployme
     ? 'hosted'
     : 'self-hosted';
 
+// Vercel serves the editorial News feed. A downloaded/local checkout instead
+// checks GitHub for Updates and can fast-forward only after explicit consent.
+const requestedDeploymentMode = process.env.MOTION_STUDIO_DEPLOYMENT_MODE;
+const deploymentMode = requestedDeploymentMode === 'hosted' || requestedDeploymentMode === 'self-hosted'
+  ? requestedDeploymentMode
+  : process.env.VERCEL === '1'
+    ? 'hosted'
+    : 'self-hosted';
+
 const nextConfig = {
   reactStrictMode: false, // avoid double Pixi mount in dev
   devIndicators: false,   // hide the dev overlay badge (it covers the play button)

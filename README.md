@@ -62,28 +62,54 @@ npm test             # the verification suites (see below)
 npx tsc --noEmit     # the only required check before a PR
 ```
 
-### Local update notifications
+### Notifications: GitHub Updates locally, Vercel News when hosted
 
-When the editor is opened through `localhost`, the bell above the theme button
-checks the official `main` branch in the background. If new commits exist, its
-panel shows their titles and offers an **Update Git** button. Alerts can be
-turned off (and back on) from that panel; disabling them also stops automatic
-Git checks in that browser. The update is always opt-in and uses a
-fast-forward-only merge; it refuses to run outside `main`, when the checkout
-has local changes, is detached, or has diverged. After updating, restart the
-dev server (and run `npm install` when the notice says dependencies changed).
+The bell above the theme button has two deployment-specific modes. A downloaded
+checkout opened through `localhost` shows **Updates** from the official GitHub
+`main` branch and offers an explicitly confirmed, fast-forward-only Git update.
+The hosted Vercel application shows only the read-only **News** feed. It never
+offers a Git action or exposes the local update endpoint.
 
-The endpoint is unavailable from LAN/public hostnames, rejects cross-site and
-unconfirmed update requests, serializes concurrent updates, and is removed
-entirely from the static GitHub Pages build. It never installs dependencies or
-restarts a process. Set `MOTION_STUDIO_UPDATE_REPOSITORY` only when maintaining
-a fork that should check a different Git repository.
+Pull requests and branch pushes create Vercel Preview deployments but do not
+alert production users. Editorial News is published only after the change
+reaches the Vercel Production Branch and its Production deployment succeeds.
+Open clients check `/api/news` every five minutes, compare item IDs with those
+already seen in that browser, and show the red dot and panel when something
+changes.
+
+Editorial **News** items are maintained in `content/news.json`, newest first,
+and are published with the next successful Production deployment. Each item
+uses this shape (keep `id` stable and unique, and all customer-facing copy in
+English):
+
+```json
+{
+  "id": "new-feature-slug",
+  "title": "A short customer-facing title",
+  "body": "Optional detail shown inside the notification panel.",
+  "url": "https://example.com/optional-details"
+}
+```
+
+The Vercel News endpoint has no write operation or GitHub token. The local
+Update endpoint is blocked on hosted deployments, LAN/public hostnames and
+cross-site requests; it also refuses dirty, detached, diverged or non-`main`
+checkouts. It never installs dependencies or restarts a process. Users can turn
+alerts off (and back on) in their browser; the preference remains local to that
+browser.
+
+Because the experimental Web section runs pasted code in the same origin, only
+paste code you trust: same-origin code can make the same local requests as the
+editor UI. The Git updater still accepts only a clean fast-forward from the
+configured repository, but the Web preview should be sandboxed before treating
+hostile pasted components as safe.
+
+The static GitHub Pages build omits the bell and API routes. Vercel's local
+`.vercel/` project metadata is ignored by Git.
 
 The experimental Web section intentionally executes the owner's pasted code in
 the app's same-origin context. Only paste code you trust: like any same-origin
-code, it shares the local app's browser privileges. Sandboxing that preview is
-required before treating hostile pasted components as part of the updater's
-threat model.
+code, it shares the local app's browser privileges.
 
 ## Export
 
@@ -322,16 +348,11 @@ templates, in `effects/`.
 
 ## Licence
 
-Open source under the **Apache License 2.0** — use, copy, modify and distribute
-freely, for any purpose including commercially, in production, and as a hosted
-service. Two conditions travel with a redistribution: keep the licence and the
-NOTICE, and state which files you changed. The licence also carries an express
-patent grant from every contributor.
-
-This replaces the Elastic License 2.0 the project shipped under previously; the
-hosted-service restriction that licence carried no longer applies. See
-[LICENSE](LICENSE); third-party components and their licences are listed in
-[NOTICE](NOTICE).
+Source-available under the **Elastic License 2.0** — use, copy, modify and
+distribute freely, including commercially and in production. The one right
+withheld is offering Motion Studio to third parties as a hosted or managed
+service. See [LICENSE](LICENSE); third-party components and their licences are
+listed in [NOTICE](NOTICE).
 
 ## Credits
 

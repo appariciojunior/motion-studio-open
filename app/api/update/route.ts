@@ -9,7 +9,6 @@ function isLoopback(hostname: string): boolean {
   const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
   return host === 'localhost' || host === '::1' || host.startsWith('127.');
 }
-
 function requestHostname(request: NextRequest): string {
   // Next dev normalizes request.url to its own localhost origin even when the
   // browser reached it through a LAN address. The forwarded/Host header keeps

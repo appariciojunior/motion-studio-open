@@ -7,6 +7,7 @@ import { arcVariants } from './arc';
 import { orbitVariants } from './orbit';
 import { orbit3dVariants } from './orbit3d';
 import { spinVariants } from './spin';
+import { revolveVariants } from './revolve';
 import { stackVariants } from './stack';
 import { storiesVariants } from './stories';
 import { flickerVariants, flickerRefVariants } from './flicker';
@@ -14,6 +15,9 @@ import { fieldVariants } from './field';
 import { wipeVariants } from './wipe';
 import { wipeRevealVariants } from './wipeReveal';
 import { globeVariants } from './globe';
+import { globeRefVariants } from './globeRef';
+import { coilVariants } from './spiralRef';
+import { ringRefVariants, carousel3dRefVariants } from './ring3dRef';
 import { spiralVariants } from './spiral';
 import { spiralImagesVariants } from './spiralImages';
 import { tourVariants } from './tour';
@@ -21,6 +25,7 @@ import { gravityVariants } from './gravity';
 import { parallaxVariants } from './parallax';
 import { scaleVariants } from './scale';
 import { proximityVariants } from './proximity';
+import { proximityFieldVariants } from './proximityField';
 import { storiesFocusVariants } from './storiesFocus';
 import { zoomVariants } from './zoom';
 import { bloomVariants } from './bloom';
@@ -34,8 +39,11 @@ import { tickerVariants } from './ticker';
 import { isometricVariants } from './isometric';
 import { coverflowVariants } from './coverflow';
 import { deckVariants } from './deck';
+import { deckRefVariants } from './deckRef';
 import { rippleVariants } from './flipgrid';
 import { flipVariants } from './flip';
+import { magazineVariants } from './magazine';
+import { magazineSolidVariants } from './magazineSolid';
 import { boxVariants } from './box';
 import { surfaceVariants } from './surface';
 import { premium3dTemplates } from './premium3d';
@@ -75,6 +83,7 @@ export const templateList: Template[] = [
   ...orbit3dVariants,
   ...showcaseVariants.slice(1),
   ...spinVariants,
+  ...revolveVariants,
   ...stackVariants,
   ...wheelVariants,
   ...wheelEllipseVariants,
@@ -86,7 +95,11 @@ export const templateList: Template[] = [
   ...flickerVariants,
   ...flickerRefVariants,
   ...globeVariants.slice(2),
+  ...globeRefVariants,
+  ...ringRefVariants,
+  ...carousel3dRefVariants,
   ...spiralVariants,
+  ...coilVariants,
   ...spiralImagesVariants,
   ...helix3dVariants.slice(1),
   ...tourVariants,
@@ -97,6 +110,7 @@ export const templateList: Template[] = [
   ...zoomVariants,
   ...bloomVariants,
   ...proximityVariants,
+  ...proximityFieldVariants,
   ...revealVariants,
   ...framesVariants,
   ...gridVariants,
@@ -106,7 +120,10 @@ export const templateList: Template[] = [
   ...isometricVariants,
   ...coverflowVariants,
   ...deckVariants,
+  ...deckRefVariants,
   ...flipVariants,
+  ...magazineVariants,
+  ...magazineSolidVariants,
   ...rippleVariants,
   ...boxVariants,
 ];
@@ -117,7 +134,7 @@ export const templates: Record<string, Template> = Object.fromEntries(
 
 // Templates can remain addressable for persisted scenes while being withheld
 // from every picker until their visual quality is ready for the catalogue.
-const HIDDEN_CATALOG_GROUPS = new Set(['3D & Perspective', 'Dock', 'Editorial', 'Globe', 'Ripple', 'Sphere']);
+const HIDDEN_CATALOG_GROUPS = new Set(['3D & Perspective', 'Dock', 'Editorial', 'Globe', 'Magazine', 'Ripple', 'Sphere']);
 export const catalogTemplateList = templateList.filter(
   (t) => !t.meta.catalogHidden && !HIDDEN_CATALOG_GROUPS.has(t.meta.group)
 );
