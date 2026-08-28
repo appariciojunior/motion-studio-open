@@ -640,10 +640,7 @@ export const TEMPLATE_MANIFEST: Record<string, { exports: string[]; ids: string[
       "poster-03",
       "poster-04",
       "poster-05",
-      "poster-06",
-      "stickers-01",
-      "stickers-02",
-      "stickers-03"
+      "poster-06"
     ]
   },
   "stickersExact.ts": {
