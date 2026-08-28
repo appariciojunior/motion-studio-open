@@ -34,5 +34,5 @@ public/demo-ref/
 .exp-*/
 
 # Landing page: repositorio git proprio (motion-studio-landing), versionado a parte
-design/
-design-concepts/
+/design/
+/design-concepts/
