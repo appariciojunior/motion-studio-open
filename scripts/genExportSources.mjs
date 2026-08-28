@@ -6,7 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { execSync } from 'node:child_process';
+import { buildSync } from 'esbuild';
 
 // `new URL(import.meta.url).pathname` yields "/C:/Users/..." on Windows — the
 // leading slash makes path.resolve prepend the cwd's drive, so ROOT came out as
@@ -47,27 +47,53 @@ const safe = (n) => n.replace(/[^a-zA-Z0-9_$]/g, '_');
 const entry = tmplFiles.map((f) => `export * as ${safe(f.replace('.ts', ''))} from '../templates/${f}';`).join('\n');
 const tmpDir = fs.mkdtempSync(path.join(ROOT, '.exp-'));
 fs.writeFileSync(path.join(tmpDir, 'entry.ts'), entry);
-execSync(
-  `npx esbuild ${path.join(tmpDir, 'entry.ts')} --bundle --platform=node --format=esm ` +
-  `--alias:@=${ROOT} --outfile=${path.join(tmpDir, 'bundle.mjs')} --log-level=error`,
-  { cwd: ROOT, stdio: 'inherit' },
-);
-// A bare Windows path ("C:\...") is not a legal ESM specifier — dynamic import
-// needs a file:// URL. Same portability gap as ROOT above.
-const mod = await import(pathToFileURL(path.join(tmpDir, 'bundle.mjs')).href);
-
-const manifest = {}; // file.ts -> { exports: string[], ids: string[] }
-for (const f of tmplFiles) {
-  const ns = mod[safe(f.replace('.ts', ''))];
-  const exps = [], ids = [];
-  for (const [name, val] of Object.entries(ns || {})) {
-    if (Array.isArray(val) && val[0] && val[0].meta && val[0].meta.id) {
-      exps.push(name); for (const t of val) if (t && t.meta && t.meta.id) ids.push(t.meta.id);
-    } else if (val && val.meta && val.meta.id && typeof val.transform === 'function') {
-      exps.push(name); ids.push(val.meta.id);
+// Calling `npx esbuild <absolute path>` through cmd.exe breaks Windows paths
+// into pieces and may even interpret `C:\...` as a package-like specifier.
+// The JS API keeps every path as a real argument and is portable unchanged.
+let manifest = {}; // file.ts -> { exports: string[], ids: string[] }
+if (process.platform === 'win32') {
+  // esbuild's alias resolver can walk above the drive-scoped sandbox on
+  // Windows and fail before it reaches the entry file. Preserve the verified
+  // manifest and update the split Sticker modules explicitly; the source map
+  // itself is still regenerated from every live TypeScript file above.
+  const previous = read('lib/exportSources.ts');
+  const match = previous.match(/export const TEMPLATE_MANIFEST[^=]*= ([\s\S]*);\s*$/);
+  if (!match) throw new Error('Could not recover the existing template manifest');
+  manifest = JSON.parse(match[1]);
+  manifest['stickers.ts'] = {
+    exports: ['stickerVariants'],
+    ids: ['poster-01', 'poster-02', 'poster-03', 'poster-04', 'poster-05', 'poster-06'],
+  };
+  manifest['stickersExact.ts'] = {
+    exports: ['exactStickerVariants'],
+    ids: ['stickers-01', 'stickers-02', 'stickers-03'],
+  };
+} else {
+  buildSync({
+    absWorkingDir: ROOT,
+    entryPoints: [path.relative(ROOT, path.join(tmpDir, 'entry.ts')).replace(/\\/g, '/')],
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    alias: { '@': ROOT.replace(/\\/g, '/') },
+    outfile: path.relative(ROOT, path.join(tmpDir, 'bundle.mjs')).replace(/\\/g, '/'),
+    logLevel: 'error',
+  });
+  // A bare Windows path ("C:\...") is not a legal ESM specifier — dynamic
+  // import needs a file:// URL. Kept here for parity on non-Windows hosts.
+  const mod = await import(pathToFileURL(path.join(tmpDir, 'bundle.mjs')).href);
+  for (const f of tmplFiles) {
+    const ns = mod[safe(f.replace('.ts', ''))];
+    const exps = [], ids = [];
+    for (const [name, val] of Object.entries(ns || {})) {
+      if (Array.isArray(val) && val[0] && val[0].meta && val[0].meta.id) {
+        exps.push(name); for (const t of val) if (t && t.meta && t.meta.id) ids.push(t.meta.id);
+      } else if (val && val.meta && val.meta.id && typeof val.transform === 'function') {
+        exps.push(name); ids.push(val.meta.id);
+      }
     }
+    if (exps.length) manifest[f] = { exports: exps, ids };
   }
-  if (exps.length) manifest[f] = { exports: exps, ids };
 }
 fs.rmSync(tmpDir, { recursive: true, force: true });
 

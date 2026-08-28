@@ -7,6 +7,7 @@ export type ControlType =
   | 'toggle'   // two-state segmented (Forward/Reverse, On/Off)
   | 'pills'    // single-select option row.         needs options[]
   | 'select'   // dropdown.                         needs options[]
+  | 'direction' // visual 3x3 edge/corner picker
   | 'color'    // hex string
   | 'xypad'    // {x,y}
   | 'upload'   // file/url
@@ -90,6 +91,12 @@ export interface LayerTransform3D {
   cornerPeel?: number;       // 0..1 directional sheet peel
   peelAngle?: number;        // radians rotated around the moving fold
   peelDirection?: number;    // degrees: 0 right, 90 top, 180 left, 270 bottom
+  peelSoftness?: number;     // 0 sharp crease .. 1 progressively curved fold
+  // Exact rolling-sheet deformation used by the Sticker presets. `front` and
+  // `radius` are expressed in normalized card-width units; vertices beyond
+  // the moving front wrap around a cylinder and eventually expose the back.
+  stickerPeelFront?: number;
+  stickerCurlRadius?: number;
   backfaceColor?: string;    // optional solid reverse side (used by rolling stickers)
   velocity?: { x: number; y: number; z: number }; // px/s, used by finish passes
   scale: number;

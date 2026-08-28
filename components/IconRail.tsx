@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { modeForSection, NAV_SECTIONS, sectionFromPathname, type NavSectionId } from '@/lib/navSections';
+import LogoMark from '@/components/LogoMark';
 import { useUIStore } from '@/store/useUIStore';
 import { useProjectStore } from '@/store/useProjectStore';
 import { capturePoster } from '@/lib/projectPoster';
@@ -60,11 +61,7 @@ export default function IconRail() {
       <div className="rail-top">
         <div className="rail-logo-wrap">
           <div className="rail-logo">
-            <svg width="42" height="19" viewBox="0 0 42 19" fill="none" aria-hidden="true">
-              <rect x="1" y="2" width="10" height="15" rx="2.5" fill="currentColor"/>
-              <rect x="14" y="4.5" width="8" height="10" rx="2" fill="currentColor" opacity="0.55"/>
-              <rect x="25" y="6.5" width="6" height="6" rx="1.5" fill="currentColor" opacity="0.3"/>
-            </svg>
+            <LogoMark />
           </div>
           <span className="beta-tag rail-beta-tag">Beta</span>
         </div>

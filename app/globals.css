@@ -524,6 +524,27 @@ input[type=range] { -webkit-appearance: none; appearance: none; background: none
 }
 select.field { padding-right: 26px; }
 
+/* Direction picker — the sticker's loose edge is spatial, so show it in the
+   same 3×3 geometry instead of hiding nine choices in a native dropdown. */
+.direction-picker {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px;
+  width: 100%; padding: var(--seg-pad); border-radius: var(--r-ctrl);
+  background: var(--card-inset);
+}
+.direction-cell {
+  height: 29px; min-width: 0; border-radius: var(--r-seg);
+  color: var(--fg-faint); font-size: 16px; line-height: 1;
+  display: grid; place-items: center;
+  transition: background var(--t-fast), color var(--t-fast), transform var(--t-fast);
+}
+.direction-cell:hover:not(.active) { color: var(--fg-muted); background: var(--card-thumb); }
+.direction-cell:active { transform: scale(.96); }
+.direction-cell.active { background: var(--seg-active-bg); color: var(--seg-active-fg); }
+.direction-cell.is-random {
+  font-size: 9px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+}
+.direction-cell:focus-visible { outline: 1px solid var(--handle); outline-offset: -2px; }
+
 /* color */
 .color { display: flex; gap: 8px; align-items: center; width: 100%; }
 .color input[type=color] {
@@ -1144,9 +1165,11 @@ select.field { padding-right: 26px; }
 }
 
 /* ============================================================
-   NEWS NOTICE — read-only production deployment announcements
+   LOCAL UPDATE NOTICE + NEWS NOTICE
+   update: verifica a main oficial e atualiza com consentimento
+   news:   anuncios do deploy de producao (somente leitura)
    ============================================================ */
-.news-notice {
+.update-notice, .news-notice {
   position: fixed; z-index: 190;
   width: min(380px, calc(100vw - 100px)); max-height: calc(100dvh - 24px); padding: 18px;
   display: flex; flex-direction: column; gap: 10px;
@@ -1154,11 +1177,38 @@ select.field { padding-right: 26px; }
   background: var(--card); border: 1px solid var(--line); border-radius: var(--r-card);
   box-shadow: 0 18px 55px rgba(0,0,0,0.2); color: var(--fg);
 }
-.news-notice-close {
+.update-notice-close, .news-notice-close {
   position: absolute; top: 10px; right: 12px; width: 28px; height: 28px;
   display: grid; place-items: center; border-radius: var(--r-chip);
   color: var(--fg-faint); font-size: 20px; line-height: 1;
 }
+.update-notice-close:hover { background: var(--card-inset); color: var(--fg); }
+.update-notice-eyebrow {
+  padding-right: 28px; color: var(--fg-faint); font-size: var(--fs-eyebrow);
+  font-weight: 600; letter-spacing: 1.2px; line-height: 1.2; text-transform: uppercase;
+}
+.update-notice strong { font-size: 15px; line-height: 1.35; }
+.update-notice p { margin: 0; color: var(--fg-label); font-size: var(--fs-label); line-height: 1.5; }
+.update-notice code { padding: 2px 5px; background: var(--card-inset); border-radius: 4px; color: var(--fg); }
+.update-notice-list {
+  margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 5px;
+  color: var(--fg-label); font-size: var(--fs-ui); line-height: 1.4;
+}
+.update-notice-warning { padding: 9px 10px; background: var(--card-inset); border-radius: var(--r-ctrl); }
+.update-notice-info { padding: 9px 10px; background: var(--card-inset); border-radius: var(--r-ctrl); }
+.update-notice-actions { margin-top: 3px; display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.update-notice-primary { min-width: 112px; height: 34px; padding: 0 14px; }
+.update-notice-optout {
+  align-self: flex-start; color: var(--fg-faint); font-size: var(--fs-ui); text-decoration: underline;
+  text-decoration-color: transparent; text-underline-offset: 3px;
+}
+.update-notice-optout:hover { color: var(--fg-label); text-decoration-color: currentColor; }
+.update-notice button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+@media (max-width: 919px) {
+  .update-notice { left: 12px !important; right: 12px; bottom: 12px !important; width: auto; }
+}
+
 .news-notice-close:hover { background: var(--card-inset); color: var(--fg); }
 .news-notice-eyebrow {
   padding-right: 28px; color: var(--fg-faint); font-size: var(--fs-eyebrow);
@@ -2005,6 +2055,8 @@ select.field { padding-right: 26px; }
 }
 .route-404-link:hover { background: var(--line); }
 
+/* The loading screen centres its row, so the loader's own top margin — which
+   exists for the standalone use — would push it off that centre line. */
 .editor-loading .ld-cards { margin-top: 0; }
 .ctl-section + .ctl-section { margin-top: 14px; }
 .ctl-section-title {
@@ -2032,7 +2084,21 @@ select.field { padding-right: 26px; }
 }
 .ctl-advanced-toggle:hover { color: var(--text); }
 
-/* Strata loader: the three layers of the brand mark, cycling sideways. */
+/* ---- Strata loader: the brand mark's layers, shuffling ---- */
+/* This IS the logo (app/icon.svg, components/IconRail.tsx) put in motion. Its
+   three rounded rects sit side by side, each smaller and fainter, all centred
+   on one line — so measured centre to centre they are offset 12 and 22 px, and
+   sized 10x15 -> 8x10 -> 6x6, at opacity 1 -> .55 -> .3.
+   Every card here runs that same path with a third of the cycle between them,
+   which means at rest the three of them ARE the mark, and the motion is the
+   front layer handing its place to the next.
+   The scale is non-uniform on purpose: the mark's layers get proportionally
+   shorter as they recede, not merely smaller, and a uniform scale is what made
+   this read as one blob shuffling instead of as layers.
+   Two knobs, no JavaScript:
+     --ink  the colour. Falls back to currentColor, so a parent can either set
+            --ink or simply set its own `color`.
+     --dir  which way the layers recede. 1 to the right (default), -1 to the left. */
 .ld-cards { position: relative; width: 42px; height: 19px; margin-top: 16px; }
 .ld-cards i {
   position: absolute;
@@ -2048,9 +2114,12 @@ select.field { padding-right: 26px; }
 .ld-cards i:nth-child(3) { animation-delay: -1.2s; }
 @keyframes cards {
   0%, 100% { transform: translateX(0) scale(1, 1); opacity: 1; }
-  33.333% { transform: translateX(calc(12px * var(--dir, 1))) scale(.8, .6667); opacity: .55; }
-  66.667% { transform: translateX(calc(22px * var(--dir, 1))) scale(.6, .4); opacity: .3; }
+  33.333%  { transform: translateX(calc(12px * var(--dir, 1))) scale(.8, .6667); opacity: .55; }
+  66.667%  { transform: translateX(calc(22px * var(--dir, 1))) scale(.6, .4); opacity: .3; }
 }
+/* Reduced motion: the animation stops and what is left is the mark itself —
+   the three layers frozen on the three positions the loop cycles through.
+   `animation: none` on its own would stack them into one opaque rectangle. */
 @media (prefers-reduced-motion: reduce) {
   .ld-cards i { animation: none; }
   .ld-cards i:nth-child(2) { transform: translateX(calc(12px * var(--dir, 1))) scale(.8, .6667); opacity: .55; }

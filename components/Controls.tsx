@@ -29,6 +29,7 @@ function renderControl(def: ControlDef, value: any, onChange: (v: any) => void) 
     case 'toggle': return <ToggleControl def={def} value={value} onChange={onChange} />;
     case 'pills': return <PillsControl def={def} value={value} onChange={onChange} />;
     case 'select': return <SelectControl def={def} value={value} onChange={onChange} />;
+    case 'direction': return <DirectionControl def={def} value={value} onChange={onChange} />;
     case 'color': return <ColorControl value={value} onChange={onChange} />;
     case 'xypad': return <XYPadControl def={def} value={value} onChange={onChange} />;
     case 'upload': return <UploadControl value={value} onChange={onChange} />;
@@ -279,6 +280,52 @@ function SelectControl({ def, value, onChange }: RowProps) {
     <select className="field" value={value} onChange={(e) => onChange(e.target.value)}>
       {(def.options ?? []).map((opt) => <option key={opt} value={opt}>{opt}</option>)}
     </select>
+  );
+}
+
+const DIRECTION_CELLS = [
+  { value: 'top left', glyph: '↖', label: 'Top left' },
+  { value: 'top', glyph: '↑', label: 'Top' },
+  { value: 'top right', glyph: '↗', label: 'Top right' },
+  { value: 'left', glyph: '←', label: 'Left' },
+  { value: 'random', glyph: 'Rnd', label: 'Random — click again to reshuffle' },
+  { value: 'right', glyph: '→', label: 'Right' },
+  { value: 'bottom left', glyph: '↙', label: 'Bottom left' },
+  { value: 'bottom', glyph: '↓', label: 'Bottom' },
+  { value: 'bottom right', glyph: '↘', label: 'Bottom right' },
+] as const;
+
+function DirectionControl({ def, value, onChange }: RowProps) {
+  const available = new Set(def.options ?? DIRECTION_CELLS.map((cell) => cell.value));
+  const current = String(value ?? def.default);
+  const isRandom = current === 'random' || current.startsWith('random:');
+  const reshuffle = () => {
+    const previous = current.startsWith('random:') ? Number.parseInt(current.slice(7), 36) : NaN;
+    // Advancing an explicit counter guarantees the next click cannot select
+    // the same slot merely because two random hashes collided.
+    const next = Number.isFinite(previous) ? previous + 1 : Date.now();
+    onChange(`random:${Math.trunc(next).toString(36)}`);
+  };
+  return (
+    <div className="direction-picker" role="group" aria-label={def.label}>
+      {DIRECTION_CELLS.map((cell) => {
+        if (!available.has(cell.value)) return <span key={cell.value} />;
+        const active = cell.value === 'random' ? isRandom : current === cell.value;
+        return (
+          <button
+            key={cell.value}
+            type="button"
+            className={`direction-cell ${cell.value === 'random' ? 'is-random' : ''} ${active ? 'active' : ''}`}
+            aria-label={cell.label}
+            aria-pressed={active}
+            title={cell.label}
+            onClick={() => cell.value === 'random' ? reshuffle() : onChange(cell.value)}
+          >
+            {cell.glyph}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
