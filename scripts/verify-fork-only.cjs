@@ -18,18 +18,16 @@
 //  this branch introduces, not what the fork happens to contain.
 //
 //  Usage:
-//    node scripts/verify-fork-only.cjs                  # vs upstream/main
+//    node scripts/verify-fork-only.cjs                  # vs appariciojunior/main
 //    UPSTREAM_BASE=origin/main node scripts/verify-fork-only.cjs
 //    npm run check:upstream
 //
-//  First time, add the remote the base refers to:
+//  If the appariciojunior remote is not present, add it once:
 //    git remote add upstream https://github.com/appariciojunior/motion-studio-open.git
 //    git fetch upstream
 // ============================================================
 
 const { execFileSync } = require('node:child_process');
-
-const BASE = process.env.UPSTREAM_BASE || 'upstream/main';
 
 // Each marker is a thing that must never reach upstream, with a note the
 // failure message can print — a bare regex list teaches nobody why.
@@ -54,6 +52,11 @@ function git(args) {
 function baseExists(ref) {
   try { git(['rev-parse', '--verify', '--quiet', ref]); return true; } catch { return false; }
 }
+
+const DEFAULT_BASES = ['appariciojunior/main', 'upstream/main'];
+const BASE = process.env.UPSTREAM_BASE
+  || DEFAULT_BASES.find((ref) => baseExists(ref))
+  || DEFAULT_BASES[0];
 
 if (!baseExists(BASE)) {
   console.error(`\n  Base ref "${BASE}" not found, so there is nothing to compare against.\n`);

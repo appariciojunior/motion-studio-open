@@ -1,9 +1,15 @@
 Motion Studio
 Copyright (c) 2026 Motion Studio Authors and Contributors
 
-Licensed under the Elastic License 2.0. See the LICENSE file for the full terms:
-use, modification and distribution are free, including commercially; offering
-Motion Studio to third parties as a hosted or managed service is not.
+Licensed under the Apache License, Version 2.0. See the LICENSE file for the
+full terms: use, modification and distribution are free, including commercially
+and including as a hosted service. Keep this NOTICE with any copy you
+distribute, and state which files you changed.
+
+This file is part of the licence terms, not a courtesy. Apache-2.0 section 4(d)
+requires that recipients of a derivative work receive the attribution notices
+carried here, so the third-party list below has to travel with any
+redistribution.
 
 This product includes third-party software, listed below with the licence each
 one is distributed under. Their notices are preserved as required, both here and

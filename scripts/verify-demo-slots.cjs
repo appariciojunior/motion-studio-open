@@ -22,7 +22,7 @@ function assert(ok, message) {
 const store = useSceneStore.getState();
 store.resetScene();
 let scene = useSceneStore.getState();
-assert(scene.assets.length === 12, 'fresh scene should keep twelve preview slots');
+assert(scene.assets.length === 8, 'fresh scene should keep eight conceptual preview slots');
 assert(scene.assets.every((asset) => asset.origin === 'demo'), 'fresh slots should be demos');
 assert(countDemoSlotsInUse(scene) === 6, 'default six-card template should report six demo slots');
 
@@ -35,8 +35,9 @@ assert(countDemoSlotsInUse(scene) === 5, 'one filled slot should leave five demo
 
 store.removeAsset(firstId);
 scene = useSceneStore.getState();
-assert(scene.assets[0].id === firstId, 'removing should preserve the slot id');
-assert(scene.assets[0].origin === 'demo', 'removing should restore the demo fallback');
+assert(!scene.assets.some((asset) => asset.id === firstId), 'removing should delete the media item');
+assert(scene.assets.length === 7, 'removing should leave seven conceptual media items');
+assert(countDemoSlotsInUse(scene) === 6, 'the six-card template should continue using six remaining demos');
 
 store.addAssets([
   { name: 'Real 01', url: 'https://example.com/real-01.jpg', origin: 'remote' },

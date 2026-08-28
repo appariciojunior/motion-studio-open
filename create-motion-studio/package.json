@@ -1,0 +1,20 @@
+{
+  "name": "create-motion-studio",
+  "version": "1.0.0",
+  "description": "Scaffold a local copy of motion-studio-open with one command — npx create-motion-studio",
+  "type": "module",
+  "bin": {
+    "create-motion-studio": "index.mjs"
+  },
+  "files": [
+    "index.mjs"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/appariciojunior/motion-studio-open.git"
+  }
+}
