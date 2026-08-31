@@ -15,6 +15,8 @@
 // matter how long the catalogue gets.
 import { useEffect, useRef, useState } from 'react';
 import type { Template } from '@/lib/types';
+import { frameColour, onThemeChange } from '@/lib/thumbStill';
+import { cachedThumb, scheduleThumb } from '@/lib/thumbQueue';
 import {
   CTX_BASE,
   attachCanvas,
@@ -44,16 +46,21 @@ export default function TemplateThumb3D({
   const hostRef = useRef<HTMLDivElement>(null);
   const [still, setStill] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
+  const [themeVersion, setThemeVersion] = useState(0);
+
+  useEffect(() => onThemeChange(() => setThemeVersion((n) => n + 1)), []);
 
   // The idle still: drawn once. The tones are built synchronously, so there is
   // nothing arriving late to redraw for.
   useEffect(() => {
     let alive = true;
-    const draw = () => {
-      if (!alive) return;
-      try {
-        setStill(snapshotThumb(template, THUMB_FRAME));
-      } catch (err) {
+    const key = `3d:${template.meta.id}:${THUMB_FRAME}:${frameColour()}`;
+    setStill(cachedThumb(key));
+    const scheduled = scheduleThumb(key, () => snapshotThumb(template, THUMB_FRAME));
+    scheduled.promise
+      .then((src) => { if (alive) setStill(src); })
+      .catch((err) => {
+        if (!alive) return;
         // Never silent, and never blank: a browser hands out a limited number of
         // GL contexts and this one can genuinely fail to get one (measured: five
         // catalogue pages open at once exhausts them). Say so, and let the parent
@@ -61,11 +68,12 @@ export default function TemplateThumb3D({
         // empty card is worse and tells the reader nothing.
         console.warn(`[thumb3d] ${template.meta.id} sem contexto 3D, caindo para 2D:`, err);
         onUnavailable?.();
-      }
-    };
-    draw();
-    return () => { alive = false; };
-  }, [template]);
+      });
+    return () => { alive = false; scheduled.cancel(); };
+  // `onUnavailable` is an inline fallback supplied by the parent. Depending on
+  // its identity would reschedule the still after every state update.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [template, themeVersion]);
 
   // Hover / focus / autoplay, same triggers as the 2D thumbnail.
   useEffect(() => {
@@ -160,6 +168,10 @@ export default function TemplateThumb3D({
       className={`tpl-thumb ${previewing ? 'is-previewing' : ''}`}
       aria-hidden="true"
     >
+      {/* Skeleton while the still is being rendered. Without it the box sits
+          empty — aspect-ratio holds its size, so what shows is a bare frame,
+          which reads as broken rather than as loading. */}
+      {!previewing && !still && <div className="tpl-thumb-skeleton" />}
       {!previewing && still && (
         <img
           src={still}

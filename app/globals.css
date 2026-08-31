@@ -2336,3 +2336,43 @@ select.field { padding-right: 26px; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .pdock-recent-meta { font-size: var(--fs-meta); color: var(--fg-faint); flex: 0 0 auto; }
+
+/* ---- Thumbnail skeleton: the box while its still is being rendered ----
+   The thumbnails are rendered now (three for the webgl presets, Pixi for the
+   2D ones), which means there IS a wait where the div path had none — measured
+   at ~1.3s for a 34-card search to have every still. The box itself never
+   collapsed (aspect-ratio holds it at 147px), so what showed was an empty
+   frame, which reads as broken rather than as loading.
+
+   A sweep rather than a pulse: a pulse on 271 boxes at once reads as the whole
+   list flashing, while a sweep travelling in one direction reads as progress.
+   Built from the surface tokens — a skeleton is a surface, not an accent, and
+   the palette has no accent to borrow. */
+.tpl-thumb-skeleton {
+  position: absolute; inset: 0;
+  background: var(--card-inset);
+  overflow: hidden;
+}
+.tpl-thumb-skeleton::after {
+  content: '';
+  position: absolute; inset: 0;
+  /* 200% wide so the highlight can travel a full box width before repeating. */
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    color-mix(in srgb, var(--fg) 7%, transparent) 45%,
+    color-mix(in srgb, var(--fg) 7%, transparent) 55%,
+    transparent 80%
+  );
+  background-size: 200% 100%;
+  animation: tpl-thumb-sweep 1.4s linear infinite;
+}
+@keyframes tpl-thumb-sweep {
+  from { background-position: 150% 0; }
+  to   { background-position: -50% 0; }
+}
+/* Reduced motion: keep the surface, drop the travel. The box still reads as
+   "not content yet" because it is a flat inset rather than the frame colour. */
+@media (prefers-reduced-motion: reduce) {
+  .tpl-thumb-skeleton::after { animation: none; }
+}
