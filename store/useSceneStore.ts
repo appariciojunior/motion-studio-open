@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { defaultsFor, easingFor, templates } from '@/templates';
+import { carouselReferenceDurations } from '@/templates/carousel';
 import type { EasingSpec } from '@/lib/easing';
 import type { CropFocus } from '@/lib/crop';
 import { DEMO_ASSETS, demoSourceForSlot, isDemoAssetSource } from '@/lib/demoAssets';
@@ -466,10 +467,12 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       };
       const ref3dDuration = REF_3D_DURATION[id];
       const isRef3dPreset = ref3dDuration !== undefined;
+      const runwayRefDuration = carouselReferenceDurations[id];
+      const isRunwayRefPreset = runwayRefDuration !== undefined;
       const referenceAspect = (isSpinnerPreset || isStickerPreset || isPosterPreset || isArcPreset) ? '4:5'
         : isOrbit3dPreset ? (ORBIT_3D_SQUARE.has(id) ? '1:1' : '4:5')
         : isWheelRefPreset ? '1:1'
-        : isRef2dPreset || isGlobeRefPreset || isRef3dPreset ? '3:4'
+        : isRunwayRefPreset || isRef2dPreset || isGlobeRefPreset || isRef3dPreset ? '3:4'
         : null;
       const referenceCanvas = referenceAspect ? dimsFor(referenceAspect) : null;
       // A blank scene has no track to patch, so the first pick BECOMES Layer 1.
@@ -496,6 +499,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         duration: isSpinnerPreset ? spinnerDuration : isStickerPreset ? stickerDuration : isPosterPreset ? posterDuration
           : isPulseRefPreset ? pulseDuration : isFlipPreset ? 12 : isOrbit3dPreset ? orbitDuration
           : isArcPreset ? arcDuration : isWheelRefPreset ? wheelRefDuration
+          : isRunwayRefPreset ? runwayRefDuration
           : isRef2dPreset ? ref2dDuration : isGlobeRefPreset ? globeRefDuration
           : isRef3dPreset ? ref3dDuration : s.duration,
         ...((isSpinnerPreset || isStickerPreset || isPosterPreset) && !s.background.userSet ? {
