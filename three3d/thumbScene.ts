@@ -22,6 +22,7 @@ import type { CameraPose, LayerTransform3D, Template } from '@/lib/types';
 import { clamp } from '@/lib/motion';
 import { defaultsFor, easingFor, layerCountFor } from '@/templates';
 import { resolveEasing } from '@/lib/easing';
+import { stillFrom } from '@/lib/thumbStill';
 import {
   makeBentPlaneGeometry,
   makeCornerPeelGeometry,
@@ -101,6 +102,7 @@ export function getShared(): Shared {
     canvas,
     antialias: true,
     alpha: true,
+    powerPreference: 'high-performance',
     // Needed to read the canvas back for the idle still.
     preserveDrawingBuffer: true,
   });
@@ -318,14 +320,7 @@ export function renderThumbFrame(template: Template, frame: number): boolean {
 /** Draw one frame and read it back as a still, for the idle thumbnail. */
 export function snapshotThumb(template: Template, frame: number): string | null {
   if (!renderThumbFrame(template, frame)) return null;
-  const ctx = getShared();
-  const off = document.createElement('canvas');
-  off.width = THUMB_W;
-  off.height = THUMB_H;
-  const g = off.getContext('2d');
-  if (!g) return null;
-  g.drawImage(ctx.canvas, 0, 0);
-  return off.toDataURL('image/png');
+  return stillFrom(getShared().canvas, THUMB_W, THUMB_H);
 }
 
 /** Move the shared canvas into this container (previewing starts). */

@@ -17,6 +17,7 @@ import type { LayerTransform, Template } from '@/lib/types';
 import { clamp } from '@/lib/motion';
 import { defaultsFor, easingFor, layerCountFor } from '@/templates';
 import { resolveEasing } from '@/lib/easing';
+import { stillFrom } from '@/lib/thumbStill';
 
 export const THUMB_W = 180;
 export const THUMB_H = 240;
@@ -98,6 +99,7 @@ export async function getShared2d(): Promise<Shared> {
       antialias: true,
       autoStart: false,          // drawn on demand, never on a ticker
       preference: 'webgl',
+      powerPreference: 'high-performance',
       resolution: 1,
       // Needed to read the canvas back for the idle still.
       preserveDrawingBuffer: true,
@@ -292,13 +294,7 @@ export function renderThumbFrame2d(ctx: Shared, template: Template, frame: numbe
 export async function snapshotThumb2d(template: Template, frame: number): Promise<string | null> {
   const ctx = await getShared2d();
   renderThumbFrame2d(ctx, template, frame);
-  const off = document.createElement('canvas');
-  off.width = THUMB_W;
-  off.height = THUMB_H;
-  const g = off.getContext('2d');
-  if (!g) return null;
-  g.drawImage(ctx.canvas, 0, 0);
-  return off.toDataURL('image/png');
+  return stillFrom(ctx.canvas, THUMB_W, THUMB_H);
 }
 
 export async function attachCanvas2d(host: HTMLElement) {

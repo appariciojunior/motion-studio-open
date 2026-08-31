@@ -35,7 +35,12 @@ function getShared(): SharedCtx {
   // Style the shared canvas so it fills the .tpl-thumb container when inserted
   canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;';
 
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  const renderer = new THREE.WebGLRenderer({
+    canvas,
+    antialias: true,
+    alpha: true,
+    powerPreference: 'high-performance',
+  });
   renderer.setSize(THUMB_W, THUMB_H, false);
   renderer.setClearColor(0x000000, 0);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
