@@ -13,6 +13,8 @@
 // shared canvas moved into this card while previewing.
 import { useEffect, useRef, useState } from 'react';
 import type { Template } from '@/lib/types';
+import { frameColour, onThemeChange } from '@/lib/thumbStill';
+import { cachedThumb, scheduleThumb } from '@/lib/thumbQueue';
 import {
   CTX_BASE,
   attachCanvas2d,
@@ -43,10 +45,16 @@ export default function TemplateThumb2DGL({
   const hostRef = useRef<HTMLDivElement>(null);
   const [still, setStill] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
+  const [themeVersion, setThemeVersion] = useState(0);
+
+  useEffect(() => onThemeChange(() => setThemeVersion((n) => n + 1)), []);
 
   useEffect(() => {
     let alive = true;
-    snapshotThumb2d(template, THUMB_FRAME)
+    const key = `2d:${template.meta.id}:${THUMB_FRAME}:${frameColour()}`;
+    setStill(cachedThumb(key));
+    const scheduled = scheduleThumb(key, () => snapshotThumb2d(template, THUMB_FRAME));
+    scheduled.promise
       .then((src) => { if (alive) setStill(src); })
       // Never silent: a preset that cannot draw has to say so, or the card just
       // stays blank and the reason is invisible.
@@ -54,8 +62,11 @@ export default function TemplateThumb2DGL({
         console.warn(`[thumb2d] ${template.meta.id} sem contexto, caindo para divs:`, err);
         onUnavailable?.();
       });
-    return () => { alive = false; };
-  }, [template]);
+    return () => { alive = false; scheduled.cancel(); };
+  // `onUnavailable` is an inline fallback supplied by the parent. Depending on
+  // its identity would reschedule the still after every state update.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [template, themeVersion]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -148,6 +159,10 @@ export default function TemplateThumb2DGL({
       className={`tpl-thumb ${previewing ? 'is-previewing' : ''}`}
       aria-hidden="true"
     >
+      {/* Skeleton while the still is being rendered. Without it the box sits
+          empty — aspect-ratio holds its size, so what shows is a bare frame,
+          which reads as broken rather than as loading. */}
+      {!previewing && !still && <div className="tpl-thumb-skeleton" />}
       {!previewing && still && (
         <img
           src={still}

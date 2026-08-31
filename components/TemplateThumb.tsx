@@ -6,11 +6,32 @@ import { defaultsFor, easingFor, layerCountFor } from '@/templates';
 import { resolveEasing } from '@/lib/easing';
 import dynamic from 'next/dynamic';
 
+// The skeleton, also used as the `loading` for the dynamic imports below.
+//
+// That `loading` is not optional dressing: without it a dynamic import renders
+// NOTHING while its chunk is in flight — not even the box. The card has no
+// thumbnail to hold its height at that moment, so the whole row collapses and
+// then pops open when the chunk lands. With the box present from the first
+// paint, the layout never moves and the wait reads as loading.
+function ThumbSkeleton() {
+  return (
+    <div className="tpl-thumb" aria-hidden="true">
+      <div className="tpl-thumb-skeleton" />
+    </div>
+  );
+}
+
 // three only loads for the catalogues that actually show a webgl preset. Client
 // only: it opens a GL context on mount, which SSR cannot do.
-const TemplateThumb3D = dynamic(() => import('@/components/TemplateThumb3D'), { ssr: false });
+const TemplateThumb3D = dynamic(() => import('@/components/TemplateThumb3D'), {
+  ssr: false,
+  loading: () => <ThumbSkeleton />,
+});
 // Pixi likewise: it initialises a GL context on mount.
-const TemplateThumb2DGL = dynamic(() => import('@/components/TemplateThumb2DGL'), { ssr: false });
+const TemplateThumb2DGL = dynamic(() => import('@/components/TemplateThumb2DGL'), {
+  ssr: false,
+  loading: () => <ThumbSkeleton />,
+});
 
 // Live template thumbnail: run the template's own transform at a fixed frame
 // and render the resulting card layout as plain divs. Because it uses the real
