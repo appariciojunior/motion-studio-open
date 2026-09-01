@@ -14,6 +14,7 @@ import type { IRenderer } from '@/lib/rendererTypes';
 import type { CameraPose, LayerTransform3D } from '@/lib/types';
 import { resolveTrackTime, trackAssetIndices, type MotionTrack } from '@/lib/tracks';
 import type { SceneState } from '@/store/useSceneStore';
+import { advancedRasterSize, gradientRasterMaxEdge, gradientSignature, normalizeGradientSpec, paintGradientCanvas } from '@/lib/gradient';
 
 // Shared with the Pixi renderer so control values read identically in px.
 const SPRITE_BASE = 340;
@@ -57,7 +58,6 @@ import {
   makeCornerAlphaMap,
   makeCornerPeelGeometry,
   makeCurlPlaneGeometry,
-  makeGradientTexture,
   makePlaceholderTexture,
   makeStickerRollGeometry,
 } from '@/three3d/cardMesh';
@@ -80,6 +80,7 @@ export class SceneRenderer3D implements IRenderer {
   private placeholders = new Map<number, THREE.CanvasTexture>();
   private cornerMaps = new Map<string, THREE.CanvasTexture>();
   private gradientTex: THREE.CanvasTexture | null = null;
+  private gradientCanvas: HTMLCanvasElement | null = null;
   private gradientSig = '';
   private backgroundTex: THREE.CanvasTexture | null = null;
   private backgroundSig = '';
@@ -623,10 +624,18 @@ export class SceneRenderer3D implements IRenderer {
     // Background parity with Pixi: solid, gradient, uploaded image, or an
     // asset reflected from the active motion layer.
     if (s.background.source === 'color' && s.background.gradient) {
-      const sig = s.background.color + '|' + s.background.color2;
+      const spec = normalizeGradientSpec(s.background.gradientSpec, s.background.color, s.background.color2);
+      const phase = ((s.frame / Math.max(1, s.duration * s.fps)) % 1 + 1) % 1;
+      const [rw, rh] = advancedRasterSize(this.width, this.height, gradientRasterMaxEdge(spec));
+      const sig = `${rw}x${rh}|${gradientSignature(spec, phase)}`;
       if (this.gradientSig !== sig) {
-        this.gradientTex?.dispose();
-        this.gradientTex = makeGradientTexture(s.background.color, s.background.color2);
+        if (!this.gradientCanvas) this.gradientCanvas = document.createElement('canvas');
+        paintGradientCanvas(this.gradientCanvas, spec, rw, rh, phase);
+        if (!this.gradientTex) {
+          this.gradientTex = new THREE.CanvasTexture(this.gradientCanvas);
+          this.gradientTex.colorSpace = THREE.SRGBColorSpace;
+        }
+        this.gradientTex.needsUpdate = true;
         this.gradientSig = sig;
       }
       this.scene.background = this.gradientTex;

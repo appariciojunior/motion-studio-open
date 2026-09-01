@@ -9,6 +9,14 @@ import { makeCameraRig } from './cameraRig';
 import { use3DStore } from '../store/use3DStore';
 import { useSceneStore } from '../store/useSceneStore';
 import { apply3DAnimation } from './animations';
+import {
+  advancedRasterSize,
+  gradientFromFill,
+  gradientRasterMaxEdge,
+  gradientSignature,
+  paintGradientCanvas,
+  sampleGradientPoint,
+} from '@/lib/gradient';
 
 // ── Cartoon (toon) 3D effect ────────────────────────────────────────────────
 // Renders the model with THREE.MeshToonMaterial straight to the (WebGL) canvas.
@@ -74,6 +82,7 @@ export function initCartoon(
   // GLSL helpers shared by the wall material (stochastic paint tiling).
   const PAINT_GLSL = `
 uniform int uType; uniform vec3 uC1; uniform vec3 uC2; uniform float uAmount; uniform float uScale;
+uniform sampler2D uGradientTex; uniform float uUseGradientTex;
 varying vec2 vWallUv;
 vec2 pHash(vec2 p){ p=vec2(dot(p,vec2(127.1,311.7)),dot(p,vec2(269.5,183.3))); return fract(sin(p)*43758.5453); }
 float stochGrey(sampler2D tex, vec2 uv){
@@ -103,6 +112,24 @@ vec4 stochNormalW(sampler2D tex, vec2 uv){
   // ── Background wall: a real 3D plane behind the model (receives shadows). ──
   // Painterly gradient + strokes injected via onBeforeCompile; MeshToonMaterial
   // so it takes toon-banded cast shadows from the sun.
+  const wallGradientCanvas = document.createElement('canvas');
+  wallGradientCanvas.width = wallGradientCanvas.height = 2;
+  const wallGradientTex = new THREE.CanvasTexture(wallGradientCanvas);
+  wallGradientTex.colorSpace = THREE.SRGBColorSpace;
+  let wallGradientKey = '';
+  function syncWallGradient(spec: { type: string; c1: string; c2: string; gradient?: any }) {
+    if (spec.type === 'solid') return;
+    const sceneState = useSceneStore.getState();
+    const phase = ((sceneState.frame / Math.max(1, sceneState.duration * sceneState.fps)) % 1 + 1) % 1;
+    const gradient = gradientFromFill(spec);
+    const [rw, rh] = advancedRasterSize(sceneState.width, sceneState.height, gradientRasterMaxEdge(gradient));
+    const key = `${rw}x${rh}|${gradientSignature(gradient, phase)}`;
+    if (key === wallGradientKey) return;
+    wallGradientKey = key;
+    paintGradientCanvas(wallGradientCanvas, gradient, rw, rh, phase);
+    wallGradientTex.needsUpdate = true;
+  }
+
   const wallMat = new THREE.MeshToonMaterial({ color: 0xffffff, map: paintGrey, normalMap: paintNormal });
   wallMat.gradientMap = makeGradient(3);
   wallMat.onBeforeCompile = (shader) => {
@@ -111,6 +138,8 @@ vec4 stochNormalW(sampler2D tex, vec2 uv){
     shader.uniforms.uC2 = { value: new THREE.Color(0, 0, 0) };
     shader.uniforms.uAmount = { value: 0 };
     shader.uniforms.uScale = { value: 3 };
+    shader.uniforms.uGradientTex = { value: wallGradientTex };
+    shader.uniforms.uUseGradientTex = { value: 0 };
     shader.vertexShader = 'varying vec2 vWallUv;\n' + shader.vertexShader.replace(
       '#include <begin_vertex>', '#include <begin_vertex>\n vWallUv = uv;');
     shader.fragmentShader = PAINT_GLSL + shader.fragmentShader;
@@ -121,6 +150,7 @@ vec4 stochNormalW(sampler2D tex, vec2 uv){
        {
          float t = (uType==2) ? clamp(length(vWallUv-vec2(0.5))*1.6,0.0,1.0) : vWallUv.y;
          vec3 grad = (uType==0) ? uC1 : mix(uC1, uC2, t);
+         if (uUseGradientTex > 0.5) grad = texture2D(uGradientTex, vWallUv).rgb;
          diffuseColor.rgb = mix(grad, mix(uC1, uC2, stochGrey(map, vWallUv*uScale)), uAmount);
        }
        #endif`);
@@ -262,11 +292,9 @@ vec4 stochNormalW(sampler2D tex, vec2 uv){
   }
 
   const _v = new THREE.Vector3();
-  const _c1 = new THREE.Color();
-  const _c2 = new THREE.Color();
   const _co = new THREE.Color();
   // Bake a fill (solid / linear-Y / radial) into a mesh's vertex colours.
-  function applyFill(mesh: THREE.Mesh, spec: { type: string; c1: string; c2: string }) {
+  function applyFill(mesh: THREE.Mesh, spec: { type: string; c1: string; c2: string; gradient?: any }, phase = 0) {
     const mat = mesh.material as THREE.MeshToonMaterial;
     if (spec.type === 'solid') {
       if (mat.vertexColors) { mat.vertexColors = false; mat.needsUpdate = true; }
@@ -281,15 +309,16 @@ vec4 stochNormalW(sampler2D tex, vec2 uv){
     const n = pos.count;
     let colAttr = geo.getAttribute('color') as THREE.BufferAttribute | undefined;
     if (!colAttr || colAttr.count !== n) { colAttr = new THREE.BufferAttribute(new Float32Array(n * 3), 3); geo.setAttribute('color', colAttr); }
-    _c1.set(spec.c1).convertSRGBToLinear();
-    _c2.set(spec.c2).convertSRGBToLinear();
+    const gradient = gradientFromFill(spec);
+    const spanX = Math.max(1e-4, gd.box.max.x - gd.box.min.x);
     const spanY = Math.max(1e-4, gd.box.max.y - gd.box.min.y);
+    const uv = geo.getAttribute('uv') as THREE.BufferAttribute | undefined;
     for (let i = 0; i < n; i++) {
       _v.fromBufferAttribute(pos, i).applyMatrix4(m2m);
-      const t = spec.type === 'radial'
-        ? Math.min(1, _v.distanceTo(gd.center) / gd.radius)
-        : Math.min(1, Math.max(0, (_v.y - gd.box.min.y) / spanY));
-      _co.copy(_c1).lerp(_c2, t);
+      const gx = gradient.mapping3d === 'uv' && uv ? uv.getX(i) : (_v.x - gd.box.min.x) / spanX;
+      const gy = gradient.mapping3d === 'uv' && uv ? 1 - uv.getY(i) : (_v.y - gd.box.min.y) / spanY;
+      const sampled = sampleGradientPoint(gradient, gx, gy, phase);
+      _co.setRGB(sampled[0] / 255, sampled[1] / 255, sampled[2] / 255).convertSRGBToLinear();
       colAttr.setXYZ(i, _co.r, _co.g, _co.b);
     }
     colAttr.needsUpdate = true;
@@ -471,6 +500,8 @@ vec4 stochNormal(sampler2D tex, vec2 uv){
     const op = Math.max(0, Math.min(1, Number(p.opacity ?? 100) / 100));
     tmpColor.set(String(p.color ?? '#e9e4d6'));
     const partFills = opts.getPartFills?.() ?? {};
+    const sceneStateForGradient = useSceneStore.getState();
+    const gradientPhase = ((sceneStateForGradient.frame / Math.max(1, sceneStateForGradient.duration * sceneStateForGradient.fps)) % 1 + 1) % 1;
     const selected = opts.getSelectedPart?.() ?? null;
     const emissiveHex = String(p.emissive ?? '#000000');
     // paint strokes (brush normal map)
@@ -490,8 +521,9 @@ vec4 stochNormal(sampler2D tex, vec2 uv){
 
       // per-part fill (solid / gradient → vertex colours) or model/uniform colour
       if (fill) {
-        const hash = `${fill.type}|${fill.c1}|${fill.c2}`;
-        if (m.userData.fillHash !== hash) { applyFill(mesh, fill); m.userData.fillHash = hash; }
+        const gradient = gradientFromFill(fill);
+        const hash = `${fill.type}|${gradientSignature(gradient, gradientPhase)}`;
+        if (m.userData.fillHash !== hash) { applyFill(mesh, fill, gradientPhase); m.userData.fillHash = hash; }
       } else {
         if (m.userData.fillHash !== undefined) {   // fill removed → restore
           if (m.vertexColors) { m.vertexColors = false; m.needsUpdate = true; }
@@ -580,9 +612,11 @@ vec4 stochNormal(sampler2D tex, vec2 uv){
     const wsh = wallMat.userData.shader as any;
     const bf = opts.getBgFill?.();
     if (wsh && bf) {
+      syncWallGradient(bf);
       wsh.uniforms.uType.value = bf.type === 'linear' ? 1 : bf.type === 'radial' ? 2 : 0;
       wsh.uniforms.uC1.value.set(bf.c1).convertSRGBToLinear();
       wsh.uniforms.uC2.value.set(bf.c2).convertSRGBToLinear();
+      wsh.uniforms.uUseGradientTex.value = bf.type === 'solid' ? 0 : 1;
       const bt = opts.getBgTex?.();
       if (bt) {
         const a = Math.max(0, Math.min(1, bt.amount / 100));
@@ -673,6 +707,7 @@ vec4 stochNormal(sampler2D tex, vec2 uv){
     paintGrey.dispose();
     paintAlpha.dispose();
     wallMat.dispose();
+    wallGradientTex.dispose();
     (wallMat.gradientMap as THREE.Texture | null)?.dispose();
     wall.geometry.dispose();
     for (const m of materials) m.dispose();

@@ -9,6 +9,7 @@ import { findDevice } from '@/three3d/devices';
 import type { CameraRig } from '@/three3d/cameraRig';
 import { setRendererInstance } from '@/lib/rendererInstance';
 import type { IRenderer } from '@/lib/rendererTypes';
+import { gradientCss, gradientFromFill } from '@/lib/gradient';
 import ViewGizmo from './ViewGizmo';
 
 // 3D preview stage. Renders the active 3D effect into a canvas, then layers CSS
@@ -184,8 +185,7 @@ export default function ThreeStage3D({ effectId: forcedEffectId }: { effectId?: 
 
   const bgFill = use3DStore((s) => s.bgFill);
   const background =
-    bgFill.type === 'linear' ? `linear-gradient(to top, ${bgFill.c1} 0%, ${bgFill.c2} 100%)`
-    : bgFill.type === 'radial' ? `radial-gradient(130% 130% at 50% 50%, ${bgFill.c1} 0%, ${bgFill.c2} 100%)`
+    bgFill.type === 'linear' || bgFill.type === 'radial' ? gradientCss(gradientFromFill(bgFill))
     : bgFill.c1;
   const stageStyle: React.CSSProperties = { background };
 
