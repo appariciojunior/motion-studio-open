@@ -4,6 +4,9 @@ import { execFile } from 'node:child_process';
 
 const OFFICIAL_REPOSITORY = 'https://github.com/appariciojunior/motion-studio-open.git';
 const UPDATE_BRANCH = 'main';
+const UPDATE_REF = 'refs/motion-studio/update-main';
+const FALLBACK_UPDATE_REFS = [UPDATE_REF, 'refs/remotes/appariciojunior/main'] as const;
+const UPDATE_LOG_FORMAT = '%x1e%H%x1f%s%x1f%b';
 const GIT_TIMEOUT_MS = 30_000;
 
 export interface UpdateCommit {
@@ -18,6 +21,8 @@ export interface LocalUpdateStatus {
   latestCommit: string;
   branch: string | null;
   commits: UpdateCommit[];
+  refresh: 'online' | 'cached';
+  refreshError?: string;
   reason?: 'dirty' | 'detached' | 'diverged' | 'branch';
 }
 
@@ -63,21 +68,92 @@ async function repositoryRoot(): Promise<string> {
   return runGit(process.cwd(), ['rev-parse', '--show-toplevel']);
 }
 
-function parseCommits(output: string): UpdateCommit[] {
-  if (!output) return [];
-  const commits = output.split('\n').flatMap((line) => {
-    const separator = line.indexOf('\t');
-    if (separator < 0) return [];
-    return [{ hash: line.slice(0, separator), subject: line.slice(separator + 1) }];
-  });
-  const meaningful = commits.filter((commit) => !commit.subject.startsWith('Merge pull request'));
-  return meaningful.length ? meaningful : commits;
+interface UpdateSource {
+  latestRef: string;
+  refresh: LocalUpdateStatus['refresh'];
+  refreshError?: string;
 }
 
-async function inspectFetchedUpdate(root: string): Promise<LocalUpdateStatus> {
+async function firstAvailableUpdateRef(root: string): Promise<string | null> {
+  for (const ref of FALLBACK_UPDATE_REFS) {
+    try {
+      await runGit(root, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]);
+      return ref;
+    } catch {
+      // Try the next locally cached official ref.
+    }
+  }
+  return null;
+}
+
+function offlineMessage(error: unknown): string {
+  const detail = error instanceof Error
+    ? `${error.message}\n${(error as GitError).stderr || ''}`.toLowerCase()
+    : '';
+  if (detail.includes('failed to connect') || detail.includes('could not resolve') || detail.includes('timed out')) {
+    return 'GitHub could not be reached. Showing the last update information saved locally.';
+  }
+  return 'Update information could not be refreshed. Showing the last version saved locally.';
+}
+
+async function refreshUpdateSource(root: string, repository: string): Promise<UpdateSource> {
+  try {
+    // Unlike FETCH_HEAD, this dedicated ref survives a later offline fetch.
+    await runGit(root, [
+      'fetch',
+      '--quiet',
+      '--no-tags',
+      '--no-write-fetch-head',
+      repository,
+      `+${UPDATE_BRANCH}:${UPDATE_REF}`,
+    ]);
+    return { latestRef: UPDATE_REF, refresh: 'online' };
+  } catch (error) {
+    const latestRef = await firstAvailableUpdateRef(root);
+    if (!latestRef) {
+      throw new Error('GitHub could not be reached and no saved update information is available. Check your connection and try again.');
+    }
+    return { latestRef, refresh: 'cached', refreshError: offlineMessage(error) };
+  }
+}
+
+function parseCommits(output: string): UpdateCommit[] {
+  if (!output) return [];
+  const seen = new Set<string>();
+  return output.split('\x1e').flatMap((record) => {
+    const [rawHash, rawSubject, rawBody = ''] = record.trim().split('\x1f');
+    if (!rawHash || !rawSubject) return [];
+
+    const bodySummary = rawBody
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find((line) => line && !/^(merge|co-authored-by|signed-off-by)\b/i.test(line));
+    const branchSummary = rawSubject.match(/^Merge pull request #\d+ from [^/]+\/(.+)$/i)?.[1];
+    const source = rawSubject.startsWith('Merge pull request')
+      ? bodySummary || branchSummary || 'Project improvements'
+      : rawSubject;
+    const cleaned = source
+      .replace(/^(feat|fix|refactor|perf|style|docs|test|build|ci|chore)(\([^)]*\))?!?(?:\s*[:/-]\s*|\s+)/i, '')
+      .replace(/[-_/]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const subject = /^consolidacao\b/i.test(cleaned)
+      ? 'Project maintenance and consolidation'
+      : cleaned;
+    if (!subject) return [];
+
+    const readable = subject.charAt(0).toUpperCase() + subject.slice(1);
+    const key = readable.toLocaleLowerCase();
+    if (seen.has(key)) return [];
+    seen.add(key);
+    return [{ hash: rawHash.trim(), subject: readable }];
+  });
+}
+
+async function inspectFetchedUpdate(root: string, source: UpdateSource): Promise<LocalUpdateStatus> {
   const [currentCommit, latestCommit, branch, dirty] = await Promise.all([
     runGit(root, ['rev-parse', 'HEAD']),
-    runGit(root, ['rev-parse', 'FETCH_HEAD']),
+    runGit(root, ['rev-parse', source.latestRef]),
     runGit(root, ['symbolic-ref', '--quiet', '--short', 'HEAD']).catch(() => ''),
     runGit(root, ['status', '--porcelain', '--untracked-files=normal']),
   ]);
@@ -91,6 +167,8 @@ async function inspectFetchedUpdate(root: string): Promise<LocalUpdateStatus> {
       latestCommit,
       branch: branch || null,
       commits: [],
+      refresh: source.refresh,
+      refreshError: source.refreshError,
     };
   }
 
@@ -101,7 +179,7 @@ async function inspectFetchedUpdate(root: string): Promise<LocalUpdateStatus> {
     const isAhead = await succeeds(root, ['merge-base', '--is-ancestor', latestCommit, currentCommit]);
     const log = isAhead ? '' : await runGit(root, [
       'log',
-      '--format=%H%x09%s',
+      `--format=${UPDATE_LOG_FORMAT}`,
       '--max-count=8',
       latestCommit,
       `^${currentCommit}`,
@@ -114,13 +192,15 @@ async function inspectFetchedUpdate(root: string): Promise<LocalUpdateStatus> {
       latestCommit,
       branch: branch || null,
       commits: parseCommits(log),
+      refresh: source.refresh,
+      refreshError: source.refreshError,
       reason: isAhead ? undefined : 'diverged',
     };
   }
 
   const log = await runGit(root, [
     'log',
-    '--format=%H%x09%s',
+    `--format=${UPDATE_LOG_FORMAT}`,
     '--max-count=8',
     `${currentCommit}..${latestCommit}`,
   ]);
@@ -135,11 +215,13 @@ async function inspectFetchedUpdate(root: string): Promise<LocalUpdateStatus> {
   return {
     supported: true,
     updateAvailable: true,
-    canUpdate: !reason,
+    canUpdate: !reason && source.refresh === 'online',
     currentCommit,
     latestCommit,
     branch: branch || null,
     commits: parseCommits(log),
+    refresh: source.refresh,
+    refreshError: source.refreshError,
     reason,
   };
 }
@@ -147,8 +229,8 @@ async function inspectFetchedUpdate(root: string): Promise<LocalUpdateStatus> {
 export async function checkLocalUpdate(): Promise<LocalUpdateStatus> {
   const root = await repositoryRoot();
   const repository = process.env.MOTION_STUDIO_UPDATE_REPOSITORY || OFFICIAL_REPOSITORY;
-  await runGit(root, ['fetch', '--quiet', '--no-tags', repository, UPDATE_BRANCH]);
-  return inspectFetchedUpdate(root);
+  const source = await refreshUpdateSource(root, repository);
+  return inspectFetchedUpdate(root, source);
 }
 
 type ApplyUpdateResult = LocalUpdateStatus & { updated: boolean; dependenciesChanged: boolean };
@@ -159,10 +241,10 @@ async function applyLocalUpdateOnce(): Promise<ApplyUpdateResult> {
   const root = await repositoryRoot();
   const repository = process.env.MOTION_STUDIO_UPDATE_REPOSITORY || OFFICIAL_REPOSITORY;
 
-  // Always fetch again at click time: the status shown in the browser may have
-  // been open for hours, and FETCH_HEAD is shared mutable Git state.
-  await runGit(root, ['fetch', '--quiet', '--no-tags', repository, UPDATE_BRANCH]);
-  const before = await inspectFetchedUpdate(root);
+  // Always refresh again at click time: the status shown in the browser may
+  // have been open for hours. Offline cached data is never auto-installed.
+  const source = await refreshUpdateSource(root, repository);
+  const before = await inspectFetchedUpdate(root, source);
   if (!before.updateAvailable) return { ...before, updated: false, dependenciesChanged: false };
   if (!before.canUpdate) return { ...before, updated: false, dependenciesChanged: false };
 
@@ -176,7 +258,7 @@ async function applyLocalUpdateOnce(): Promise<ApplyUpdateResult> {
     'package.json',
     'package-lock.json',
   ]));
-  const after = await inspectFetchedUpdate(root);
+  const after = await inspectFetchedUpdate(root, source);
   return { ...after, updated: true, dependenciesChanged };
 }
 
