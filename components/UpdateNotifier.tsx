@@ -28,6 +28,8 @@ interface UpdateStatus {
   currentCommit: string;
   latestCommit: string;
   commits: UpdateCommit[];
+  refresh?: 'online' | 'cached';
+  refreshError?: string;
   reason?: 'dirty' | 'detached' | 'diverged' | 'branch';
   updated?: boolean;
   dependenciesChanged?: boolean;
@@ -87,7 +89,7 @@ export default function UpdateNotifier() {
         if (isUnread || manual) setOpen(true);
       } else if (manual) {
         setOpen(true);
-        setMessage('You are already running the latest version.');
+        setMessage(next.refreshError || 'You are already running the latest version.');
       }
     } catch (error) {
       if (manual) {
@@ -173,7 +175,7 @@ export default function UpdateNotifier() {
       const next = await response.json() as UpdateStatus;
       setStatus(next);
       if (!response.ok || !next.updated) {
-        const detail = next.reason ? reasonText[next.reason] : next.error;
+        const detail = next.reason ? reasonText[next.reason] : next.refreshError || next.error;
         throw new Error(detail || 'Could not update the project.');
       }
       markRead(next.latestCommit);
@@ -239,10 +241,11 @@ export default function UpdateNotifier() {
           <strong id="update-notice-title">What’s new in Motion Studio</strong>
           {status.commits.length > 0 && (
             <ul className="update-notice-list">
-              {status.commits.slice(0, 3).map((commit) => <li key={commit.hash}>{commit.subject}</li>)}
+              {status.commits.slice(0, 5).map((commit) => <li key={commit.hash}>{commit.subject}</li>)}
             </ul>
           )}
           {status.reason && <p className="update-notice-warning">{reasonText[status.reason]}</p>}
+          {status.refreshError && <p className="update-notice-warning">{status.refreshError}</p>}
           {phase === 'error' && <p className="update-notice-warning">{message}</p>}
           <div className="update-notice-actions">
             <button className="link-btn" onClick={() => { markRead(status.latestCommit); setOpen(false); }} disabled={phase === 'updating'}>Not now</button>

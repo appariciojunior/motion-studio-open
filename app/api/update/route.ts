@@ -56,7 +56,10 @@ function localOnly(request: NextRequest): NextResponse | null {
 }
 
 function failure(error: unknown): NextResponse {
-  const message = error instanceof Error ? error.message : 'Could not check for updates.';
+  const rawMessage = error instanceof Error ? error.message : '';
+  const message = /git fetch|unable to access|failed to connect|could not resolve/i.test(rawMessage)
+    ? 'GitHub could not be reached. Check your connection and try again.'
+    : rawMessage || 'Could not check for updates.';
   return NextResponse.json({ supported: false, error: message }, { status: 503 });
 }
 
