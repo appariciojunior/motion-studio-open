@@ -5,6 +5,7 @@ import type { CropFocus } from '@/lib/crop';
 import { DEMO_ASSETS, demoSourceForSlot, isDemoAssetSource } from '@/lib/demoAssets';
 import { idbPut, idbGet, idbDelete } from '@/lib/assetDb';
 import { DEFAULT_TRACK_TRANSFORM, TRACK_END, type BlendMode, type MotionTrack } from '@/lib/tracks';
+import { createGradientSpec, legacyColorsForGradient, normalizeGradientSpec, type GradientSpec } from '@/lib/gradient';
 
 // ---------- canvas dimension helpers ----------
 export const ASPECTS: Record<string, [number, number]> = {
@@ -50,6 +51,7 @@ export interface BackgroundSettings {
   color: string;
   gradient: boolean;
   color2: string;
+  gradientSpec?: GradientSpec;           // v2; legacy color/gradient fields remain readable
   imageUrl: string | null;            // for source: 'image'
   blur: number;                       // px blur for image/card backgrounds
   userSet?: boolean;                  // preserve an explicit choice across template switches
@@ -312,7 +314,15 @@ function initialSceneState() {
     customW: initDims.width,
     customH: initDims.height,
     safeArea: false,
-    background: { source: 'color' as const, color: '#0d0d0d', gradient: false, color2: '#1f1f1f', imageUrl: null, blur: 28 },
+    background: {
+      source: 'color' as const,
+      color: '#0d0d0d',
+      gradient: false,
+      color2: '#1f1f1f',
+      gradientSpec: createGradientSpec('#0d0d0d', '#1f1f1f'),
+      imageUrl: null,
+      blur: 28,
+    },
     logo: { url: null, position: 'br' as const, size: 96 },
     audioUrl: null,
 
@@ -630,9 +640,29 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     }),
   setDuration: (d) => set(() => ({ duration: d })),
   toggleSafeArea: () => set((s) => ({ safeArea: !s.safeArea })),
-  setBackground: (patch) => set((s) => ({
-    background: { ...s.background, ...patch, userSet: true },
-  })),
+  setBackground: (patch) => set((s) => {
+    if (patch.gradientSpec) {
+      const gradientSpec = normalizeGradientSpec(patch.gradientSpec, s.background.color, s.background.color2);
+      const legacy = legacyColorsForGradient(gradientSpec);
+      // A gradient document is an applied background, not a detached draft.
+      // Keep source + mode atomic so a hydrated legacy project cannot update
+      // the ramp while the renderer still believes it should paint a solid,
+      // uploaded image or reflected card.
+      return {
+        background: {
+          ...s.background,
+          ...patch,
+          source: 'color',
+          gradient: true,
+          color: legacy.c1,
+          color2: legacy.c2,
+          gradientSpec,
+          userSet: true,
+        },
+      };
+    }
+    return { background: { ...s.background, ...patch, userSet: true } };
+  }),
   setLogo: (patch) => set((s) => ({ logo: { ...s.logo, ...patch } })),
   setAudioUrl: (url) => set(() => ({ audioUrl: url })),
 
@@ -770,9 +800,20 @@ export const useSceneStore = create<SceneState>((set, get) => ({
           ? partial.activeTrackId!
           : safeTracks[0].id;
 
+      const rawBackground = partial.background ?? s.background;
+      const background = {
+        ...rawBackground,
+        gradientSpec: normalizeGradientSpec(
+          rawBackground.gradientSpec,
+          rawBackground.color,
+          rawBackground.color2,
+        ),
+      };
+
       return {
         ...s,
         ...partial,
+        background,
         assets,
         ...projectActive(safeTracks, activeId),
         frame: 0, // always start at the clip head

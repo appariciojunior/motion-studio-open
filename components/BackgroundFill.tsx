@@ -5,6 +5,7 @@ import { use3DStore } from '@/store/use3DStore';
 import { ControlRow } from './Controls';
 import FillRow from './FillRow';
 import type { ControlDef } from '@/lib/types';
+import { fillPatchForGradient, gradientFromFill } from '@/lib/gradient';
 
 const amtDef: ControlDef = { key: 'a', label: 'Texture Amount', type: 'slider', min: 0, max: 100, step: 1, default: 0 };
 const scaleDef: ControlDef = { key: 's', label: 'Texture Scale', type: 'slider', min: 0.5, max: 10, step: 0.1, default: 3 };
@@ -45,10 +46,18 @@ export default function BackgroundFill({ hideTexture }: { hideTexture?: boolean 
       <div className="section-head"><span className="eyebrow">Background</span></div>
       <div className="section-body mc-colors">
         <FillRow
-          label="Background"
+          label="Fill"
           fill={bgFill}
-          onType={(t) => setBgFill({ type: t === 'none' ? 'solid' : t })}
+          showEditor
+          onType={(t) => {
+            const type = t === 'none' ? 'solid' : t;
+            if (type === 'linear' || type === 'radial') {
+              const gradient = gradientFromFill(bgFill);
+              setBgFill({ ...fillPatchForGradient({ ...gradient, shape: type }), type });
+            } else setBgFill({ type });
+          }}
           onColor={(which, hex) => setBgFill({ [which]: hex })}
+          onGradient={(gradient) => setBgFill(fillPatchForGradient(gradient))}
         />
         {!hideTexture && <ControlRow def={amtDef} value={bgTexAmount} onChange={(v) => setBgTexAmount(v)} />}
         {!hideTexture && <ControlRow def={scaleDef} value={bgTexScale} onChange={(v) => setBgTexScale(v)} />}

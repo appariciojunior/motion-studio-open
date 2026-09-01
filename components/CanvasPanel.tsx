@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useSceneStore, ASPECTS } from '@/store/useSceneStore';
 import { ControlRow } from './Controls';
+import GradientEditor from './GradientEditor';
+import { normalizeGradientSpec } from '@/lib/gradient';
 
 const FPS_OPTIONS = [15, 25, 30, 60] as const;
 const BG_SOURCES: { id: 'color' | 'image' | 'card'; label: string }[] = [
@@ -82,6 +84,7 @@ export default function CanvasPanel({ is3DMode = false }: { is3DMode?: boolean }
     || activeTemplateId.startsWith('spinner-')
     || activeTemplateId.startsWith('hinge-')
     || activeTemplateId.startsWith('fan-');
+  const backgroundGradient = normalizeGradientSpec(background.gradientSpec, background.color, background.color2);
 
   return (
     <>
@@ -158,17 +161,15 @@ export default function CanvasPanel({ is3DMode = false }: { is3DMode?: boolean }
 
           {background.source === 'color' && (
             <>
-              <ControlRow def={{ key: 'bgc', label: 'Colour', type: 'color', default: '' }} value={background.color} onChange={(v) => setBackground({ color: v })} />
               <div className="ctl-row">
-                <label className="ctl-label">Gradient</label>
+                <label className="ctl-label">Fill</label>
                 <div className="segmented">
-                  <button className={`seg ${!background.gradient ? 'active' : ''}`} onClick={() => setBackground({ gradient: false })}>Off</button>
-                  <button className={`seg ${background.gradient ? 'active' : ''}`} onClick={() => setBackground({ gradient: true })}>On</button>
+                  <button className={`seg ${!background.gradient ? 'active' : ''}`} onClick={() => setBackground({ gradient: false })}>Solid</button>
+                  <button className={`seg ${background.gradient ? 'active' : ''}`} onClick={() => setBackground({ source: 'color', gradient: true, gradientSpec: backgroundGradient })}>Gradient</button>
                 </div>
               </div>
-              {background.gradient && (
-                <ControlRow def={{ key: 'bgc2', label: 'Colour 2', type: 'color', default: '' }} value={background.color2} onChange={(v) => setBackground({ color2: v })} />
-              )}
+              {!background.gradient && <ControlRow def={{ key: 'bgc', label: 'Colour', type: 'color', default: '' }} value={background.color} onChange={(v) => setBackground({ color: v })} />}
+              {background.gradient && <GradientEditor value={backgroundGradient} onChange={(gradientSpec) => setBackground({ source: 'color', gradient: true, gradientSpec })} />}
             </>
           )}
 
