@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { idbDelete, idbGet, idbPut } from '@/lib/assetDb';
+import { createGradientSpec, fillPatchForGradient, normalizeGradientSpec, type GradientSpec } from '@/lib/gradient';
 
 // Model transform — cross-effect (applies to the 3D object itself, not the
 // ASCII look). The effect reads this live and drives a pivot around the model.
@@ -110,7 +111,12 @@ export interface ThreeDState {
 
 // A part's fill: solid, or a two-colour gradient (linear along Y bottom→top,
 // or radial centre→edge). c1 = start/centre, c2 = end/edge.
-export interface FillSpec { type: 'solid' | 'linear' | 'radial'; c1: string; c2: string; }
+export interface FillSpec {
+  type: 'solid' | 'linear' | 'radial';
+  c1: string;
+  c2: string;
+  gradient?: GradientSpec;
+}
 
 // Artwork on a device's screen. `url` is live-session only — a blob: string is
 // dead after a reload — so `id` keys the bytes in IndexedDB and the url is
@@ -127,12 +133,18 @@ const nid = (prefix: string) => `${prefix}_${Date.now().toString(36)}_${++_scree
 
 const DEF_FILL: FillSpec = { type: 'solid', c1: '#cccccc', c2: '#ffffff' };
 
+function migrateFill(fill: FillSpec): FillSpec {
+  if (fill.type === 'solid') return { ...fill };
+  const gradient = normalizeGradientSpec(fill.gradient, fill.c1, fill.c2, fill.type);
+  return { ...fill, ...fillPatchForGradient(gradient), type: gradient.shape === 'radial' || gradient.shape === 'twin-radial' ? 'radial' : 'linear' };
+}
+
 // Nice out-of-the-box fills for the bundled dayse groups (generic keys, still
 // applied only when those groups are present — other models fall back to none).
 const DEFAULT_FILLS: Record<string, FillSpec> = {
-  Cube:     { type: 'radial', c1: '#f4d21c', c2: '#e88a2a' }, // centres: yellow → orange edge
-  Cylinder: { type: 'linear', c1: '#1c5622', c2: '#63c24c' }, // stems: dark bottom → light tip
-  Plane:    { type: 'linear', c1: '#ffffff', c2: '#9a9a9a' }, // petals: white → grey
+  Cube:     { type: 'radial', c1: '#f4d21c', c2: '#e88a2a', gradient: createGradientSpec('#f4d21c', '#e88a2a', 'radial') },
+  Cylinder: { type: 'linear', c1: '#1c5622', c2: '#63c24c', gradient: createGradientSpec('#1c5622', '#63c24c') },
+  Plane:    { type: 'linear', c1: '#ffffff', c2: '#9a9a9a', gradient: createGradientSpec('#ffffff', '#9a9a9a') },
 };
 
 // Default nudge that centres the bundled dayse model in the stage.
@@ -190,7 +202,10 @@ function initial3DState(): ThreeDDoc {
     parts: [],
     partFills: {},
     selectedPart: null,
-    bgFill: { type: 'linear', c1: '#fbfbfc', c2: '#e6e8eb' },   // near-white → soft light grey
+    bgFill: {
+      type: 'linear', c1: '#fbfbfc', c2: '#e6e8eb',
+      gradient: createGradientSpec('#fbfbfc', '#e6e8eb'),
+    },
     bgTexAmount: 32,
     bgTexScale: 4.1,
     sunIntensity: 85,
@@ -304,7 +319,18 @@ export const use3DStore = create<ThreeDState>((set) => ({
   // Applied when a project opens. `parts` and `selectedPart` are deliberately
   // not restored: the effect reports its own colourable groups on load, and a
   // click-selection is session state, not a document.
-  hydrate3D: (partial) => set((s) => ({ ...s, ...partial, parts: [], selectedPart: null })),
+  hydrate3D: (partial) => set((s) => {
+    const rawBg = partial.bgFill ?? s.bgFill;
+    const rawParts = partial.partFills ?? s.partFills;
+    return {
+      ...s,
+      ...partial,
+      bgFill: migrateFill(rawBg),
+      partFills: Object.fromEntries(Object.entries(rawParts).map(([key, fill]) => [key, migrateFill(fill)])),
+      parts: [],
+      selectedPart: null,
+    };
+  }),
 
   // Drops the IndexedDB rows this project's screens were using: a new project
   // will never reference them again, and IndexedDB evicts nothing on its own.
@@ -353,16 +379,20 @@ export const use3DStore = create<ThreeDState>((set) => ({
     for (const k of keys) if (DEFAULT_FILLS[k]) fills[k] = { ...DEFAULT_FILLS[k] };
     return { parts: keys, partFills: fills, selectedPart: null };
   }),
-  setPartFill: (key, patch) => set((s) => ({
-    partFills: { ...s.partFills, [key]: { ...DEF_FILL, ...s.partFills[key], ...patch } },
-  })),
+  setPartFill: (key, patch) => set((s) => {
+    const next = { ...DEF_FILL, ...s.partFills[key], ...patch } as FillSpec;
+    return { partFills: { ...s.partFills, [key]: patch.gradient ? migrateFill(next) : next } };
+  }),
   clearPartFill: (key) => set((s) => {
     const pf = { ...s.partFills };
     delete pf[key];
     return { partFills: pf };
   }),
   selectPart: (key) => set({ selectedPart: key }),
-  setBgFill: (patch) => set((s) => ({ bgFill: { ...s.bgFill, ...patch } })),
+  setBgFill: (patch) => set((s) => {
+    const next = { ...s.bgFill, ...patch } as FillSpec;
+    return { bgFill: patch.gradient ? migrateFill(next) : next };
+  }),
   setBgTexAmount: (v) => set({ bgTexAmount: v }),
   setBgTexScale: (v) => set({ bgTexScale: v }),
   setSunIntensity: (v) => set({ sunIntensity: v }),

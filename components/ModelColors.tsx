@@ -3,6 +3,7 @@
 import { use3DStore, defaultModelFor } from '@/store/use3DStore';
 import { findDevice } from '@/three3d/devices';
 import FillRow from './FillRow';
+import { fillPatchForGradient, gradientFromFill } from '@/lib/gradient';
 
 // Friendly display names for the bundled daisy groups (keys stay unchanged).
 const PART_LABELS: Record<string, string> = { Cube: 'Center', Cylinder: 'Stem', Plane: 'Petals' };
@@ -79,11 +80,21 @@ export default function ModelColors() {
                 label={PART_LABELS[key] ?? key}
                 fill={partFills[key]}
                 allowNone
+                showEditor
+                collapsibleEditor
                 selected={selected === key}
                 onEnter={() => selectPart(key)}
                 onLeave={() => selected === key && selectPart(null)}
-                onType={(t) => (t === 'none' ? clearPartFill(key) : setPartFill(key, { type: t }))}
+                onType={(t) => {
+                  if (t === 'none') { clearPartFill(key); return; }
+                  if (t === 'linear' || t === 'radial') {
+                    const current = partFills[key] ?? { type: t, c1: '#cccccc', c2: '#ffffff' };
+                    const gradient = gradientFromFill(current);
+                    setPartFill(key, { ...fillPatchForGradient({ ...gradient, shape: t }), type: t });
+                  } else setPartFill(key, { type: t });
+                }}
                 onColor={(which, hex) => setPartFill(key, { [which]: hex })}
+                onGradient={(gradient) => setPartFill(key, fillPatchForGradient(gradient))}
               />
             ))}
           </>

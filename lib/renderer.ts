@@ -10,6 +10,7 @@ import { resolveTrackTime, trackAssetIndices, type MotionTrack } from '@/lib/tra
 import { cardAspectFor, coverCrop, cropKey } from '@/lib/crop';
 import { advanceVideoForExport, createCardVideo, isVideoSource, prepareVideoForSequentialExport, useVideoProxies, whenVideoReady } from '@/lib/videoTexture';
 import { BASE_PATH, IS_STATIC_EXPORT } from '@/lib/paths';
+import { advancedRasterSize, gradientRasterMaxEdge, gradientSignature, normalizeGradientSpec, paintGradientCanvas } from '@/lib/gradient';
 
 // Reference base long-edge (px) shared with templates (carousel BASE = 340),
 // so control values read directly in on-screen pixels.
@@ -87,6 +88,7 @@ export class SceneRenderer {
   onDirty?: () => void;   // preview loop hooks this to redraw once after async loads
   private content = new PIXI.Container();       // bg + motion (effects applied here)
   private bg = new PIXI.Graphics();
+  private gradientSprite = new PIXI.Sprite();
   private bgSprite = new PIXI.Sprite();          // image / card-reflected background
   private bgBlur = new PIXI.BlurFilter({ strength: 28, quality: 4 });
   private motion = new PIXI.Container();         // card sprites
@@ -109,6 +111,9 @@ export class SceneRenderer {
   private lastFxSig = '';
   private bgImageUrl = '';                        // last-loaded uploaded bg url
   private bgImageTex: PIXI.Texture | null = null;
+  private gradientCanvas: HTMLCanvasElement | null = null;
+  private gradientTexture: PIXI.Texture | null = null;
+  private gradientKey = '';
 
   constructor() {
     this.app = new PIXI.Application();
@@ -131,9 +136,11 @@ export class SceneRenderer {
 
     this.motion.sortableChildren = true;
     this.bgSprite.anchor.set(0.5);
+    this.gradientSprite.anchor.set(0.5);
+    this.gradientSprite.visible = false;
     this.bgSprite.visible = false;
     this.bgSprite.filters = [this.bgBlur];
-    this.content.addChild(this.bg, this.bgSprite, this.motion);
+    this.content.addChild(this.bg, this.gradientSprite, this.bgSprite, this.motion);
     this.app.stage.addChild(this.content, this.overlay);
     this.overlay.addChild(this.safeGfx);
 
@@ -148,6 +155,7 @@ export class SceneRenderer {
     this.app.renderer.resize(width, height, resolution);
     this.motion.position.set(width / 2, height / 2);
     this.bgSprite.position.set(width / 2, height / 2);
+    this.gradientSprite.position.set(width / 2, height / 2);
     this.content.filterArea = new PIXI.Rectangle(0, 0, width, height);
     this.overlay.position.set(0, 0);
   }
@@ -505,12 +513,28 @@ export class SceneRenderer {
 
     // background
     this.bg.clear();
-    if (s.background.gradient) {
-      const grad = new PIXI.FillGradient(0, 0, 0, height);
-      grad.addColorStop(0, s.background.color);
-      grad.addColorStop(1, s.background.color2);
-      this.bg.rect(0, 0, width, height).fill(grad);
+    if (s.background.source === 'color' && s.background.gradient) {
+      const spec = normalizeGradientSpec(s.background.gradientSpec, s.background.color, s.background.color2);
+      const phase = ((s.frame / Math.max(1, s.duration * s.fps)) % 1 + 1) % 1;
+      const [rw, rh] = advancedRasterSize(width, height, gradientRasterMaxEdge(spec));
+      const key = `${rw}x${rh}|${gradientSignature(spec, phase)}`;
+      if (key !== this.gradientKey) {
+        this.gradientKey = key;
+        const resized = !this.gradientCanvas || this.gradientCanvas.width !== rw || this.gradientCanvas.height !== rh;
+        if (!this.gradientCanvas) this.gradientCanvas = document.createElement('canvas');
+        paintGradientCanvas(this.gradientCanvas, spec, rw, rh, phase);
+        if (!this.gradientTexture || resized) {
+          this.gradientTexture?.destroy(true);
+          this.gradientTexture = PIXI.Texture.from(this.gradientCanvas);
+          this.gradientSprite.texture = this.gradientTexture;
+        } else {
+          this.gradientTexture.source.update();
+        }
+      }
+      this.gradientSprite.visible = true;
+      this.gradientSprite.scale.set(width / rw, height / rh);
     } else {
+      this.gradientSprite.visible = false;
       this.bg.rect(0, 0, width, height).fill(s.background.color);
     }
 
@@ -805,6 +829,8 @@ export class SceneRenderer {
     this.texturePromises.clear();
     this.videoEls.forEach((v) => { try { v.pause(); v.removeAttribute('src'); v.load(); } catch { /* noop */ } });
     this.videoEls.clear();
+    this.gradientTexture?.destroy(true);
+    this.gradientTexture = null;
     try { this.app.destroy(true, { children: true, texture: false }); } catch { /* noop */ }
   }
 }

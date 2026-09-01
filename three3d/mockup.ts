@@ -12,6 +12,14 @@ import { use3DStore } from '../store/use3DStore';
 import { useSceneStore } from '../store/useSceneStore';
 import { apply3DAnimation } from './animations';
 import { createCardVideo, seekVideoToTime } from '@/lib/videoTexture';
+import {
+  advancedRasterSize,
+  gradientFromFill,
+  gradientRasterMaxEdge,
+  gradientSignature,
+  paintGradientCanvas,
+  sampleGradientPoint,
+} from '@/lib/gradient';
 
 // ── Device Mockup 3D effect ─────────────────────────────────────────────────
 // Realistic PBR render — the GLB's own materials (colour, metalness, roughness,
@@ -78,35 +86,31 @@ export function initMockup(
   //
   // Mirrors the CSS in ThreeStage3D exactly: `linear-gradient(to top, c1, c2)`
   // puts c1 at the BOTTOM, and the radial ends at 130% of the box.
-  const BG_RES = 256;
   const bgCanvas = document.createElement('canvas');
-  bgCanvas.width = bgCanvas.height = BG_RES;
-  const bgCtx = bgCanvas.getContext('2d')!;
+  bgCanvas.width = bgCanvas.height = 2;
   const bgTex = new THREE.CanvasTexture(bgCanvas);
   bgTex.colorSpace = THREE.SRGBColorSpace;
   scene.background = bgTex;
   let bgKey = '';
-  function paintBackground(spec: { type: string; c1: string; c2: string }) {
-    const key = `${spec.type}|${spec.c1}|${spec.c2}`;
+  function paintBackground(spec: { type: string; c1: string; c2: string; gradient?: any }) {
+    const sceneState = useSceneStore.getState();
+    const phase = ((sceneState.frame / Math.max(1, sceneState.duration * sceneState.fps)) % 1 + 1) % 1;
+    const gradient = gradientFromFill(spec);
+    const [rw, rh] = advancedRasterSize(sceneState.width, sceneState.height, gradientRasterMaxEdge(gradient));
+    const key = spec.type === 'solid'
+      ? `solid|${spec.c1}`
+      : `${rw}x${rh}|${gradientSignature(gradient, phase)}`;
     if (key === bgKey) return;
     bgKey = key;
-    const S = BG_RES;
-    if (spec.type === 'linear') {
-      // CanvasTexture keeps flipY, so canvas row 0 lands at the top of frame —
-      // c2 goes at y=0 and c1 at the bottom, matching `to top`.
-      const g = bgCtx.createLinearGradient(0, 0, 0, S);
-      g.addColorStop(0, spec.c2);
-      g.addColorStop(1, spec.c1);
-      bgCtx.fillStyle = g;
-    } else if (spec.type === 'radial') {
-      const g = bgCtx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S * 0.65);
-      g.addColorStop(0, spec.c1);
-      g.addColorStop(1, spec.c2);
-      bgCtx.fillStyle = g;
+    if (spec.type === 'solid') {
+      if (bgCanvas.width !== 2) bgCanvas.width = 2;
+      if (bgCanvas.height !== 2) bgCanvas.height = 2;
+      const ctx = bgCanvas.getContext('2d')!;
+      ctx.fillStyle = spec.c1;
+      ctx.fillRect(0, 0, 2, 2);
     } else {
-      bgCtx.fillStyle = spec.c1;
+      paintGradientCanvas(bgCanvas, gradient, rw, rh, phase);
     }
-    bgCtx.fillRect(0, 0, S, S);
     bgTex.needsUpdate = true;
   }
   paintBackground(opts.getBgFill?.() ?? { type: 'linear', c1: '#fbfbfc', c2: '#e6e8eb' });
@@ -299,10 +303,8 @@ export function initMockup(
   }
 
   const _v = new THREE.Vector3();
-  const _c1 = new THREE.Color();
-  const _c2 = new THREE.Color();
   const _co = new THREE.Color();
-  function applyFill(mesh: THREE.Mesh, spec: { type: string; c1: string; c2: string }) {
+  function applyFill(mesh: THREE.Mesh, spec: { type: string; c1: string; c2: string; gradient?: any }, phase = 0) {
     const mat = mesh.material as any;
     if (spec.type === 'solid') {
       if (mat.vertexColors) { mat.vertexColors = false; mat.needsUpdate = true; }
@@ -317,15 +319,16 @@ export function initMockup(
     const n = pos.count;
     let colAttr = geo.getAttribute('color') as THREE.BufferAttribute | undefined;
     if (!colAttr || colAttr.count !== n) { colAttr = new THREE.BufferAttribute(new Float32Array(n * 3), 3); geo.setAttribute('color', colAttr); }
-    _c1.set(spec.c1).convertSRGBToLinear();
-    _c2.set(spec.c2).convertSRGBToLinear();
+    const gradient = gradientFromFill(spec);
+    const spanX = Math.max(1e-4, gd.box.max.x - gd.box.min.x);
     const spanY = Math.max(1e-4, gd.box.max.y - gd.box.min.y);
+    const uv = geo.getAttribute('uv') as THREE.BufferAttribute | undefined;
     for (let i = 0; i < n; i++) {
       _v.fromBufferAttribute(pos, i).applyMatrix4(m2m);
-      const t = spec.type === 'radial'
-        ? Math.min(1, _v.distanceTo(gd.center) / gd.radius)
-        : Math.min(1, Math.max(0, (_v.y - gd.box.min.y) / spanY));
-      _co.copy(_c1).lerp(_c2, t);
+      const gx = gradient.mapping3d === 'uv' && uv ? uv.getX(i) : (_v.x - gd.box.min.x) / spanX;
+      const gy = gradient.mapping3d === 'uv' && uv ? 1 - uv.getY(i) : (_v.y - gd.box.min.y) / spanY;
+      const sampled = sampleGradientPoint(gradient, gx, gy, phase);
+      _co.setRGB(sampled[0] / 255, sampled[1] / 255, sampled[2] / 255).convertSRGBToLinear();
       colAttr.setXYZ(i, _co.r, _co.g, _co.b);
     }
     colAttr.needsUpdate = true;
@@ -960,6 +963,7 @@ export function initMockup(
     const op = Math.max(0, Math.min(1, Number(p.opacity ?? 100) / 100));
     tmpColor.set(String(p.color ?? '#d8d8dc'));
     const partFills = opts.getPartFills?.() ?? {};
+    const gradientPhase = ((useSceneStore.getState().frame / Math.max(1, useSceneStore.getState().duration * useSceneStore.getState().fps)) % 1 + 1) % 1;
     const selected = opts.getSelectedPart?.() ?? null;
     const emissiveHex = String(p.emissive ?? '#000000');
     const emissiveIntensity = Number(p.emissiveIntensity ?? 1);
@@ -986,8 +990,9 @@ export function initMockup(
       const preservePhoneDetail = DEV?.slot === 'phone' && !m.userData.isEnclosure && !partFill;
 
       if (partFill) {
-        const hash = `${partFill.type}|${partFill.c1}|${partFill.c2}`;
-        if (m.userData.fillHash !== hash) { applyFill(mesh, partFill); m.userData.fillHash = hash; }
+        const gradient = gradientFromFill(partFill);
+        const hash = `${partFill.type}|${gradientSignature(gradient, gradientPhase)}`;
+        if (m.userData.fillHash !== hash) { applyFill(mesh, partFill, gradientPhase); m.userData.fillHash = hash; }
       } else {
         if (m.userData.fillHash !== undefined) {
           if (m.vertexColors) { m.vertexColors = false; m.needsUpdate = true; }
