@@ -91,6 +91,7 @@ const editorSource = fs.readFileSync(path.join(root, 'components', 'GradientEdit
 const cssSource = fs.readFileSync(path.join(root, 'app', 'globals.css'), 'utf8');
 const sceneStoreSource = fs.readFileSync(path.join(root, 'store', 'useSceneStore.ts'), 'utf8');
 const rendererSource = fs.readFileSync(path.join(root, 'lib', 'renderer.ts'), 'utf8');
+const renderer3dSource = fs.readFileSync(path.join(root, 'lib', 'renderer3d.ts'), 'utf8');
 const gradientCssBlock = cssSource.split('/* ---- Shared 2D / 3D gradient editor ---- */')[1]
   ?.split('/* Neutral SSR/hydration gate.')[0] ?? '';
 check(editorSource.includes("import { ControlRow } from './Controls'"), 'gradient sliders must use the shared ControlRow primitive');
@@ -106,6 +107,8 @@ check(gradientRadii.every((value) => value.startsWith('var(')), 'gradient UI CSS
 check(/if \(patch\.gradientSpec\)[\s\S]*?source: 'color',[\s\S]*?gradient: true,/.test(sceneStoreSource), 'writing a gradient document must atomically activate the colour-gradient background');
 check(/const background = \{[\s\S]*?\.\.\.s\.background,[\s\S]*?\.\.\.rawBackground,[\s\S]*?gradientSpec: normalizeGradientSpec/.test(sceneStoreSource), 'legacy project hydration must merge saved background fields over the current complete background contract');
 check(rendererSource.includes("s.background.source === 'color' && s.background.gradient"), '2D renderer must obey the same background source guard as 3D');
+check(rendererSource.includes('if (!gradientCanvas || resized)') && rendererSource.includes('this.gradientCanvas = gradientCanvas'), 'Pixi gradient resolution changes must allocate a fresh canvas texture source');
+check(renderer3dSource.includes('if (!gradientTex || resized)') && renderer3dSource.includes('gradientTex?.dispose()') && renderer3dSource.includes('this.gradientTex = gradientTex'), 'Three gradient resolution changes must recreate and dispose their canvas texture');
 
 if (failures.length) {
   console.error(`Gradient verification failed (${failures.length}/${assertions})`);
