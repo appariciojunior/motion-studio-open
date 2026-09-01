@@ -184,9 +184,11 @@ export default function ThreeStage3D({ effectId: forcedEffectId }: { effectId?: 
   };
 
   const bgFill = use3DStore((s) => s.bgFill);
-  const background =
-    bgFill.type === 'linear' || bgFill.type === 'radial' ? gradientCss(gradientFromFill(bgFill))
-    : bgFill.c1;
+  const backgroundGradient = bgFill.type === 'linear' || bgFill.type === 'radial'
+    ? gradientFromFill(bgFill)
+    : null;
+  const background = backgroundGradient ? gradientCss(backgroundGradient) : bgFill.c1;
+  const backgroundBlur = backgroundGradient ? backgroundGradient.softness * 24 : 0;
   const stageStyle: React.CSSProperties = { background };
 
   // Same "contain" fit a <canvas>/<img> gets for free from object-fit, ported
@@ -214,6 +216,18 @@ export default function ThreeStage3D({ effectId: forcedEffectId }: { effectId?: 
           overflow: 'hidden',
         }}
       >
+        {backgroundBlur > 0 && (
+          <div
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              inset: '-8%',
+              background,
+              filter: `blur(${backgroundBlur}px)`,
+              pointerEvents: 'none',
+            }}
+          />
+        )}
         <canvas key={effectId} className="three3d-layer three3d-ascii" ref={canvasRef} style={canvasStyle} />
 
         {has('tint') && (

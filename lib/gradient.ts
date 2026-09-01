@@ -212,12 +212,6 @@ function mixColor(a: RGB, b: RGB, t: number): RGB {
   ];
 }
 
-function softenedT(t: number, softness: number): number {
-  const linear = clamp(t);
-  const eased = linear * linear * (3 - 2 * linear);
-  return linear + (eased - linear) * clamp(softness);
-}
-
 function rgbHex(color: RGB): string {
   return `#${color.slice(0, 3).map((channel) => Math.round(channel).toString(16).padStart(2, '0')).join('')}`;
 }
@@ -229,7 +223,7 @@ function prepareStops(spec: GradientSpec): PreparedStop[] {
   }));
 }
 
-function samplePreparedStops(stops: PreparedStop[], t: number, softness = 0): RGB {
+function sampleLinearStops(stops: PreparedStop[], t: number): RGB {
   const x = clamp(t);
   if (x <= stops[0].position) return stops[0].color;
   for (let i = 1; i < stops.length; i++) {
@@ -237,10 +231,28 @@ function samplePreparedStops(stops: PreparedStop[], t: number, softness = 0): RG
     if (x <= right.position) {
       const left = stops[i - 1];
       const span = Math.max(1e-6, right.position - left.position);
-      return mixColor(left.color, right.color, softenedT((x - left.position) / span, softness));
+      return mixColor(left.color, right.color, (x - left.position) / span);
     }
   }
   return stops[stops.length - 1].color;
+}
+
+function samplePreparedStops(stops: PreparedStop[], t: number, softness = 0): RGB {
+  const amount = clamp(softness);
+  if (amount <= 0) return sampleLinearStops(stops, t);
+
+  // A small Gaussian convolution really feathers the colour ramp. Unlike an
+  // easing curve, it does not squeeze the transition into a harder midpoint;
+  // it rounds corners at authored stops and gently blends the ramp boundaries.
+  const radius = amount * 0.28;
+  const offsets = [-1, -0.5, 0, 0.5, 1];
+  const weights = [1, 4, 6, 4, 1];
+  const result: RGB = [0, 0, 0, 0];
+  for (let i = 0; i < offsets.length; i++) {
+    const color = sampleLinearStops(stops, t + offsets[i] * radius);
+    for (let channel = 0; channel < 4; channel++) result[channel] += color[channel] * weights[i];
+  }
+  return result.map((channel) => channel / 16) as RGB;
 }
 
 export function sampleGradientRGB(specInput: GradientSpec, t: number): RGB {
@@ -253,26 +265,18 @@ export function gradientRenderStops(specInput: GradientSpec): GradientStop[] {
   const stops = sortedStops(spec);
   if (spec.softness <= 0) return stops;
 
-  const rendered: GradientStop[] = [stops[0]];
-  const samplesPerSegment = 12;
-  for (let i = 1; i < stops.length; i++) {
-    const left = stops[i - 1];
-    const right = stops[i];
-    const leftColor = parseColor(left.color, left.opacity);
-    const rightColor = parseColor(right.color, right.opacity);
-    for (let sample = 1; sample < samplesPerSegment; sample++) {
-      const t = sample / samplesPerSegment;
-      const color = mixColor(leftColor, rightColor, softenedT(t, spec.softness));
-      rendered.push({
-        id: `soft-${i}-${sample}`,
-        position: left.position + (right.position - left.position) * t,
-        color: rgbHex(color),
-        opacity: color[3] / 255,
-      });
-    }
-    rendered.push(right);
-  }
-  return rendered;
+  const prepared = prepareStops(spec);
+  const sampleCount = Math.max(32, (stops.length - 1) * 16);
+  return Array.from({ length: sampleCount + 1 }, (_, sample) => {
+    const position = sample / sampleCount;
+    const color = samplePreparedStops(prepared, position, spec.softness);
+    return {
+      id: `soft-${sample}`,
+      position,
+      color: rgbHex(color),
+      opacity: color[3] / 255,
+    };
+  });
 }
 
 function hash2(x: number, y: number): number {
@@ -306,8 +310,9 @@ function prepareMeshPalette(stops: PreparedStop[]): RGB[] {
 }
 
 function meshColor(spec: GradientSpec, colors: RGB[], stopCount: number, x: number, y: number): RGB {
-  const easedX = softenedT(x, spec.softness);
-  const easedY = softenedT(y, spec.softness);
+  const spread = 1 - spec.softness * 0.22;
+  const easedX = clamp(0.5 + (x - 0.5) * spread);
+  const easedY = clamp(0.5 + (y - 0.5) * spread);
   const top = mixColor(colors[0], colors[1], easedX);
   const bottom = mixColor(colors[3], colors[2], easedX);
   let result = mixColor(top, bottom, easedY);
@@ -388,6 +393,67 @@ function addNativeStops(gradient: CanvasGradient, spec: GradientSpec) {
   }
 }
 
+export function gradientBlurRadius(specInput: GradientSpec, width: number, height: number): number {
+  const spec = normalizeGradientSpec(specInput);
+  if (spec.softness <= 0) return 0;
+  return Math.min(32, Math.max(0, Math.min(width, height)) * 0.035 * spec.softness);
+}
+
+type BlurBuffers = { source: HTMLCanvasElement; padded: HTMLCanvasElement };
+const blurBuffers = new WeakMap<HTMLCanvasElement, BlurBuffers>();
+
+function canvasBuffer(width: number, height: number): HTMLCanvasElement {
+  const buffer = document.createElement('canvas');
+  buffer.width = width;
+  buffer.height = height;
+  return buffer;
+}
+
+function applyGradientBlur(canvas: HTMLCanvasElement, spec: GradientSpec): void {
+  const blur = gradientBlurRadius(spec, canvas.width, canvas.height);
+  if (blur <= 0) return;
+
+  const pad = Math.max(2, Math.ceil(blur * 3));
+  let buffers = blurBuffers.get(canvas);
+  if (!buffers) {
+    buffers = { source: canvasBuffer(canvas.width, canvas.height), padded: canvasBuffer(canvas.width + pad * 2, canvas.height + pad * 2) };
+    blurBuffers.set(canvas, buffers);
+  }
+  const { source, padded } = buffers;
+  if (source.width !== canvas.width) source.width = canvas.width;
+  if (source.height !== canvas.height) source.height = canvas.height;
+  if (padded.width !== canvas.width + pad * 2) padded.width = canvas.width + pad * 2;
+  if (padded.height !== canvas.height + pad * 2) padded.height = canvas.height + pad * 2;
+
+  const sourceCtx = source.getContext('2d');
+  const paddedCtx = padded.getContext('2d');
+  const ctx = canvas.getContext('2d');
+  if (!sourceCtx || !paddedCtx || !ctx) return;
+  const w = canvas.width, h = canvas.height;
+  sourceCtx.clearRect(0, 0, w, h);
+  sourceCtx.drawImage(canvas, 0, 0);
+
+  // Extend the four edge pixels into the blur padding. A regular filtered draw
+  // samples transparent pixels outside the canvas and creates a dark frame;
+  // clamped edges keep a background gradient opaque from corner to corner.
+  paddedCtx.clearRect(0, 0, padded.width, padded.height);
+  paddedCtx.drawImage(source, pad, pad);
+  paddedCtx.drawImage(source, 0, 0, w, 1, pad, 0, w, pad);
+  paddedCtx.drawImage(source, 0, h - 1, w, 1, pad, pad + h, w, pad);
+  paddedCtx.drawImage(source, 0, 0, 1, h, 0, pad, pad, h);
+  paddedCtx.drawImage(source, w - 1, 0, 1, h, pad + w, pad, pad, h);
+  paddedCtx.drawImage(source, 0, 0, 1, 1, 0, 0, pad, pad);
+  paddedCtx.drawImage(source, w - 1, 0, 1, 1, pad + w, 0, pad, pad);
+  paddedCtx.drawImage(source, 0, h - 1, 1, 1, 0, pad + h, pad, pad);
+  paddedCtx.drawImage(source, w - 1, h - 1, 1, 1, pad + w, pad + h, pad, pad);
+
+  ctx.save();
+  ctx.clearRect(0, 0, w, h);
+  ctx.filter = `blur(${blur}px)`;
+  ctx.drawImage(padded, -pad, -pad);
+  ctx.restore();
+}
+
 export function paintGradientCanvas(
   canvas: HTMLCanvasElement,
   specInput: GradientSpec,
@@ -419,6 +485,7 @@ export function paintGradientCanvas(
     addNativeStops(gradient, spec);
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, w, h);
+    applyGradientBlur(canvas, spec);
     return;
   }
 
@@ -438,6 +505,7 @@ export function paintGradientCanvas(
     }
   }
   ctx.putImageData(image, 0, 0);
+  applyGradientBlur(canvas, spec);
 }
 
 export function advancedRasterSize(width: number, height: number, maxEdge = 384): [number, number] {
