@@ -32,6 +32,7 @@ Module._resolveFilename = function (request, parent, isMain, options) {
 };
 
 const { templateList, defaultsFor, easingFor, layerCountFor } = require('../templates');
+const { carouselReferenceDurations } = require('../templates/carousel');
 const { resolveEasing } = require('../lib/easing');
 const { loopCycles } = require('../lib/motion');
 const { solveLattice } = require('../templates/lattice');
@@ -101,9 +102,9 @@ function loopDrift(template, values, ctx) {
 //  cards sit at base size and neighbours are unambiguous:
 //    planeSize 730, gap 80  -> card 548x730, pitch 810
 //    planeSize 850, gap 500 -> card 638x850, pitch 1350
-//  which gives card height = planeSize (3:4) and pitch = planeSize + gap.
-//  This family's `gap` control is a centre distance AT BASE SIZE, so the 0.75
-//  divides out: cardSize = 0.75*planeSize, gap = BASE*(1 + gapRef/planeSize).
+//  `planeSize` is the extent ALONG THE TRAVEL AXIS. In this project cardSize is
+//  the long edge, so vertical converts by 0.75 while horizontal keeps the raw
+//  width. Both axes still land on a 0.75*(planeSize+gap) centre pitch.
 // ============================================================
 const RUNWAY = {
   'Runway 06': [600, 40], 'Runway 07': [546, 40], 'Runway 08': [568, 235], 'Runway 09': [440, 190],
@@ -117,8 +118,13 @@ for (const [name, [planeSize, gapRef]] of Object.entries(RUNWAY)) {
   if (!t) continue;
   const v = defaultsFor(t.meta.id);
   // cardSize and gap are integer sliders, so two roundings can compound.
-  near(v.cardSize, REF_SCALE * planeSize, 1, name, 'card long edge');
+  const horizontal = v.direction === 'left' || v.direction === 'right';
+  near(v.cardSize, horizontal ? planeSize : REF_SCALE * planeSize, 1, name, 'card long edge');
   near(v.gap * (v.cardSize / SPRITE_BASE), REF_SCALE * (planeSize + gapRef), 2, name, 'centre-to-centre pitch');
+  const authoredDuration = carouselReferenceDurations[t.meta.id];
+  check(Number.isFinite(authoredDuration) && authoredDuration > 0, name, 'missing authored Runway duration');
+  // Every reconstructed clip advances the complete six-card set exactly once.
+  near(v.speed, 6 / authoredDuration, 0.02, name, 'slot cadence');
   const ctx = makeCtx(t.meta.id, { cardAspect: 3 / 4 });
   check(loopDrift(t, v, ctx) < 1e-6, name, 'does not return to frame 0 at the loop point');
 }
