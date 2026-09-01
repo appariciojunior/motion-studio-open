@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Template } from '@/lib/types';
 import { frameColour, onThemeChange } from '@/lib/thumbStill';
-import { cachedThumb, scheduleThumb } from '@/lib/thumbQueue';
+import { cachedThumb, pauseThumbQueue, scheduleThumb } from '@/lib/thumbQueue';
 import {
   CTX_BASE,
   attachCanvas2d,
@@ -77,17 +77,21 @@ export default function TemplateThumb2DGL({
     let running = false;
     let startedAt = 0;
     let lastDrawn = -1;
+    let runToken = 0;
+    let resumeQueue: (() => void) | null = null;
     let hovered = false, focused = false, autoVisible = false;
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
     const stop = () => {
       if (!running) return;
       running = false;
+      runToken++;
       cancelAnimationFrame(raf);
       detachCanvas2d();
       setPreviewing(false);
       if (releaseActive === stop) releaseActive = null;
-      snapshotThumb2d(template, THUMB_FRAME).then((src) => setStill(src)).catch(() => { /* noop */ });
+      resumeQueue?.();
+      resumeQueue = null;
     };
 
     const start = () => {
@@ -95,10 +99,20 @@ export default function TemplateThumb2DGL({
       releaseActive?.();      // there is only one canvas
       releaseActive = stop;
       running = true;
-      startedAt = performance.now();
-      lastDrawn = -1;
-      setPreviewing(true);
-      attachCanvas2d(host).then((ctx) => {
+      const token = ++runToken;
+      resumeQueue = pauseThumbQueue();
+      // Continue from the exact pose used by the idle still. Starting at frame
+      // zero made every hover look like a jump cut.
+      startedAt = performance.now() - (THUMB_FRAME / PREVIEW_FPS) * 1000;
+      lastDrawn = THUMB_FRAME;
+      getShared2d().then(async (ctx) => {
+        if (!running || token !== runToken) return;
+        // Paint before attaching/hiding the still. The shared canvas may still
+        // contain another card's last frame.
+        renderThumbFrame2d(ctx, template, THUMB_FRAME);
+        await attachCanvas2d(host);
+        if (!running || token !== runToken) return;
+        setPreviewing(true);
         const tick = (now: number) => {
           if (!running) return;
           const frame = Math.floor(((now - startedAt) / 1000) * PREVIEW_FPS) % CTX_BASE.totalFrames;
@@ -111,7 +125,14 @@ export default function TemplateThumb2DGL({
           raf = requestAnimationFrame(tick);
         };
         raf = requestAnimationFrame(tick);
-      }).catch(() => { running = false; setPreviewing(false); });
+      }).catch(() => {
+        if (token !== runToken) return;
+        running = false;
+        setPreviewing(false);
+        if (releaseActive === stop) releaseActive = null;
+        resumeQueue?.();
+        resumeQueue = null;
+      });
     };
 
     const reconcile = () => {
