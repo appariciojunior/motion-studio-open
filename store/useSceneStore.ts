@@ -802,6 +802,13 @@ export const useSceneStore = create<SceneState>((set, get) => ({
 
       const rawBackground = partial.background ?? s.background;
       const background = {
+        // A persisted project may predate source, blur, imageUrl or the v2
+        // gradient document. Keep today's complete background contract and
+        // layer the saved values over it instead of replacing it wholesale.
+        // Without this merge, an old project hydrates `source` as undefined;
+        // the renderer's colour-background guard then rejects a gradient even
+        // though the editor shows it as selected.
+        ...s.background,
         ...rawBackground,
         gradientSpec: normalizeGradientSpec(
           rawBackground.gradientSpec,

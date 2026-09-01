@@ -83,6 +83,7 @@ check(!/font-size:\s*\d/.test(gradientCssBlock), 'gradient UI CSS must not hardc
 const gradientRadii = [...gradientCssBlock.matchAll(/border-radius:\s*([^;]+)/g)].map((match) => match[1].trim());
 check(gradientRadii.every((value) => value.startsWith('var(')), 'gradient UI CSS must keep every control, including stop handles, on the square radius tokens');
 check(/if \(patch\.gradientSpec\)[\s\S]*?source: 'color',[\s\S]*?gradient: true,/.test(sceneStoreSource), 'writing a gradient document must atomically activate the colour-gradient background');
+check(/const background = \{[\s\S]*?\.\.\.s\.background,[\s\S]*?\.\.\.rawBackground,[\s\S]*?gradientSpec: normalizeGradientSpec/.test(sceneStoreSource), 'legacy project hydration must merge saved background fields over the current complete background contract');
 check(rendererSource.includes("s.background.source === 'color' && s.background.gradient"), '2D renderer must obey the same background source guard as 3D');
 
 if (failures.length) {
