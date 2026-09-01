@@ -11,6 +11,9 @@ Advanced mode, but they must not define their own gradient document shape.
 - Modes: `basic`, `advanced`.
 - Shapes: `linear`, `radial`, `conic`, `mesh`, `warped-field`, `twin-radial`.
 - Stops: sorted for rendering, minimum 2, maximum 8, stable IDs.
+- Softness: `0..1`; eases interpolation between authored stops without applying
+  blur to the layer. `0` preserves the native linear interpolation used by
+  existing documents.
 - Angle convention: `0deg` runs left to right and increases clockwise in screen
   space. Renderer-specific angle conventions are converted at the boundary.
 - Center, radius and 3D coordinates are normalized to `0..1`.
@@ -42,6 +45,8 @@ through the normal autosave path after an edit.
 
 - Basic exposes Linear and Radial.
 - Advanced exposes every shape and the five procedural controls.
+- Softness is shared by Basic and Advanced and applies to Linear and Radial as
+  well as the additional Advanced shapes.
 - Clicking the ramp adds an interpolated stop at that position.
 - `+ Stop` splits the largest gap and interpolates its initial color.
 - Stops drag horizontally, render in position order and retain their IDs.

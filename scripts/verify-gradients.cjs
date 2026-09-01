@@ -11,6 +11,7 @@ const {
   createGradientSpec,
   fillPatchForGradient,
   gradientFromFill,
+  gradientRenderStops,
   gradientRasterMaxEdge,
   gradientSignature,
   normalizeGradientSpec,
@@ -29,6 +30,7 @@ check(legacy.version === 2, 'legacy fill must migrate to GradientSpec v2');
 check(legacy.shape === 'radial', 'legacy radial fill must keep its shape');
 check(legacy.stops.length === 2, 'legacy fill must create two stops');
 check(legacy.stops[0].color === '#112233' && legacy.stops[1].color === '#ddeeff', 'legacy colours must survive migration');
+check(legacy.softness === 0, 'legacy gradients must preserve linear interpolation');
 
 const crowded = normalizeGradientSpec({
   ...createGradientSpec(),
@@ -39,6 +41,13 @@ check(crowded.stops.every((stop, i, list) => i === 0 || list[i - 1].position <= 
 
 const simple = createGradientSpec('#000000', '#ffffff');
 check(colorClose(sampleGradientRGB(simple, 0.5), [128, 128, 128, 255]), 'two-stop midpoint must interpolate');
+const soft = normalizeGradientSpec({ ...simple, softness: 1 });
+check(colorClose(sampleGradientRGB(soft, 0.25), [40, 40, 40, 255]), 'softness must ease colour interpolation between stops');
+check(colorClose(sampleGradientRGB(soft, 0), [0, 0, 0, 255]) && colorClose(sampleGradientRGB(soft, 1), [255, 255, 255, 255]), 'softness must preserve authored endpoint colours');
+check(gradientRenderStops(simple).length === simple.stops.length && gradientRenderStops(soft).length > soft.stops.length, 'native renderers must add easing samples only when softness is enabled');
+check(normalizeGradientSpec({ ...simple, softness: 7 }).softness === 1, 'softness must clamp to its document range');
+const mesh = normalizeGradientSpec({ ...soft, mode: 'advanced', shape: 'mesh' });
+check(!colorClose(sampleGradientPoint(mesh, 0.25, 0.5), sampleGradientPoint({ ...mesh, softness: 0 }, 0.25, 0.5), 0.1), 'mesh must honor the shared softness interpolation');
 check(colorClose(sampleGradientPoint({ ...simple, angle: 0 }, 0, 0.5), [0, 0, 0, 255]), 'linear start must use first stop');
 check(colorClose(sampleGradientPoint({ ...simple, angle: 0 }, 1, 0.5), [255, 255, 255, 255]), 'linear end must use last stop');
 
@@ -75,6 +84,7 @@ const rendererSource = fs.readFileSync(path.join(root, 'lib', 'renderer.ts'), 'u
 const gradientCssBlock = cssSource.split('/* ---- Shared 2D / 3D gradient editor ---- */')[1]
   ?.split('/* Neutral SSR/hydration gate.')[0] ?? '';
 check(editorSource.includes("import { ControlRow } from './Controls'"), 'gradient sliders must use the shared ControlRow primitive');
+check(editorSource.includes("label: 'Softness'") && editorSource.includes('value={spec.softness}'), 'shared editor must expose softness through the design-system control primitive');
 check(editorSource.includes('className="segmented"') && editorSource.includes('className="field"') && editorSource.includes('className="btn"'), 'gradient choices and actions must use shared control classes');
 check(!editorSource.includes('type="range"') && !editorSource.includes('gradient-number'), 'gradient editor must not introduce native parallel sliders');
 check(gradientCssBlock.includes('var(--ctl-h)') && gradientCssBlock.includes('var(--gap-row)') && gradientCssBlock.includes('var(--r-ctrl)'), 'gradient geometry must derive from tokens.css metrics');
@@ -83,6 +93,7 @@ check(!/font-size:\s*\d/.test(gradientCssBlock), 'gradient UI CSS must not hardc
 const gradientRadii = [...gradientCssBlock.matchAll(/border-radius:\s*([^;]+)/g)].map((match) => match[1].trim());
 check(gradientRadii.every((value) => value.startsWith('var(')), 'gradient UI CSS must keep every control, including stop handles, on the square radius tokens');
 check(/if \(patch\.gradientSpec\)[\s\S]*?source: 'color',[\s\S]*?gradient: true,/.test(sceneStoreSource), 'writing a gradient document must atomically activate the colour-gradient background');
+check(/const background = \{[\s\S]*?\.\.\.s\.background,[\s\S]*?\.\.\.rawBackground,[\s\S]*?gradientSpec: normalizeGradientSpec/.test(sceneStoreSource), 'legacy project hydration must merge saved background fields over the current complete background contract');
 check(rendererSource.includes("s.background.source === 'color' && s.background.gradient"), '2D renderer must obey the same background source guard as 3D');
 
 if (failures.length) {

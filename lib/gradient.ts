@@ -30,6 +30,7 @@ export interface GradientSpec {
   mode: GradientMode;
   shape: GradientShape;
   stops: GradientStop[];
+  softness: number; // 0..1; eases colour transitions without blurring the layer
   angle: number; // 0deg = left to right; clockwise in screen space
   center: { x: number; y: number };
   radius: number;
@@ -73,6 +74,7 @@ export function createGradientSpec(
       { id: 'stop-0', color: cleanHex(c1, '#2b1055'), position: 0, opacity: 1 },
       { id: 'stop-1', color: cleanHex(c2, '#7597de'), position: 1, opacity: 1 },
     ],
+    softness: 0,
     angle: 90,
     center: { x: 0.5, y: 0.5 },
     radius: 0.72,
@@ -110,6 +112,7 @@ export function normalizeGradientSpec(
     mode: MODES.includes(input?.mode as GradientMode) ? input!.mode! : base.mode,
     shape: SHAPES.includes(input?.shape as GradientShape) ? input!.shape! : legacyShape,
     stops,
+    softness: clamp(finite(input?.softness, base.softness)),
     angle: ((finite(input?.angle, base.angle) % 360) + 360) % 360,
     center: {
       x: clamp(finite(input?.center?.x, base.center.x)),
@@ -171,7 +174,10 @@ export function gradientSignature(spec: GradientSpec, phase = 0): string {
 
 export function gradientCss(specInput: GradientSpec): string {
   const spec = normalizeGradientSpec(specInput);
-  const stops = sortedStops(spec).map((s) => `${s.color} ${Math.round(s.position * 1000) / 10}%`).join(', ');
+  const stops = gradientRenderStops(spec).map((s) => {
+    const color = s.opacity == null || s.opacity >= 1 ? s.color : `${s.color}${Math.round(s.opacity * 255).toString(16).padStart(2, '0')}`;
+    return `${color} ${Math.round(s.position * 1000) / 10}%`;
+  }).join(', ');
   const cx = Math.round(spec.center.x * 1000) / 10;
   const cy = Math.round(spec.center.y * 1000) / 10;
   if (spec.shape === 'radial') return `radial-gradient(circle at ${cx}% ${cy}%, ${stops})`;
@@ -206,6 +212,16 @@ function mixColor(a: RGB, b: RGB, t: number): RGB {
   ];
 }
 
+function softenedT(t: number, softness: number): number {
+  const linear = clamp(t);
+  const eased = linear * linear * (3 - 2 * linear);
+  return linear + (eased - linear) * clamp(softness);
+}
+
+function rgbHex(color: RGB): string {
+  return `#${color.slice(0, 3).map((channel) => Math.round(channel).toString(16).padStart(2, '0')).join('')}`;
+}
+
 function prepareStops(spec: GradientSpec): PreparedStop[] {
   return sortedStops(spec).map((stop) => ({
     position: stop.position,
@@ -213,7 +229,7 @@ function prepareStops(spec: GradientSpec): PreparedStop[] {
   }));
 }
 
-function samplePreparedStops(stops: PreparedStop[], t: number): RGB {
+function samplePreparedStops(stops: PreparedStop[], t: number, softness = 0): RGB {
   const x = clamp(t);
   if (x <= stops[0].position) return stops[0].color;
   for (let i = 1; i < stops.length; i++) {
@@ -221,7 +237,7 @@ function samplePreparedStops(stops: PreparedStop[], t: number): RGB {
     if (x <= right.position) {
       const left = stops[i - 1];
       const span = Math.max(1e-6, right.position - left.position);
-      return mixColor(left.color, right.color, (x - left.position) / span);
+      return mixColor(left.color, right.color, softenedT((x - left.position) / span, softness));
     }
   }
   return stops[stops.length - 1].color;
@@ -229,7 +245,34 @@ function samplePreparedStops(stops: PreparedStop[], t: number): RGB {
 
 export function sampleGradientRGB(specInput: GradientSpec, t: number): RGB {
   const spec = normalizeGradientSpec(specInput);
-  return samplePreparedStops(prepareStops(spec), t);
+  return samplePreparedStops(prepareStops(spec), t, spec.softness);
+}
+
+export function gradientRenderStops(specInput: GradientSpec): GradientStop[] {
+  const spec = normalizeGradientSpec(specInput);
+  const stops = sortedStops(spec);
+  if (spec.softness <= 0) return stops;
+
+  const rendered: GradientStop[] = [stops[0]];
+  const samplesPerSegment = 12;
+  for (let i = 1; i < stops.length; i++) {
+    const left = stops[i - 1];
+    const right = stops[i];
+    const leftColor = parseColor(left.color, left.opacity);
+    const rightColor = parseColor(right.color, right.opacity);
+    for (let sample = 1; sample < samplesPerSegment; sample++) {
+      const t = sample / samplesPerSegment;
+      const color = mixColor(leftColor, rightColor, softenedT(t, spec.softness));
+      rendered.push({
+        id: `soft-${i}-${sample}`,
+        position: left.position + (right.position - left.position) * t,
+        color: rgbHex(color),
+        opacity: color[3] / 255,
+      });
+    }
+    rendered.push(right);
+  }
+  return rendered;
 }
 
 function hash2(x: number, y: number): number {
@@ -263,9 +306,11 @@ function prepareMeshPalette(stops: PreparedStop[]): RGB[] {
 }
 
 function meshColor(spec: GradientSpec, colors: RGB[], stopCount: number, x: number, y: number): RGB {
-  const top = mixColor(colors[0], colors[1], x);
-  const bottom = mixColor(colors[3], colors[2], x);
-  let result = mixColor(top, bottom, y);
+  const easedX = softenedT(x, spec.softness);
+  const easedY = softenedT(y, spec.softness);
+  const top = mixColor(colors[0], colors[1], easedX);
+  const bottom = mixColor(colors[3], colors[2], easedX);
+  let result = mixColor(top, bottom, easedY);
   if (stopCount >= 5) {
     const dx = x - spec.center.x, dy = y - spec.center.y;
     const pool = Math.exp(-(dx * dx + dy * dy) / 0.075);
@@ -326,7 +371,7 @@ function samplePreparedGradientPoint(
   }
 
   if (advanced) t = 0.5 + (t - 0.5) * contrast;
-  return samplePreparedStops(stops, clamp(t));
+  return samplePreparedStops(stops, clamp(t), spec.softness);
 }
 
 export function sampleGradientPoint(specInput: GradientSpec, x: number, y: number, phase = 0): RGB {
@@ -335,7 +380,12 @@ export function sampleGradientPoint(specInput: GradientSpec, x: number, y: numbe
 }
 
 function addNativeStops(gradient: CanvasGradient, spec: GradientSpec) {
-  for (const stop of sortedStops(spec)) gradient.addColorStop(stop.position, stop.color);
+  for (const stop of gradientRenderStops(spec)) {
+    const color = stop.opacity == null || stop.opacity >= 1
+      ? stop.color
+      : `${stop.color}${Math.round(stop.opacity * 255).toString(16).padStart(2, '0')}`;
+    gradient.addColorStop(stop.position, color);
+  }
 }
 
 export function paintGradientCanvas(
