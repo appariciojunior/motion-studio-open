@@ -8,6 +8,7 @@ import LogoMark from '@/components/LogoMark';
 import { useUIStore } from '@/store/useUIStore';
 import { useProjectStore } from '@/store/useProjectStore';
 import { capturePoster } from '@/lib/projectPoster';
+import { preloadMockupProject } from '@/lib/mockupPreload';
 import { IS_HOSTED_DEPLOYMENT } from '@/lib/deployment';
 import NewsNotifier from './NewsNotifier';
 import UpdateNotifier from './UpdateNotifier';
@@ -39,13 +40,30 @@ export default function IconRail() {
   const [experimentalsOpen, setExperimentalsOpen] = useState(false);
   const experimentalActive = EXPERIMENTAL_NAV.some((item) => item.id === active);
 
-  // Leaving a section is the one moment the stage still shows what the user was
-  // working on AND we know they're about to look elsewhere — so that is when the
-  // project's card picture is grabbed. Reading the id at click time keeps the
-  // rail from re-rendering on every project switch.
+  // Library and Mockup own different project documents. Hydrate the destination
+  // before swapping the panel/stage so Mockup mounts once with its real model,
+  // rather than mounting empty and restarting after EditorShell's effect.
   const leaveSection = (next: NavSectionId) => {
-    if (next !== active) capturePoster(useProjectStore.getState().activeId);
+    const projects = useProjectStore.getState();
+    if (next === 'library' || next === 'mockup') {
+      const wanted = modeForSection(next);
+      const current = projects.projects.find((item) => item.id === projects.activeId);
+      if (current?.mode !== wanted) {
+        const destination = projects.projects.find((item) => item.mode === wanted);
+        if (destination) projects.open(destination.id);
+        else projects.create(`Project ${projects.projects.length + 1}`, wanted);
+      }
+    }
+    // Posters only need to be current when the user is about to see the project
+    // cards. Capturing on every rail hop forced a full synchronous render and
+    // was the main Library → Mockup delay.
+    if (next === 'projects' && next !== active) capturePoster(projects.activeId);
     setNav(next);
+  };
+
+  const warmMockup = () => {
+    const project = useProjectStore.getState().projects.find((item) => item.mode === 'mockup');
+    void preloadMockupProject(project?.id);
   };
 
   // An ACTION, not a nav section — so it never takes the active state. The +
@@ -79,6 +97,8 @@ export default function IconRail() {
             // panel swap on the same frame as the click: the mirror in
             // EditorShell is an effect, which lands a frame later.
             onClick={() => leaveSection(n.id)}
+            onPointerEnter={n.id === 'mockup' ? warmMockup : undefined}
+            onFocus={n.id === 'mockup' ? warmMockup : undefined}
             aria-current={active === n.id ? 'page' : undefined}
             className={`rail-item ${active === n.id ? 'active' : ''}`}
           >

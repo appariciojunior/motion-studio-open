@@ -108,8 +108,10 @@ export class SceneRenderer3D implements IRenderer {
   private width = 810;
   private height = 1080;
   ready = false;
+  private destroyed = false;
 
   async init(canvas: HTMLCanvasElement) {
+    if (this.destroyed) return;
     const s = useSceneStore.getState();
     this.width = s.width;
     this.height = s.height;
@@ -126,8 +128,10 @@ export class SceneRenderer3D implements IRenderer {
     this.renderer.setPixelRatio(1);
     this.renderer.setSize(this.width, this.height, false);
     const { R3FSceneBridge } = await import('@/lib/r3fSceneBridge');
+    if (this.destroyed) return;
     this.r3f = new R3FSceneBridge();
     await this.r3f.init(canvas, this.renderer, this.scene, this.camera, this.width, this.height);
+    if (this.destroyed) return;
     this.createCompositor();
     this.ready = true;
     this.syncAssets();
@@ -1074,88 +1078,94 @@ export class SceneRenderer3D implements IRenderer {
   }
 
   renderFrame(frame: number) {
-    if (!this.ready) return;
-    this.getFrameState(frame);
-    const s = useSceneStore.getState();
+    if (!this.ready || this.destroyed || !this.renderer) return;
+    try {
+      this.getFrameState(frame);
+      if (!this.ready || this.destroyed || !this.renderer) return;
+      const s = useSceneStore.getState();
 
-    // The accumulator begins with the opaque scene background.
-    this.renderer.setRenderTarget(this.composeA);
-    this.renderer.setClearColor(0x000000, 1);
-    this.renderer.clear(true, true, true);
-    this.renderer.render(this.scene, this.camera);
-
-    let read = this.composeA;
-    let write = this.composeB;
-    const composeMaterial = this.composeQuad.material;
-    s.tracks.forEach((track) => {
-      const rt = this.trackRTs.get(track.id);
-      if (!rt?.active) return;
-
-      // A layer owns its depth buffer. Z can never leak into another layer.
-      this.renderer.setRenderTarget(rt.target);
-      this.renderer.setClearColor(0x000000, 0);
+      // The accumulator begins with the opaque scene background.
+      this.renderer.setRenderTarget(this.composeA);
+      this.renderer.setClearColor(0x000000, 1);
       this.renderer.clear(true, true, true);
-      this.renderer.render(rt.scene, rt.camera);
+      this.renderer.render(this.scene, this.camera);
 
-      composeMaterial.uniforms.baseMap.value = read.texture;
-      composeMaterial.uniforms.layerMap.value = rt.target.texture;
-      composeMaterial.uniforms.opacity.value = rt.opacity;
-      composeMaterial.uniforms.blendMode.value = rt.blend === 'add' ? 1
-        : rt.blend === 'screen' ? 2
-        : rt.blend === 'multiply' ? 3 : 0;
-      this.renderer.setRenderTarget(write);
-      this.renderer.clear(true, false, false);
-      this.renderer.render(this.composeScene, this.composeCam);
-      [read, write] = [write, read];
-    });
+      let read = this.composeA;
+      let write = this.composeB;
+      const composeMaterial = this.composeQuad.material;
+      s.tracks.forEach((track) => {
+        const rt = this.trackRTs.get(track.id);
+        if (!rt?.active) return;
 
-    // Effects, as further passes on the SAME ping-pong the tracks just used.
-    // Until now this pass looked pixelate up by id and folded it into the output
-    // quad, so the other effects in effects/ simply did not exist for the webgl
-    // presets. Each active effect is now a pass, applied in the order the panel
-    // lists them — the same order the 2D path gives PIXI.Container.filters.
-    //
-    // The resolution handed to the shader is the RENDER TARGET's, not the
-    // scene's: during export the whole chain runs supersampled, and an effect
-    // measured in scene pixels would come out proportionally finer in the
-    // exported frame than on screen.
-    const fxCtx = {
-      width: this.width * this.resolution,
-      height: this.height * this.resolution,
-      time: frame / Math.max(1, s.fps),
-    };
-    for (const active of s.effects) {
-      if (!active.enabled) continue;
-      const def = getEffect(active.effectId);
-      if (!def) continue;
-      try {
-        const material = threeMaterialFor(def);
-        applyThreeUniforms(material, def, active.values, fxCtx);
-        material.uniforms.map.value = read.texture;
-        this.fxQuad.material = material;
+        // A layer owns its depth buffer. Z can never leak into another layer.
+        this.renderer.setRenderTarget(rt.target);
+        this.renderer.setClearColor(0x000000, 0);
+        this.renderer.clear(true, true, true);
+        this.renderer.render(rt.scene, rt.camera);
+
+        composeMaterial.uniforms.baseMap.value = read.texture;
+        composeMaterial.uniforms.layerMap.value = rt.target.texture;
+        composeMaterial.uniforms.opacity.value = rt.opacity;
+        composeMaterial.uniforms.blendMode.value = rt.blend === 'add' ? 1
+          : rt.blend === 'screen' ? 2
+            : rt.blend === 'multiply' ? 3 : 0;
         this.renderer.setRenderTarget(write);
         this.renderer.clear(true, false, false);
-        this.renderer.render(this.fxScene, this.composeCam);
+        this.renderer.render(this.composeScene, this.composeCam);
         [read, write] = [write, read];
-      } catch { /* a shader that will not compile must not take the scene down */ }
+      });
+
+      // Effects, as further passes on the SAME ping-pong the tracks just used.
+      // Until now this pass looked pixelate up by id and folded it into the output
+      // quad, so the other effects in effects/ simply did not exist for the webgl
+      // presets. Each active effect is now a pass, applied in the order the panel
+      // lists them — the same order the 2D path gives PIXI.Container.filters.
+      //
+      // The resolution handed to the shader is the RENDER TARGET's, not the
+      // scene's: during export the whole chain runs supersampled, and an effect
+      // measured in scene pixels would come out proportionally finer in the
+      // exported frame than on screen.
+      const fxCtx = {
+        width: this.width * this.resolution,
+        height: this.height * this.resolution,
+        time: frame / Math.max(1, s.fps),
+      };
+      for (const active of s.effects) {
+        if (!active.enabled) continue;
+        const def = getEffect(active.effectId);
+        if (!def) continue;
+        try {
+          const material = threeMaterialFor(def);
+          applyThreeUniforms(material, def, active.values, fxCtx);
+          material.uniforms.map.value = read.texture;
+          this.fxQuad.material = material;
+          this.renderer.setRenderTarget(write);
+          this.renderer.clear(true, false, false);
+          this.renderer.render(this.fxScene, this.composeCam);
+          [read, write] = [write, read];
+        } catch { /* a shader that will not compile must not take the scene down */ }
+      }
+
+      this.outputQuad.material.uniforms.map.value = read.texture;
+      this.renderer.setRenderTarget(null);
+      this.renderer.setClearColor(0x000000, 1);
+      this.renderer.clear(true, true, true);
+      this.renderer.render(this.outputScene, this.composeCam);
+
+      // HUD pass (logo + safe-area) is deliberately outside global pixelation.
+      this.renderer.autoClear = false;
+      this.renderer.render(this.hud, this.hudCam);
+      this.renderer.autoClear = true;
+    } catch {
+      // guard against renderer being disposed mid-frame or WebGL context lost
     }
-
-    this.outputQuad.material.uniforms.map.value = read.texture;
-    this.renderer.setRenderTarget(null);
-    this.renderer.setClearColor(0x000000, 1);
-    this.renderer.clear(true, true, true);
-    this.renderer.render(this.outputScene, this.composeCam);
-
-    // HUD pass (logo + safe-area) is deliberately outside global pixelation.
-    this.renderer.autoClear = false;
-    this.renderer.render(this.hud, this.hudCam);
-    this.renderer.autoClear = true;
   }
 
   captureFrame(frame: number): string {
+    if (!this.ready || this.destroyed || !this.renderer) return '';
     this.renderFrame(frame);
     // JPEG (q0.92) — see the Pixi renderer's captureFrame for the rationale.
-    return this.renderer.domElement.toDataURL('image/jpeg', 0.92);
+    return this.renderer.domElement?.toDataURL?.('image/jpeg', 0.92) ?? '';
   }
 
   extractCanvas(): HTMLCanvasElement {
@@ -1164,6 +1174,7 @@ export class SceneRenderer3D implements IRenderer {
 
   destroy() {
     this.ready = false;
+    this.destroyed = true;
     this.texturePromises.clear();
     this.r3f?.destroy();
     this.r3f = null;

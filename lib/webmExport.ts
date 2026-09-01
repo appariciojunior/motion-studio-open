@@ -76,61 +76,37 @@ export async function encodeWebmWebCodecs(opts: WebmExportOpts): Promise<Blob> {
   const config = await pickConfig(wc.VideoEncoder, width, height, fps);
   if (!config) throw new Error('No supported VP9 encoder config');
 
-  // dynamic so mediabunny stays out of the initial bundle, like mp4-muxer
-  const { Output, WebMOutputFormat, BufferTarget, EncodedVideoPacketSource, EncodedPacket } =
+  // Dynamic so mediabunny stays out of the initial bundle. CanvasSource owns
+  // the VP9 colour + alpha encoders and writes the alpha packets as WebM side
+  // data; a bare VideoEncoder defaults to discarding alpha.
+  const { Output, WebMOutputFormat, BufferTarget, CanvasSource } =
     await import('mediabunny');
 
   const output = new Output({ format: new WebMOutputFormat(), target: new BufferTarget() });
-  const source = new EncodedVideoPacketSource('vp9');
-  output.addVideoTrack(source, { frameRate: fps });
-  await output.start();
-
-  let encodeError: Error | null = null;
-  // mediabunny's add() is async (it applies writer backpressure), while the
-  // encoder's output callback is sync — so the adds are chained onto a promise
-  // and awaited once at the end rather than dropped on the floor.
-  let pending: Promise<void> = Promise.resolve();
-  const encoder = new wc.VideoEncoder({
-    output: (chunk, meta) => {
-      pending = pending.then(() => source.add(
-        EncodedPacket.fromEncodedChunk(chunk as EncodedVideoChunk),
-        meta as EncodedVideoChunkMetadata,
-      )).catch((e: Error) => { encodeError = e; });
-    },
-    error: (e) => { encodeError = e; },
-  });
-  encoder.configure(config);
-
-  // Only used when the renderer's canvas differs from the exact even output.
   const staging = document.createElement('canvas');
   staging.width = width;
   staging.height = height;
-  const stagingCtx = staging.getContext('2d')!;
+  const stagingCtx = staging.getContext('2d', { alpha: true })!;
+  const source = new CanvasSource(staging, {
+    codec: 'vp9',
+    bitrate: Number(config.bitrate),
+    keyFrameInterval: 2,
+    alpha: 'keep',
+    hardwareAcceleration: 'no-preference',
+  });
+  output.addVideoTrack(source, { frameRate: fps });
+  await output.start();
 
-  const frameUs = Math.round(1_000_000 / fps);
-  const keyInt = Math.max(1, Math.round(fps * 2)); // keyframe every ~2s
-
-  try {
-    for (let f = 0; f < totalFrames; f++) {
-      if (encodeError) throw encodeError;
-      const src = await renderFrame(f);
-      let frameSource: CanvasImageSource = src;
-      if (src.width !== width || src.height !== height) {
-        stagingCtx.drawImage(src, 0, 0, width, height);
-        frameSource = staging;
-      }
-      const frame = new wc.VideoFrame(frameSource, { timestamp: f * frameUs, duration: frameUs });
-      encoder.encode(frame, { keyFrame: f % keyInt === 0 });
-      frame.close();
-      if (f === totalFrames - 1 || f % Math.max(1, Math.round(fps / 6)) === 0) onProgress?.(f + 1);
-      while (encoder.encodeQueueSize > 4) await new Promise((r) => setTimeout(r, 1));
-      if (f % 10 === 0) await new Promise((r) => setTimeout(r, 0));
-    }
-    await encoder.flush();
-    await pending; // every chunk actually reached the muxer
-    if (encodeError) throw encodeError;
-  } finally {
-    try { encoder.close(); } catch { /* already closed on error */ }
+  const frameDuration = 1 / fps;
+  for (let f = 0; f < totalFrames; f++) {
+    const src = await renderFrame(f);
+    // clearRect is essential: drawImage composites onto the destination, so
+    // without clearing, transparent pixels would retain the previous frame.
+    stagingCtx.clearRect(0, 0, width, height);
+    stagingCtx.drawImage(src, 0, 0, width, height);
+    await source.add(f * frameDuration, frameDuration, { keyFrame: f % Math.max(1, Math.round(fps * 2)) === 0 });
+    if (f === totalFrames - 1 || f % Math.max(1, Math.round(fps / 6)) === 0) onProgress?.(f + 1);
+    if (f % 10 === 0) await new Promise((r) => setTimeout(r, 0));
   }
 
   await output.finalize();

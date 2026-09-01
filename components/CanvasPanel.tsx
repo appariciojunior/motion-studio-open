@@ -5,8 +5,10 @@ import { useSceneStore, ASPECTS } from '@/store/useSceneStore';
 import { ControlRow } from './Controls';
 import GradientEditor from './GradientEditor';
 import { normalizeGradientSpec } from '@/lib/gradient';
+import type { ControlDef } from '@/lib/types';
 
 const FPS_OPTIONS = [15, 25, 30, 60] as const;
+const BG_ALPHA: ControlDef = { key: 'background-alpha', label: 'Alpha', type: 'slider', min: 0, max: 100, step: 1, default: 100 };
 const BG_SOURCES: { id: 'color' | 'image' | 'card'; label: string }[] = [
   { id: 'color', label: 'Color' },
   { id: 'image', label: 'Image' },
@@ -52,7 +54,7 @@ function Collapsible({ title, children, defaultOpen = false, openKey }: {
       <button className={`collapsible-head ${open ? 'open' : ''}`} onClick={() => setOpen((o) => !o)}>
         <span className="c-label">{title}</span>
         <span className="chev">
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3.5 2L7 5l-3.5 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3.5 2L7 5l-3.5 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </span>
       </button>
       {open && <div className="collapsible-body">{children}</div>}
@@ -143,86 +145,89 @@ export default function CanvasPanel({ is3DMode = false }: { is3DMode?: boolean }
       </div>
 
       {!is3DMode && (
-      <>
-      <div className="hairline" />
-      <div className="section-body" style={{ paddingTop: 4 }}>
-        <Collapsible title="Background" defaultOpen={isStickerCanvas} openKey={activeTemplateId}>
-          {isStickerCanvas && (
-            <div className="ctl-hint">The template starts on white. Your background choice is kept when switching Spinner, Sticker or Poster presets.</div>
-          )}
-          <div className="ctl-row">
-            <label className="ctl-label">Source</label>
-            <div className="pills">
-              {BG_SOURCES.map((src) => (
-                <button key={src.id} className={`pill ${background.source === src.id ? 'active' : ''}`} onClick={() => setBackground({ source: src.id })}>{src.label}</button>
-              ))}
-            </div>
-          </div>
-
-          {background.source === 'color' && (
-            <>
+        <>
+          <div className="hairline" />
+          <div className="section-body" style={{ paddingTop: 4 }}>
+            <Collapsible title="Background" defaultOpen={isStickerCanvas} openKey={activeTemplateId}>
+              {isStickerCanvas && (
+                <div className="ctl-hint">The template starts on white. Your background choice is kept when switching Spinner, Sticker or Poster presets.</div>
+              )}
               <div className="ctl-row">
-                <label className="ctl-label">Fill</label>
-                <div className="segmented">
-                  <button className={`seg ${!background.gradient ? 'active' : ''}`} onClick={() => setBackground({ gradient: false })}>Solid</button>
-                  <button className={`seg ${background.gradient ? 'active' : ''}`} onClick={() => setBackground({ source: 'color', gradient: true, gradientSpec: backgroundGradient })}>Gradient</button>
+                <label className="ctl-label">Source</label>
+                <div className="pills">
+                  {BG_SOURCES.map((src) => (
+                    <button key={src.id} className={`pill ${background.source === src.id ? 'active' : ''}`} onClick={() => setBackground({ source: src.id })}>{src.label}</button>
+                  ))}
                 </div>
               </div>
-              {!background.gradient && <ControlRow def={{ key: 'bgc', label: 'Colour', type: 'color', default: '' }} value={background.color} onChange={(v) => setBackground({ color: v })} />}
-              {background.gradient && <GradientEditor value={backgroundGradient} onChange={(gradientSpec) => setBackground({ source: 'color', gradient: true, gradientSpec })} />}
-            </>
-          )}
 
-          {background.source === 'image' && (
-            <>
+              {background.source === 'color' && (
+                <>
+                  <div className="ctl-row">
+                    <label className="ctl-label">Fill</label>
+                    <div className="segmented">
+                      <button className={`seg ${!background.gradient ? 'active' : ''}`} onClick={() => setBackground({ gradient: false })}>Solid</button>
+                      <button className={`seg ${background.gradient ? 'active' : ''}`} onClick={() => setBackground({ source: 'color', gradient: true, gradientSpec: backgroundGradient })}>Gradient</button>
+                    </div>
+                  </div>
+                  {!background.gradient && <ControlRow def={{ key: 'bgc', label: 'Colour', type: 'color', default: '' }} value={background.color} onChange={(v) => setBackground({ color: v })} />}
+                  {background.gradient && <GradientEditor value={backgroundGradient} onChange={(gradientSpec) => setBackground({ source: 'color', gradient: true, gradientSpec })} />}
+                  <ControlRow def={BG_ALPHA} value={background.alpha ?? 100} onChange={(v) => setBackground({ alpha: Number(v) })} />
+                </>
+              )}
+
+              {background.source === 'image' && (
+                <>
+                  <div className="ctl-row">
+                    <label className="ctl-label">Image</label>
+                    <label className="upload">
+                      <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) setBackground({ imageUrl: URL.createObjectURL(f) }); }} />
+                      <span>{background.imageUrl ? 'Replace…' : 'Upload…'}</span>
+                    </label>
+                  </div>
+                  <ControlRow def={{ key: 'bgblur', label: 'Blur', type: 'slider', min: 0, max: 100, step: 1, default: 28 }} value={background.blur} onChange={(v) => setBackground({ blur: Number(v) })} />
+                  <ControlRow def={BG_ALPHA} value={background.alpha ?? 100} onChange={(v) => setBackground({ alpha: Number(v) })} />
+                </>
+              )}
+
+              {background.source === 'card' && (
+                <>
+                  <div className="ctl-hint">Reflects the featured card — the background moves with the animation.</div>
+                  <ControlRow def={{ key: 'bgblur', label: 'Blur', type: 'slider', min: 0, max: 100, step: 1, default: 28 }} value={background.blur} onChange={(v) => setBackground({ blur: Number(v) })} />
+                  <ControlRow def={BG_ALPHA} value={background.alpha ?? 100} onChange={(v) => setBackground({ alpha: Number(v) })} />
+                </>
+              )}
+            </Collapsible>
+
+            <Collapsible title="Logo">
               <div className="ctl-row">
                 <label className="ctl-label">Image</label>
                 <label className="upload">
-                  <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) setBackground({ imageUrl: URL.createObjectURL(f) }); }} />
-                  <span>{background.imageUrl ? 'Replace…' : 'Upload…'}</span>
+                  <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) setLogo({ url: URL.createObjectURL(f) }); }} />
+                  <span>{logo.url ? 'Replace…' : 'Upload…'}</span>
                 </label>
               </div>
-              <ControlRow def={{ key: 'bgblur', label: 'Blur', type: 'slider', min: 0, max: 100, step: 1, default: 28 }} value={background.blur} onChange={(v) => setBackground({ blur: Number(v) })} />
-            </>
-          )}
+              <div className="ctl-row">
+                <label className="ctl-label">Corner</label>
+                <div className="pills">
+                  {(['tl', 'tr', 'bl', 'br'] as const).map((p) => (
+                    <button key={p} className={`pill ${logo.position === p ? 'active' : ''}`} onClick={() => setLogo({ position: p })}>{p.toUpperCase()}</button>
+                  ))}
+                </div>
+              </div>
+            </Collapsible>
 
-          {background.source === 'card' && (
-            <>
-              <div className="ctl-hint">Reflects the featured card — the background moves with the animation.</div>
-              <ControlRow def={{ key: 'bgblur', label: 'Blur', type: 'slider', min: 0, max: 100, step: 1, default: 28 }} value={background.blur} onChange={(v) => setBackground({ blur: Number(v) })} />
-            </>
-          )}
-        </Collapsible>
-
-        <Collapsible title="Logo">
-          <div className="ctl-row">
-            <label className="ctl-label">Image</label>
-            <label className="upload">
-              <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) setLogo({ url: URL.createObjectURL(f) }); }} />
-              <span>{logo.url ? 'Replace…' : 'Upload…'}</span>
-            </label>
+            <Collapsible title="Audio">
+              <div className="ctl-row">
+                <label className="ctl-label">Track</label>
+                <label className="upload">
+                  <input type="file" accept="audio/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) setAudioUrl(URL.createObjectURL(f)); }} />
+                  <span>{audioUrl ? 'Replace…' : 'Upload…'}</span>
+                </label>
+              </div>
+            </Collapsible>
           </div>
-          <div className="ctl-row">
-            <label className="ctl-label">Corner</label>
-            <div className="pills">
-              {(['tl', 'tr', 'bl', 'br'] as const).map((p) => (
-                <button key={p} className={`pill ${logo.position === p ? 'active' : ''}`} onClick={() => setLogo({ position: p })}>{p.toUpperCase()}</button>
-              ))}
-            </div>
-          </div>
-        </Collapsible>
-
-        <Collapsible title="Audio">
-          <div className="ctl-row">
-            <label className="ctl-label">Track</label>
-            <label className="upload">
-              <input type="file" accept="audio/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) setAudioUrl(URL.createObjectURL(f)); }} />
-              <span>{audioUrl ? 'Replace…' : 'Upload…'}</span>
-            </label>
-          </div>
-        </Collapsible>
-      </div>
-      </>
+        </>
       )}
     </>
   );

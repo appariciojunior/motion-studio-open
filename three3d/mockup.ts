@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { AsciiOptions } from './ascii';
@@ -12,6 +11,7 @@ import { use3DStore } from '../store/use3DStore';
 import { useSceneStore } from '../store/useSceneStore';
 import { apply3DAnimation } from './animations';
 import { createCardVideo, seekVideoToTime } from '@/lib/videoTexture';
+import { loadGLBSource } from './gltfCache';
 import {
   advancedRasterSize,
   gradientFromFill,
@@ -50,7 +50,9 @@ export function initMockup(
 
   let animId = 0;
   let disposed = false;
+  let exportMode = false;
   let lastCenterNonce = 0;
+  delete canvas.dataset.modelReady;
 
   const scene = new THREE.Scene();
   // near 0.1 / far 100, NOT 0.01 / 1000. These device meshes stack several
@@ -255,17 +257,20 @@ export function initMockup(
     ground.position.y = Math.min(groundBaseY, bottomNow);
   }
 
-  // Render at the scene's EXPORT resolution and let CSS shrink the canvas into
-  // whatever box the stage gives it — the reference tool does exactly
-  // this: measured there, a 1080x1440 backing store displayed in a 416x555 box,
-  // a 2.6x supersample. Sizing the backing store to the element instead (the
-  // obvious reading of "resize") renders 1:1 and is what left this preview soft.
+  // The editor only needs enough pixels for the visible stage. Rendering every
+  // live frame at export resolution made a tall project shade 3M+ pixels at
+  // 60fps while the GLB was still parsing. Keep a modest supersample for a
+  // crisp preview; setCaptureScale still switches to exact export dimensions.
   // `updateStyle = false` keeps the canvas' CSS box owned by the stylesheet.
   let lastW = 0, lastH = 0;
   function resize() {
-    if (!stage.clientWidth || !stage.clientHeight) return;
+    if (exportMode || !stage.clientWidth || !stage.clientHeight) return;
     const st = useSceneStore.getState();
-    const W = Math.max(2, Math.round(st.width)), H = Math.max(2, Math.round(st.height));
+    const displayScale = Math.min(stage.clientWidth / st.width, stage.clientHeight / st.height);
+    const previewDensity = Math.min(2, Math.max(1.5, window.devicePixelRatio || 1));
+    const previewScale = Math.min(1, displayScale * previewDensity);
+    const W = Math.max(2, Math.round(st.width * previewScale));
+    const H = Math.max(2, Math.round(st.height * previewScale));
     if (W === lastW && H === lastH) return;
     lastW = W; lastH = H;
     renderer.setSize(W, H, false);
@@ -852,11 +857,12 @@ export function initMockup(
   scene.add(pivot);
   let model: THREE.Object3D | null = null;
 
-  if (MODEL_URL) new GLTFLoader().load(
-    MODEL_URL,
-    (gltf) => {
+  if (MODEL_URL) loadGLBSource(MODEL_URL).then(
+    (source) => {
       if (disposed) return;
-      model = gltf.scene;
+      // Keep the cached source pristine: this renderer fits the root and owns
+      // per-instance material state, while thumbnail rendering has its own clone.
+      model = source.clone(true);
       const keys: string[] = [];
       model.traverse((o) => {
         const mesh = o as THREE.Mesh;
@@ -915,8 +921,8 @@ export function initMockup(
         restoreScreenMaterial();
       }
       opts.onParts?.(keys);
+      canvas.dataset.modelReady = 'true';
     },
-    () => {},
     (err) => { console.error('GLB load failed:', err); },
   );
 
@@ -1278,6 +1284,15 @@ export function initMockup(
   };
 
   const setCaptureScale = (k: number): void => {
+    // ExportDialog calls endVideoExport before restoring scale 1. At that point
+    // return to the lightweight editor backing store rather than leaving the
+    // live preview at full export cost.
+    if (!exportMode && k === 1) {
+      lastW = 0;
+      lastH = 0;
+      resize();
+      return;
+    }
     const st = useSceneStore.getState();
     renderer.setSize(Math.round(st.width * k), Math.round(st.height * k), false);
     // Invalidate resize()'s cache, or it would see the scene dims unchanged and
@@ -1299,6 +1314,7 @@ export function initMockup(
   // on 'seeked', so it holds with or without a compositor. The sequential pass
   // exists to amortise GOP decodes across MANY card videos; a screen has one.
   const beginVideoExport = async (): Promise<void> => {
+    exportMode = true;
     const v = screenVideoEl;
     if (!v) return;
     screenVideoExporting = true;
@@ -1316,6 +1332,7 @@ export function initMockup(
   };
 
   const endVideoExport = (): void => {
+    exportMode = false;
     screenVideoExporting = false;
     screenVideoSeekTarget = -1;
     if (screenVideoEl) screenVideoEl.loop = true;
@@ -1353,7 +1370,8 @@ export function initMockup(
       if (sm && sm !== screenMesh.userData.origMaterial) sm.dispose();
     }
     for (const m of materials) m.dispose();
-    if (model) model.traverse((o) => { const g = (o as THREE.Mesh).geometry; if (g) g.dispose(); });
+    // Geometry belongs to the shared parsed GLB cache. Materials are cloned
+    // above and disposed here; shared geometry remains reusable on navigation.
     renderer.dispose();
   };
 }

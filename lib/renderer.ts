@@ -51,10 +51,10 @@ function taperCorners(w: number, h: number, taper: NonNullable<LayerTransform['t
   const hw = w / 2, hh = h / 2;
   const ix = hw * (1 - r), iy = hh * (1 - r);
   switch (taper.edge) {
-    case 'top':    return [-hw + ix, -hh, hw - ix, -hh, hw, hh, -hw, hh];
+    case 'top': return [-hw + ix, -hh, hw - ix, -hh, hw, hh, -hw, hh];
     case 'bottom': return [-hw, -hh, hw, -hh, hw - ix, hh, -hw + ix, hh];
-    case 'left':   return [-hw, -hh + iy, hw, -hh, hw, hh, -hw, hh - iy];
-    default:       return [-hw, -hh, hw, -hh + iy, hw, hh - iy, -hw, hh]; // 'right'
+    case 'left': return [-hw, -hh + iy, hw, -hh, hw, hh, -hw, hh - iy];
+    default: return [-hw, -hh, hw, -hh + iy, hw, hh - iy, -hw, hh]; // 'right'
   }
 }
 
@@ -107,6 +107,7 @@ export class SceneRenderer {
   // containers; zIndex mirrors the store's track order.
   private trackRTs = new Map<string, TrackRT>();
   private ready = false;
+  private destroyed = false;
 
   private lastFxSig = '';
   private bgImageUrl = '';                        // last-loaded uploaded bg url
@@ -120,19 +121,26 @@ export class SceneRenderer {
   }
 
   async init(canvas: HTMLCanvasElement) {
+    if (this.destroyed) return;
     const { width, height } = useSceneStore.getState();
-    await this.app.init({
-      canvas,
-      width,
-      height,
-      backgroundAlpha: 0,
-      antialias: true,
-      autoStart: false,          // we drive rendering ourselves
-      preference: 'webgl',
-      powerPreference: 'high-performance', // hint the browser to use the discrete GPU
-      resolution: 1,
-      preserveDrawingBuffer: true, // so toDataURL reads real pixels during export
-    });
+    try {
+      await this.app.init({
+        canvas,
+        width,
+        height,
+        backgroundAlpha: 0,
+        antialias: true,
+        autoStart: false,          // we drive rendering ourselves
+        preference: 'webgl',
+        powerPreference: 'high-performance', // hint the browser to use the discrete GPU
+        resolution: 1,
+        preserveDrawingBuffer: true, // so toDataURL reads real pixels during export
+      });
+    } catch {
+      return;
+    }
+
+    if (this.destroyed || !this.app?.renderer) return;
 
     this.motion.sortableChildren = true;
     this.bgSprite.anchor.set(0.5);
@@ -151,13 +159,15 @@ export class SceneRenderer {
   }
 
   resize(width: number, height: number, resolution = 1) {
-    if (!this.ready) return;
-    this.app.renderer.resize(width, height, resolution);
-    this.motion.position.set(width / 2, height / 2);
-    this.bgSprite.position.set(width / 2, height / 2);
-    this.gradientSprite.position.set(width / 2, height / 2);
-    this.content.filterArea = new PIXI.Rectangle(0, 0, width, height);
-    this.overlay.position.set(0, 0);
+    if (!this.ready || this.destroyed || !this.app?.renderer) return;
+    try {
+      this.app.renderer.resize(width, height, resolution);
+      this.motion.position.set(width / 2, height / 2);
+      this.bgSprite.position.set(width / 2, height / 2);
+      this.gradientSprite.position.set(width / 2, height / 2);
+      this.content.filterArea = new PIXI.Rectangle(0, 0, width, height);
+      this.overlay.position.set(0, 0);
+    } catch { /* noop */ }
   }
 
   // ---- asset / slot management ----
@@ -430,9 +440,9 @@ export class SceneRenderer {
     const frac = Math.max(0, Math.min(1, cornerRadiusPct / 100));
     const c = clip
       ? {
-          x0: Math.max(0, Math.min(1, clip.x0)), y0: Math.max(0, Math.min(1, clip.y0)),
-          x1: Math.max(0, Math.min(1, clip.x1)), y1: Math.max(0, Math.min(1, clip.y1)),
-        }
+        x0: Math.max(0, Math.min(1, clip.x0)), y0: Math.max(0, Math.min(1, clip.y0)),
+        x1: Math.max(0, Math.min(1, clip.x1)), y1: Math.max(0, Math.min(1, clip.y1)),
+      }
       : null;
     const partial = !!c && (c.x0 > 0 || c.y0 > 0 || c.x1 < 1 || c.y1 < 1);
     const key = partial ? `${frac}|${c!.x0}|${c!.y0}|${c!.x1}|${c!.y1}` : `${frac}`;
@@ -510,9 +520,13 @@ export class SceneRenderer {
   // ---- overlays ----
   private drawOverlays(s: SceneState) {
     const { width, height } = s;
+    const backgroundAlpha = Math.max(0, Math.min(1, (s.background.alpha ?? 100) / 100));
 
     // background
     this.bg.clear();
+    this.bg.alpha = backgroundAlpha;
+    this.gradientSprite.alpha = backgroundAlpha;
+    this.bgSprite.alpha = backgroundAlpha;
     if (s.background.source === 'color' && s.background.gradient) {
       const spec = normalizeGradientSpec(s.background.gradientSpec, s.background.color, s.background.color2);
       const phase = ((s.frame / Math.max(1, s.duration * s.fps)) % 1 + 1) % 1;
@@ -799,8 +813,14 @@ export class SceneRenderer {
 
   // Realize + render a frame synchronously (used by export).
   renderFrame(frame: number) {
-    this.getFrameState(frame);
-    this.app.renderer.render(this.app.stage);
+    if (!this.ready || this.destroyed || !this.app?.renderer) return;
+    try {
+      this.getFrameState(frame);
+      if (!this.ready || this.destroyed || !this.app?.renderer) return;
+      this.app.renderer.render(this.app.stage);
+    } catch {
+      // guard against renderer being destroyed mid-frame or WebGL context lost
+    }
   }
 
   // Deterministic capture: realize frame, render, read pixels as a JPEG data URL.
@@ -808,8 +828,9 @@ export class SceneRenderer {
   // the scene always paints a background so the missing alpha channel is moot.
   // ffmpeg re-encodes to h264/gif downstream, so there's no visible quality loss.
   captureFrame(frame: number): string {
+    if (!this.ready || this.destroyed || !this.app?.renderer) return '';
     this.renderFrame(frame);
-    return (this.app.canvas as HTMLCanvasElement).toDataURL('image/jpeg', 0.92);
+    return (this.app.canvas as HTMLCanvasElement)?.toDataURL?.('image/jpeg', 0.92) ?? '';
   }
 
   // Multiply the backing-store resolution for export capture. Logical
@@ -826,6 +847,7 @@ export class SceneRenderer {
 
   destroy() {
     this.ready = false;
+    this.destroyed = true;
     this.texturePromises.clear();
     this.videoEls.forEach((v) => { try { v.pause(); v.removeAttribute('src'); v.load(); } catch { /* noop */ } });
     this.videoEls.clear();
