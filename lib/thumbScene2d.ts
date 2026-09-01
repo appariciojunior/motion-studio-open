@@ -18,6 +18,7 @@ import { clamp } from '@/lib/motion';
 import { defaultsFor, easingFor, layerCountFor } from '@/templates';
 import { resolveEasing } from '@/lib/easing';
 import { stillFrom } from '@/lib/thumbStill';
+import { waitForThumbQueue } from '@/lib/thumbQueue';
 
 export const THUMB_W = 180;
 export const THUMB_H = 240;
@@ -293,6 +294,9 @@ export function renderThumbFrame2d(ctx: Shared, template: Template, frame: numbe
 /** Draw one frame and read it back as a still, for the idle thumbnail. */
 export async function snapshotThumb2d(template: Template, frame: number): Promise<string | null> {
   const ctx = await getShared2d();
+  // Initialising Pixi is asynchronous. A hover may have claimed the canvas
+  // while that await was in flight, so wait again immediately before drawing.
+  await waitForThumbQueue();
   renderThumbFrame2d(ctx, template, frame);
   return stillFrom(ctx.canvas, THUMB_W, THUMB_H);
 }

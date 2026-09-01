@@ -264,7 +264,9 @@ export function MockupAnimThumb({
       if (activeAnim) activeAnim.stop();
 
       running = true;
-      startedAt = performance.now();
+      // The idle image is captured at progress .3. Continue from that same pose
+      // so hover does not jump back to the beginning of the animation.
+      startedAt = performance.now() - (0.3 / 0.15) * 1000;
       setIsPreviewing(true);
       activeAnim = { stop };
 
@@ -272,7 +274,7 @@ export function MockupAnimThumb({
       if (imgRef.current) imgRef.current.style.display = 'none';
       const ctx = getShared();
       // Set model into shared scene
-      renderToShared(modelRef.current, fitHeightRef.current, animKey, 0);
+      renderToShared(modelRef.current, fitHeightRef.current, animKey, 0.3);
       thumb!.appendChild(ctx.canvas);
 
       raf = requestAnimationFrame(tick);
