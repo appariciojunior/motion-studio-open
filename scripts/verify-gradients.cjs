@@ -11,6 +11,7 @@ const {
   createGradientSpec,
   fillPatchForGradient,
   gradientFromFill,
+  gradientBlurRadius,
   gradientRenderStops,
   gradientRasterMaxEdge,
   gradientSignature,
@@ -42,10 +43,19 @@ check(crowded.stops.every((stop, i, list) => i === 0 || list[i - 1].position <= 
 const simple = createGradientSpec('#000000', '#ffffff');
 check(colorClose(sampleGradientRGB(simple, 0.5), [128, 128, 128, 255]), 'two-stop midpoint must interpolate');
 const soft = normalizeGradientSpec({ ...simple, softness: 1 });
-check(colorClose(sampleGradientRGB(soft, 0.25), [40, 40, 40, 255]), 'softness must ease colour interpolation between stops');
-check(colorClose(sampleGradientRGB(soft, 0), [0, 0, 0, 255]) && colorClose(sampleGradientRGB(soft, 1), [255, 255, 255, 255]), 'softness must preserve authored endpoint colours');
-check(gradientRenderStops(simple).length === simple.stops.length && gradientRenderStops(soft).length > soft.stops.length, 'native renderers must add easing samples only when softness is enabled');
+check(colorClose(sampleGradientRGB(soft, 0), [13, 13, 13, 255]), 'softness must feather the start of a two-stop ramp');
+check(colorClose(sampleGradientRGB(soft, 1), [242, 242, 242, 255]), 'softness must feather the end of a two-stop ramp');
+const peaked = normalizeGradientSpec({ ...simple, softness: 1, stops: [
+  { id: 'dark-start', color: '#000000', position: 0 },
+  { id: 'light-middle', color: '#ffffff', position: 0.5 },
+  { id: 'dark-end', color: '#000000', position: 1 },
+] });
+check(sampleGradientRGB(peaked, 0.5)[0] < 240, 'softness must round a hard interior colour stop');
+check(gradientRenderStops(simple).length === simple.stops.length && gradientRenderStops(soft).length > soft.stops.length, 'native renderers must add smoothing samples only when softness is enabled');
 check(normalizeGradientSpec({ ...simple, softness: 7 }).softness === 1, 'softness must clamp to its document range');
+check(gradientBlurRadius(simple, 800, 600) === 0, 'zero softness must not add a spatial blur');
+check(close(gradientBlurRadius(soft, 800, 600), 21, 0.001), 'softness must map to a proportional spatial blur radius');
+check(gradientBlurRadius(soft, 2000, 2000) === 32, 'spatial blur must keep a bounded render cost');
 const mesh = normalizeGradientSpec({ ...soft, mode: 'advanced', shape: 'mesh' });
 check(!colorClose(sampleGradientPoint(mesh, 0.25, 0.5), sampleGradientPoint({ ...mesh, softness: 0 }, 0.25, 0.5), 0.1), 'mesh must honor the shared softness interpolation');
 check(colorClose(sampleGradientPoint({ ...simple, angle: 0 }, 0, 0.5), [0, 0, 0, 255]), 'linear start must use first stop');
@@ -85,6 +95,7 @@ const gradientCssBlock = cssSource.split('/* ---- Shared 2D / 3D gradient editor
   ?.split('/* Neutral SSR/hydration gate.')[0] ?? '';
 check(editorSource.includes("import { ControlRow } from './Controls'"), 'gradient sliders must use the shared ControlRow primitive');
 check(editorSource.includes("label: 'Softness'") && editorSource.includes('value={spec.softness}'), 'shared editor must expose softness through the design-system control primitive');
+check(editorSource.includes('advanced: { ...DEFAULT_GRADIENT_ADVANCED }') && editorSource.includes('center: { x: 0.5, y: 0.5 }'), 'Basic-to-Advanced activation must reset hidden legacy geometry');
 check(editorSource.includes('className="segmented"') && editorSource.includes('className="field"') && editorSource.includes('className="btn"'), 'gradient choices and actions must use shared control classes');
 check(!editorSource.includes('type="range"') && !editorSource.includes('gradient-number'), 'gradient editor must not introduce native parallel sliders');
 check(gradientCssBlock.includes('var(--ctl-h)') && gradientCssBlock.includes('var(--gap-row)') && gradientCssBlock.includes('var(--r-ctrl)'), 'gradient geometry must derive from tokens.css metrics');

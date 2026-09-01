@@ -5,6 +5,7 @@ import { ControlRow } from './Controls';
 import type { ControlDef } from '@/lib/types';
 import {
   MAX_GRADIENT_STOPS,
+  DEFAULT_GRADIENT_ADVANCED,
   gradientCss,
   normalizeGradientSpec,
   sampleGradientRGB,
@@ -60,11 +61,14 @@ function rgbHex(rgb: [number, number, number, number]) {
 
 function presetSpec(current: GradientSpec, preset: (typeof PRESETS)[number]): GradientSpec {
   const colors = preset.colors;
+  const resetsCenter = preset.shape === 'radial';
   return normalizeGradientSpec({
     ...current,
     mode: 'basic',
     shape: preset.shape ?? 'linear',
     angle: preset.angle ?? current.angle,
+    center: resetsCenter ? { x: 0.5, y: 0.5 } : current.center,
+    radius: resetsCenter ? 0.72 : current.radius,
     stops: colors.map((color, i) => ({ id: `preset-${preset.name.toLowerCase()}-${i}`, color, position: i / Math.max(1, colors.length - 1), opacity: 1 })),
   });
 }
@@ -153,7 +157,12 @@ export default function GradientEditor({ value, onChange, showMapping = false }:
               mode: 'basic',
               shape: BASIC_SHAPES.some(([shape]) => shape === spec.shape) ? spec.shape : 'linear',
             })}>Basic</button>
-            <button className={`seg ${spec.mode === 'advanced' ? 'active' : ''}`} onClick={() => emit({ mode: 'advanced' })}>Advanced</button>
+            <button className={`seg ${spec.mode === 'advanced' ? 'active' : ''}`} onClick={() => emit(spec.mode === 'basic' ? {
+              mode: 'advanced',
+              center: { x: 0.5, y: 0.5 },
+              radius: 0.72,
+              advanced: { ...DEFAULT_GRADIENT_ADVANCED },
+            } : { mode: 'advanced' })}>Advanced</button>
           </div>
         </div>
       </div>
@@ -221,7 +230,11 @@ export default function GradientEditor({ value, onChange, showMapping = false }:
       <div className="ctl-row">
         <label className="ctl-label">Shape</label>
         <div className="ctl-input">
-          <select className="field" value={spec.shape} onChange={(e) => emit({ shape: e.target.value as GradientShape })}>
+          <select className="field" value={spec.shape} onChange={(e) => {
+            const shape = e.target.value as GradientShape;
+            const startsUsingCenter = !needsCenter && (shape === 'radial' || shape === 'conic' || shape === 'twin-radial');
+            emit(startsUsingCenter ? { shape, center: { x: 0.5, y: 0.5 }, radius: 0.72 } : { shape });
+          }}>
             {shapes.map(([shape, label]) => <option key={shape} value={shape}>{label}</option>)}
           </select>
         </div>
