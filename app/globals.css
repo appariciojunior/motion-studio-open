@@ -154,15 +154,18 @@ input[type=range] {
   overflow-y: auto;
   flex: 1;
   min-height: 0;
+  /* The inspector is a stack of functional surfaces, not one uninterrupted
+     form. The soft canvas stays visible only in the gutters between groups. */
+  background: var(--card-soft);
 }
 
 /* ---- section head (eyebrow + optional action) ---- */
 .eyebrow {
   font-size: var(--fs-eyebrow);
-  font-weight: 500;
+  font-weight: 650;
   letter-spacing: 1.5px;
   text-transform: uppercase;
-  color: var(--fg-muted);
+  color: var(--fg-label);
   line-height: 15px;
 }
 
@@ -170,14 +173,16 @@ input[type=range] {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px var(--pad-sect) 6px;
+  padding: 17px var(--pad-sect) 7px;
+  background: var(--card);
 }
 
 .section-body {
-  padding: 8px var(--pad-sect) 16px;
+  padding: 9px var(--pad-sect) 18px;
   display: flex;
   flex-direction: column;
   gap: var(--gap-row);
+  background: var(--card);
 }
 
 .hairline {
@@ -187,16 +192,21 @@ input[type=range] {
   flex: 0 0 auto;
 }
 
-/* Panel groups keep the existing visual system, with a little more breathing
-   room around their dividers so unrelated controls do not read as one block. */
+/* A real gutter between functional groups. Arqé makes inspector sections read
+   as distinct surfaces; this keeps our square, neutral visual system while
+   creating the same hierarchy instead of relying on a nearly invisible line. */
 .card-scroll > .hairline {
-  margin-top: 8px;
-  margin-bottom: 8px;
+  width: 100%;
+  height: 12px;
+  margin: 0;
+  background: var(--card-soft);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
 }
 
 .card-scroll > .section-head,
 .card-scroll > :first-child > .section-head {
-  padding-top: 18px;
+  padding-top: 20px;
 }
 
 .ctl-hint {
@@ -1589,17 +1599,18 @@ select.field {
   display: none;
 }
 
-/* collapsible — Details: summary pt14 pb6 px0(section pads), chevron 10px */
+/* Arqé keeps expandable sections inside the same inspector surface and uses a
+   deliberate divider + whitespace rhythm between them. */
 .collapsible {
+  margin-top: 14px;
+  padding-top: 8px;
   border-top: 1px solid var(--line);
-  margin-top: 6px;
-  padding-top: 4px;
 }
 
 .collapsible:first-child {
-  border-top: none;
   margin-top: 0;
   padding-top: 0;
+  border-top: 0;
 }
 
 .collapsible-head {
@@ -1607,16 +1618,17 @@ select.field {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 0 6px;
+  min-height: 42px;
+  padding: 11px 0;
   text-align: left;
 }
 
 .collapsible-head .c-label {
   font-size: var(--fs-eyebrow);
-  font-weight: 500;
+  font-weight: 650;
   letter-spacing: 1.5px;
   text-transform: uppercase;
-  color: var(--fg-muted);
+  color: var(--fg-label);
   line-height: 15px;
 }
 
@@ -1634,7 +1646,7 @@ select.field {
 }
 
 .collapsible-body {
-  padding: 2px 0 16px;
+  padding: 3px 0 16px;
   display: flex;
   flex-direction: column;
   gap: var(--gap-row);
@@ -5661,14 +5673,20 @@ select.field {
   margin-top: 0;
 }
 
-.ctl-section+.ctl-section {
-  margin-top: 14px;
+.controls .section-body>.ctl-section {
+  padding: 0;
+}
+
+.controls .section-body>.ctl-section+.ctl-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
 }
 
 .ctl-section-title {
-  margin: 0 0 var(--gap-tight);
-  color: var(--fg-muted);
-  font-size: var(--fs-micro);
+  margin: 0 0 12px;
+  color: var(--fg-label);
+  font-size: var(--fs-eyebrow);
   font-weight: 650;
   letter-spacing: .13em;
   text-transform: uppercase;
