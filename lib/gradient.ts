@@ -393,6 +393,67 @@ function addNativeStops(gradient: CanvasGradient, spec: GradientSpec) {
   }
 }
 
+export function gradientBlurRadius(specInput: GradientSpec, width: number, height: number): number {
+  const spec = normalizeGradientSpec(specInput);
+  if (spec.softness <= 0) return 0;
+  return Math.min(32, Math.max(0, Math.min(width, height)) * 0.035 * spec.softness);
+}
+
+type BlurBuffers = { source: HTMLCanvasElement; padded: HTMLCanvasElement };
+const blurBuffers = new WeakMap<HTMLCanvasElement, BlurBuffers>();
+
+function canvasBuffer(width: number, height: number): HTMLCanvasElement {
+  const buffer = document.createElement('canvas');
+  buffer.width = width;
+  buffer.height = height;
+  return buffer;
+}
+
+function applyGradientBlur(canvas: HTMLCanvasElement, spec: GradientSpec): void {
+  const blur = gradientBlurRadius(spec, canvas.width, canvas.height);
+  if (blur <= 0) return;
+
+  const pad = Math.max(2, Math.ceil(blur * 3));
+  let buffers = blurBuffers.get(canvas);
+  if (!buffers) {
+    buffers = { source: canvasBuffer(canvas.width, canvas.height), padded: canvasBuffer(canvas.width + pad * 2, canvas.height + pad * 2) };
+    blurBuffers.set(canvas, buffers);
+  }
+  const { source, padded } = buffers;
+  if (source.width !== canvas.width) source.width = canvas.width;
+  if (source.height !== canvas.height) source.height = canvas.height;
+  if (padded.width !== canvas.width + pad * 2) padded.width = canvas.width + pad * 2;
+  if (padded.height !== canvas.height + pad * 2) padded.height = canvas.height + pad * 2;
+
+  const sourceCtx = source.getContext('2d');
+  const paddedCtx = padded.getContext('2d');
+  const ctx = canvas.getContext('2d');
+  if (!sourceCtx || !paddedCtx || !ctx) return;
+  const w = canvas.width, h = canvas.height;
+  sourceCtx.clearRect(0, 0, w, h);
+  sourceCtx.drawImage(canvas, 0, 0);
+
+  // Extend the four edge pixels into the blur padding. A regular filtered draw
+  // samples transparent pixels outside the canvas and creates a dark frame;
+  // clamped edges keep a background gradient opaque from corner to corner.
+  paddedCtx.clearRect(0, 0, padded.width, padded.height);
+  paddedCtx.drawImage(source, pad, pad);
+  paddedCtx.drawImage(source, 0, 0, w, 1, pad, 0, w, pad);
+  paddedCtx.drawImage(source, 0, h - 1, w, 1, pad, pad + h, w, pad);
+  paddedCtx.drawImage(source, 0, 0, 1, h, 0, pad, pad, h);
+  paddedCtx.drawImage(source, w - 1, 0, 1, h, pad + w, pad, pad, h);
+  paddedCtx.drawImage(source, 0, 0, 1, 1, 0, 0, pad, pad);
+  paddedCtx.drawImage(source, w - 1, 0, 1, 1, pad + w, 0, pad, pad);
+  paddedCtx.drawImage(source, 0, h - 1, 1, 1, 0, pad + h, pad, pad);
+  paddedCtx.drawImage(source, w - 1, h - 1, 1, 1, pad + w, pad + h, pad, pad);
+
+  ctx.save();
+  ctx.clearRect(0, 0, w, h);
+  ctx.filter = `blur(${blur}px)`;
+  ctx.drawImage(padded, -pad, -pad);
+  ctx.restore();
+}
+
 export function paintGradientCanvas(
   canvas: HTMLCanvasElement,
   specInput: GradientSpec,
@@ -424,6 +485,7 @@ export function paintGradientCanvas(
     addNativeStops(gradient, spec);
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, w, h);
+    applyGradientBlur(canvas, spec);
     return;
   }
 
@@ -443,6 +505,7 @@ export function paintGradientCanvas(
     }
   }
   ctx.putImageData(image, 0, 0);
+  applyGradientBlur(canvas, spec);
 }
 
 export function advancedRasterSize(width: number, height: number, maxEdge = 384): [number, number] {

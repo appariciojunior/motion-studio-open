@@ -11,6 +11,7 @@ const {
   createGradientSpec,
   fillPatchForGradient,
   gradientFromFill,
+  gradientBlurRadius,
   gradientRenderStops,
   gradientRasterMaxEdge,
   gradientSignature,
@@ -52,6 +53,9 @@ const peaked = normalizeGradientSpec({ ...simple, softness: 1, stops: [
 check(sampleGradientRGB(peaked, 0.5)[0] < 240, 'softness must round a hard interior colour stop');
 check(gradientRenderStops(simple).length === simple.stops.length && gradientRenderStops(soft).length > soft.stops.length, 'native renderers must add smoothing samples only when softness is enabled');
 check(normalizeGradientSpec({ ...simple, softness: 7 }).softness === 1, 'softness must clamp to its document range');
+check(gradientBlurRadius(simple, 800, 600) === 0, 'zero softness must not add a spatial blur');
+check(close(gradientBlurRadius(soft, 800, 600), 21, 0.001), 'softness must map to a proportional spatial blur radius');
+check(gradientBlurRadius(soft, 2000, 2000) === 32, 'spatial blur must keep a bounded render cost');
 const mesh = normalizeGradientSpec({ ...soft, mode: 'advanced', shape: 'mesh' });
 check(!colorClose(sampleGradientPoint(mesh, 0.25, 0.5), sampleGradientPoint({ ...mesh, softness: 0 }, 0.25, 0.5), 0.1), 'mesh must honor the shared softness interpolation');
 check(colorClose(sampleGradientPoint({ ...simple, angle: 0 }, 0, 0.5), [0, 0, 0, 255]), 'linear start must use first stop');

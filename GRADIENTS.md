@@ -11,9 +11,10 @@ Advanced mode, but they must not define their own gradient document shape.
 - Modes: `basic`, `advanced`.
 - Shapes: `linear`, `radial`, `conic`, `mesh`, `warped-field`, `twin-radial`.
 - Stops: sorted for rendering, minimum 2, maximum 8, stable IDs.
-- Softness: `0..1`; applies a one-dimensional Gaussian feather to the colour
-  ramp without blurring the layer or its edges. `0` preserves the native linear
-  interpolation used by existing documents.
+- Softness: `0..1`; combines a one-dimensional Gaussian feather on the colour
+  ramp with a spatial Gaussian blur on the rendered field. Raster edges are
+  extended before filtering so the background remains opaque corner-to-corner.
+  `0` preserves the native linear interpolation used by existing documents.
 - Angle convention: `0deg` runs left to right and increases clockwise in screen
   space. Renderer-specific angle conventions are converted at the boundary.
 - Center, radius and 3D coordinates are normalized to `0..1`.
