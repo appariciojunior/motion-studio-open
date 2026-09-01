@@ -23,6 +23,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@react-three/fiber": "^9.0.0",
     "@tailwindcss/browser": "^4.3.3",
+    "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
     "gifenc": "^1.0.3",
     "jszip": "^3.10.1",
