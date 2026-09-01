@@ -42,6 +42,7 @@ const angleDef: ControlDef = { key: 'gradient-angle', label: 'Angle', type: 'sli
 const centerXDef: ControlDef = { key: 'gradient-center-x', label: 'Center X', type: 'slider', min: 0, max: 1, step: 0.01, precision: 2, default: 0.5 };
 const centerYDef: ControlDef = { key: 'gradient-center-y', label: 'Center Y', type: 'slider', min: 0, max: 1, step: 0.01, precision: 2, default: 0.5 };
 const radiusDef: ControlDef = { key: 'gradient-radius', label: 'Radius', type: 'slider', min: 0.05, max: 2, step: 0.01, precision: 2, default: 0.7 };
+const softnessDef: ControlDef = { key: 'gradient-softness', label: 'Softness', type: 'slider', min: 0, max: 1, step: 0.01, precision: 2, default: 0 };
 const stopPositionDef: ControlDef = { key: 'gradient-stop-position', label: 'Position', type: 'slider', min: 0, max: 100, step: 1, default: 0, unit: '%' };
 const warpDef: ControlDef = { key: 'gradient-warp', label: 'Warp', type: 'slider', min: 0, max: 2, step: 0.01, precision: 2, default: 0 };
 const flowDef: ControlDef = { key: 'gradient-flow', label: 'Flow', type: 'slider', min: 0, max: 1, step: 0.01, precision: 2, default: 0 };
@@ -225,6 +226,9 @@ export default function GradientEditor({ value, onChange, showMapping = false }:
           </select>
         </div>
       </div>
+
+      <ControlRow def={softnessDef} value={spec.softness}
+        onChange={(softness) => emit({ softness: Number(softness) })} />
 
       {spec.shape === 'linear' && <ControlRow def={angleDef} value={spec.angle} onChange={(angle) => emit({ angle: Number(angle) })} />}
       {needsCenter && <>
