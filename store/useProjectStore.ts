@@ -25,6 +25,7 @@ import {
 import { useSceneStore } from './useSceneStore';
 import { reset3DMemory, use3DStore } from './use3DStore';
 import { useHistoryStore } from './useHistoryStore';
+import { DEVICES, selectDevice } from '@/three3d/devices';
 
 // Any switch of the open project drops undo history: undoing across a switch
 // would write one project's scene into another.
@@ -51,6 +52,21 @@ export interface ProjectState {
 
 const DEFAULT_NAME = 'Default project';
 
+/**
+ * A Mockup document must always address the Mockup model slot. Route effects
+ * also keep effectId in sync, but project hydration runs later and can reset it
+ * to the generic 3D default. Enforce the invariant at the document boundary,
+ * then seed legacy/new projects that do not have a device yet.
+ */
+function prepareMockupStudio(): void {
+  let studio = use3DStore.getState();
+  if (studio.effectId !== 'mockup') {
+    studio.setEffect('mockup');
+    studio = use3DStore.getState();
+  }
+  if (!studio.models.mockup?.url && DEVICES[0]) selectDevice(DEVICES[0].key);
+}
+
 // The 3D/Mockup slice lives in its own store under its own storage key, so every
 // switch below has to move it in step with the 2D scene. Restoring it is one
 // helper so the five paths cannot drift, and it RETURNS the slice it loaded so
@@ -65,11 +81,14 @@ function load3D(projectId: string) {
   reset3DMemory();
   if (slice) {
     use3DStore.getState().hydrate3D(slice);
+    prepareMockupStudio();
     // Screen media saves an id, never a blob: url — those are dead after a
     // reload. Rebuild the urls from the stored bytes.
     void use3DStore.getState().rehydrateScreenMedia();
   } else {
-    // reset3DMemory above already established the defaults.
+    // reset3DMemory above established generic defaults; Mockup owns a concrete
+    // device from its first paint rather than an empty, unselectable stage.
+    prepareMockupStudio();
   }
   return slice;
 }
@@ -122,16 +141,17 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   open: (id) => {
     if (id === get().activeId) return;
-    // The card picture of the project being left, grabbed while its stage is
-    // still the one on screen (see lib/projectPoster: the pixel read is sync).
     const current = get().projects.find((p) => p.id === get().activeId);
-    capturePoster(get().activeId);
+    const next = listProjects().find((p) => p.id === id);
+    if (!next) return;
+    // Switching projects inside one document mode updates the card picture.
+    // A Library ↔ Mockup hop does not need it now and must not synchronously
+    // render a multi-megapixel poster before the destination can mount.
+    if (current?.mode === next.mode) capturePoster(get().activeId);
     flushProject(current);              // only the document this project owns
     setAutosaveTarget(null);            // nothing may be written mid-swap
     setThreeDSaveTarget(null);
     setActiveProject(id);
-    const next = listProjects().find((p) => p.id === id);
-    if (!next) return;
     loadProject(next);
     resetHistory();
     // The "saved 2 min ago" of the project just left says nothing about this
@@ -143,7 +163,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   create: (name, mode = '2d') => {
     const current = get().projects.find((p) => p.id === get().activeId);
-    capturePoster(get().activeId);
+    if (current?.mode === mode) capturePoster(get().activeId);
     flushProject(current);
     setAutosaveTarget(null);
     setThreeDSaveTarget(null);
@@ -163,6 +183,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     // state a missing slice falls back to — so either way a fresh project opens
     // an empty studio.
     reset3DMemory();
+    if (mode === 'mockup') prepareMockupStudio();
     setThreeDSaveTarget(mode === 'mockup' ? meta.id : null, null);
     if (mode === 'mockup') flushThreeD();
     else flushScene();

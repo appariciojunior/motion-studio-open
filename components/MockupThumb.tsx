@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { fitAndCenter } from '@/three3d/frame';
-import type { DeviceDef } from '@/three3d/devices';
+import { DEVICES, type DeviceDef } from '@/three3d/devices';
+import { loadGLBSource } from '@/three3d/gltfCache';
+import { asset } from '@/lib/paths';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // SHARED SINGLETON — one renderer, one scene, one camera, one env-map.
@@ -68,22 +69,55 @@ function getShared(): SharedCtx {
   return _ctx;
 }
 
-// ── GLB cache ───────────────────────────────────────────────────────────────
+// ── Thumb-model cache ───────────────────────────────────────────────────────
+// The parsed source is shared with the full-size preview. Thumbs get one clone
+// of their own because fitting/reparenting it must not mutate the source.
 const glbCache = new Map<string, THREE.Group>();
 const glbLoading = new Map<string, Promise<THREE.Group>>();
-const loader = new GLTFLoader();
 
 function loadGLB(url: string): Promise<THREE.Group> {
-  if (glbCache.has(url)) return Promise.resolve(glbCache.get(url)!.clone(true));
-  if (glbLoading.has(url)) return glbLoading.get(url)!.then((g) => g.clone(true));
-  const p = new Promise<THREE.Group>((resolve, reject) => {
-    loader.load(url, (gltf) => {
-      glbCache.set(url, gltf.scene.clone(true));
-      resolve(gltf.scene.clone(true));
-    }, undefined, reject);
+  const resolvedUrl = asset(url);
+  const cached = glbCache.get(resolvedUrl);
+  if (cached) return Promise.resolve(cached);
+  const loading = glbLoading.get(resolvedUrl);
+  if (loading) return loading;
+  const p = loadGLBSource(resolvedUrl).then((source) => {
+    const model = source.clone(true);
+    glbCache.set(resolvedUrl, model);
+    glbLoading.delete(resolvedUrl);
+    return model;
+  }, (error) => {
+    glbLoading.delete(resolvedUrl);
+    throw error;
   });
-  glbLoading.set(url, p);
+  glbLoading.set(resolvedUrl, p);
   return p;
+}
+
+// Passive effects for the sidebar run before the stage effect because the
+// sidebar appears first in the tree. Deferring thumbnail work one idle turn
+// lets the full-size preview register as the first GLB consumer and paint first.
+function scheduleThumbWork(task: () => void): () => void {
+  const idleWindow = window as Window & {
+    requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
+    cancelIdleCallback?: (handle: number) => void;
+  };
+  if (idleWindow.requestIdleCallback) {
+    const handle = idleWindow.requestIdleCallback(task, { timeout: 400 });
+    return () => idleWindow.cancelIdleCallback?.(handle);
+  }
+  const handle = window.setTimeout(task, 100);
+  return () => window.clearTimeout(handle);
+}
+
+// Every card for one device uses the same model and only one card can own the
+// shared renderer. Fitting is therefore model setup, not per-thumbnail work.
+const fittedHeight = new WeakMap<THREE.Group, number>();
+
+function ensureFitted(model: THREE.Group, fitHeight: number): void {
+  if (fittedHeight.get(model) === fitHeight) return;
+  fitAndCenter(model, fitHeight);
+  fittedHeight.set(model, fitHeight);
 }
 
 // ── Render with the shared renderer (sets model, camera, draws) ─────────────
@@ -95,7 +129,7 @@ function renderToShared(
 ): void {
   const ctx = getShared();
   while (ctx.pivot.children.length) ctx.pivot.remove(ctx.pivot.children[0]);
-  fitAndCenter(model, fitHeight);
+  ensureFitted(model, fitHeight);
   ctx.pivot.add(model);
   applyPose(ctx, animKey, progress, fitHeight);
   ctx.renderer.render(ctx.scene, ctx.camera);
@@ -123,23 +157,31 @@ function applyPose(ctx: SharedCtx, animKey: string, progress: number, fitHeight:
 }
 
 // ── Snapshot helper (used only once per idle frame) ──────────────────────────
+const snapshotCache = new Map<string, string>();
+let snapshotCanvas: HTMLCanvasElement | null = null;
+
 function takeSnapshot(
   model: THREE.Group,
   fitHeight: number,
   animKey: string,
   progress: number,
+  cacheKey: string,
 ): string {
+  const cached = snapshotCache.get(cacheKey);
+  if (cached) return cached;
   const ctx = getShared();
-  // Temporarily enable preserveDrawingBuffer for toDataURL
   renderToShared(model, fitHeight, animKey, progress);
-  // Read pixels synchronously (WebGL readback)
-  const w = THUMB_W, h = THUMB_H;
-  const offCanvas = document.createElement('canvas');
-  offCanvas.width = w;
-  offCanvas.height = h;
-  const offCtx = offCanvas.getContext('2d')!;
+  // Reuse one readback surface. WebP preserves the transparent backdrop while
+  // encoding much faster and smaller than the PNG previously made 16 times.
+  snapshotCanvas ??= document.createElement('canvas');
+  snapshotCanvas.width = THUMB_W;
+  snapshotCanvas.height = THUMB_H;
+  const offCtx = snapshotCanvas.getContext('2d')!;
+  offCtx.clearRect(0, 0, THUMB_W, THUMB_H);
   offCtx.drawImage(ctx.canvas, 0, 0);
-  return offCanvas.toDataURL('image/png');
+  const src = snapshotCanvas.toDataURL('image/webp', 0.86);
+  snapshotCache.set(cacheKey, src);
+  return src;
 }
 
 // ── Camera pose solver ──────────────────────────────────────────────────────
@@ -182,15 +224,18 @@ export function DeviceThumb({ device }: { device: DeviceDef }) {
 
   useEffect(() => {
     let cancelled = false;
-    loadGLB(device.modelUrl).then((model) => {
-      if (cancelled) return;
-      setSrc(takeSnapshot(model, device.fitHeight, 'static', 0.3));
+    const cancelScheduled = scheduleThumbWork(() => {
+      loadGLB(device.modelUrl).then((model) => {
+        if (cancelled) return;
+        setSrc(takeSnapshot(model, device.fitHeight, 'static', 0.3, `${device.modelUrl}|static|0.3`));
+      });
     });
-    return () => { cancelled = true; };
+    return () => { cancelled = true; cancelScheduled(); };
   }, [device.modelUrl, device.fitHeight]);
 
   return (
     <div className="tpl-thumb" aria-hidden="true">
+      {!src && <div className="tpl-thumb-skeleton" />}
       {src && (
         <img
           src={src} alt="" draggable={false}
@@ -219,8 +264,6 @@ export function MockupAnimThumb({
   const fitHeightRef = useRef(2.077);
 
   const getDeviceInfo = useCallback((): { url: string; fitHeight: number } => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { DEVICES } = require('@/three3d/devices');
     const dk = deviceKey ?? 'iphone17pro';
     const dev = DEVICES.find((d: DeviceDef) => d.key === dk) ?? DEVICES[0];
     return { url: dev?.modelUrl ?? '/3d/devices/iphone17pro-clean.glb', fitHeight: dev?.fitHeight ?? 2.077 };
@@ -231,12 +274,14 @@ export function MockupAnimThumb({
     let cancelled = false;
     const info = getDeviceInfo();
     fitHeightRef.current = info.fitHeight;
-    loadGLB(info.url).then((model) => {
-      if (cancelled) return;
-      modelRef.current = model;
-      setSrc(takeSnapshot(model, info.fitHeight, animKey, 0.3));
+    const cancelScheduled = scheduleThumbWork(() => {
+      loadGLB(info.url).then((model) => {
+        if (cancelled) return;
+        modelRef.current = model;
+        setSrc(takeSnapshot(model, info.fitHeight, animKey, 0.3, `${info.url}|${animKey}|0.3`));
+      });
     });
-    return () => { cancelled = true; };
+    return () => { cancelled = true; cancelScheduled(); };
   }, [animKey, deviceKey, getDeviceInfo]);
 
   // Hover → move shared canvas in, run animation loop. Leave → remove canvas.
@@ -313,6 +358,7 @@ export function MockupAnimThumb({
 
   return (
     <div ref={thumbRef} className={`tpl-thumb ${isPreviewing ? 'is-previewing' : ''}`} aria-hidden="true">
+      {!src && <div className="tpl-thumb-skeleton" />}
       {src && (
         <img
           ref={imgRef} src={src} alt="" draggable={false}
