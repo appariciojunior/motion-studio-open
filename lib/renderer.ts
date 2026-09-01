@@ -107,6 +107,7 @@ export class SceneRenderer {
   // containers; zIndex mirrors the store's track order.
   private trackRTs = new Map<string, TrackRT>();
   private ready = false;
+  private destroyed = false;
 
   private lastFxSig = '';
   private bgImageUrl = '';                        // last-loaded uploaded bg url
@@ -120,19 +121,26 @@ export class SceneRenderer {
   }
 
   async init(canvas: HTMLCanvasElement) {
+    if (this.destroyed) return;
     const { width, height } = useSceneStore.getState();
-    await this.app.init({
-      canvas,
-      width,
-      height,
-      backgroundAlpha: 0,
-      antialias: true,
-      autoStart: false,          // we drive rendering ourselves
-      preference: 'webgl',
-      powerPreference: 'high-performance', // hint the browser to use the discrete GPU
-      resolution: 1,
-      preserveDrawingBuffer: true, // so toDataURL reads real pixels during export
-    });
+    try {
+      await this.app.init({
+        canvas,
+        width,
+        height,
+        backgroundAlpha: 0,
+        antialias: true,
+        autoStart: false,          // we drive rendering ourselves
+        preference: 'webgl',
+        powerPreference: 'high-performance', // hint the browser to use the discrete GPU
+        resolution: 1,
+        preserveDrawingBuffer: true, // so toDataURL reads real pixels during export
+      });
+    } catch {
+      return;
+    }
+
+    if (this.destroyed || !this.app?.renderer) return;
 
     this.motion.sortableChildren = true;
     this.bgSprite.anchor.set(0.5);
@@ -151,13 +159,15 @@ export class SceneRenderer {
   }
 
   resize(width: number, height: number, resolution = 1) {
-    if (!this.ready) return;
-    this.app.renderer.resize(width, height, resolution);
-    this.motion.position.set(width / 2, height / 2);
-    this.bgSprite.position.set(width / 2, height / 2);
-    this.gradientSprite.position.set(width / 2, height / 2);
-    this.content.filterArea = new PIXI.Rectangle(0, 0, width, height);
-    this.overlay.position.set(0, 0);
+    if (!this.ready || this.destroyed || !this.app?.renderer) return;
+    try {
+      this.app.renderer.resize(width, height, resolution);
+      this.motion.position.set(width / 2, height / 2);
+      this.bgSprite.position.set(width / 2, height / 2);
+      this.gradientSprite.position.set(width / 2, height / 2);
+      this.content.filterArea = new PIXI.Rectangle(0, 0, width, height);
+      this.overlay.position.set(0, 0);
+    } catch { /* noop */ }
   }
 
   // ---- asset / slot management ----
@@ -808,8 +818,14 @@ export class SceneRenderer {
 
   // Realize + render a frame synchronously (used by export).
   renderFrame(frame: number) {
-    this.getFrameState(frame);
-    this.app.renderer.render(this.app.stage);
+    if (!this.ready || this.destroyed || !this.app?.renderer) return;
+    try {
+      this.getFrameState(frame);
+      if (!this.ready || this.destroyed || !this.app?.renderer) return;
+      this.app.renderer.render(this.app.stage);
+    } catch {
+      // guard against renderer being destroyed mid-frame or WebGL context lost
+    }
   }
 
   // Deterministic capture: realize frame, render, read pixels as a JPEG data URL.
@@ -817,8 +833,9 @@ export class SceneRenderer {
   // the scene always paints a background so the missing alpha channel is moot.
   // ffmpeg re-encodes to h264/gif downstream, so there's no visible quality loss.
   captureFrame(frame: number): string {
+    if (!this.ready || this.destroyed || !this.app?.renderer) return '';
     this.renderFrame(frame);
-    return (this.app.canvas as HTMLCanvasElement).toDataURL('image/jpeg', 0.92);
+    return (this.app.canvas as HTMLCanvasElement)?.toDataURL?.('image/jpeg', 0.92) ?? '';
   }
 
   // Multiply the backing-store resolution for export capture. Logical
@@ -835,6 +852,7 @@ export class SceneRenderer {
 
   destroy() {
     this.ready = false;
+    this.destroyed = true;
     this.texturePromises.clear();
     this.videoEls.forEach((v) => { try { v.pause(); v.removeAttribute('src'); v.load(); } catch { /* noop */ } });
     this.videoEls.clear();

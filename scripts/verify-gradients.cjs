@@ -10,6 +10,7 @@ const {
   MAX_GRADIENT_STOPS,
   createGradientSpec,
   fillPatchForGradient,
+  gradientCss,
   gradientFromFill,
   gradientBlurRadius,
   gradientRenderStops,
@@ -43,19 +44,20 @@ check(crowded.stops.every((stop, i, list) => i === 0 || list[i - 1].position <= 
 const simple = createGradientSpec('#000000', '#ffffff');
 check(colorClose(sampleGradientRGB(simple, 0.5), [128, 128, 128, 255]), 'two-stop midpoint must interpolate');
 const soft = normalizeGradientSpec({ ...simple, softness: 1 });
-check(colorClose(sampleGradientRGB(soft, 0), [13, 13, 13, 255]), 'softness must feather the start of a two-stop ramp');
-check(colorClose(sampleGradientRGB(soft, 1), [242, 242, 242, 255]), 'softness must feather the end of a two-stop ramp');
+check(colorClose(sampleGradientRGB(soft, 0), [0, 0, 0, 255]), 'softness must not alter authored start-stop sampling');
+check(colorClose(sampleGradientRGB(soft, 1), [255, 255, 255, 255]), 'softness must not alter authored end-stop sampling');
 const peaked = normalizeGradientSpec({ ...simple, softness: 1, stops: [
   { id: 'dark-start', color: '#000000', position: 0 },
   { id: 'light-middle', color: '#ffffff', position: 0.5 },
   { id: 'dark-end', color: '#000000', position: 1 },
 ] });
-check(sampleGradientRGB(peaked, 0.5)[0] < 240, 'softness must round a hard interior colour stop');
-check(gradientRenderStops(simple).length === simple.stops.length && gradientRenderStops(soft).length > soft.stops.length, 'native renderers must add smoothing samples only when softness is enabled');
+check(sampleGradientRGB(peaked, 0.5)[0] === 255, 'softness must not bake a rounded interior colour into the document');
+check(gradientRenderStops(simple).length === simple.stops.length && gradientRenderStops(soft).length === soft.stops.length, 'render stops must remain the authored stops at every softness');
 check(normalizeGradientSpec({ ...simple, softness: 7 }).softness === 1, 'softness must clamp to its document range');
 check(gradientBlurRadius(simple, 800, 600) === 0, 'zero softness must not add a spatial blur');
-check(close(gradientBlurRadius(soft, 800, 600), 21, 0.001), 'softness must map to a proportional spatial blur radius');
-check(gradientBlurRadius(soft, 2000, 2000) === 32, 'spatial blur must keep a bounded render cost');
+check(close(gradientBlurRadius(soft, 800, 600), 10.8, 0.001), 'softness must map to a proportional spatial blur radius');
+check(gradientBlurRadius(soft, 4000, 4000) === 64, 'spatial blur must keep a bounded render cost');
+check(gradientCss(soft).includes('#000000 0%') && gradientCss(soft).includes('#ffffff 100%'), 'CSS fallback must preserve authored stops instead of applying softness a second time');
 const mesh = normalizeGradientSpec({ ...soft, mode: 'advanced', shape: 'mesh' });
 check(!colorClose(sampleGradientPoint(mesh, 0.25, 0.5), sampleGradientPoint({ ...mesh, softness: 0 }, 0.25, 0.5), 0.1), 'mesh must honor the shared softness interpolation');
 check(colorClose(sampleGradientPoint({ ...simple, angle: 0 }, 0, 0.5), [0, 0, 0, 255]), 'linear start must use first stop');
@@ -109,6 +111,8 @@ check(/const background = \{[\s\S]*?\.\.\.s\.background,[\s\S]*?\.\.\.rawBackgro
 check(rendererSource.includes("s.background.source === 'color' && s.background.gradient"), '2D renderer must obey the same background source guard as 3D');
 check(rendererSource.includes('if (!gradientCanvas || resized)') && rendererSource.includes('this.gradientCanvas = gradientCanvas'), 'Pixi gradient resolution changes must allocate a fresh canvas texture source');
 check(renderer3dSource.includes('if (!gradientTex || resized)') && renderer3dSource.includes('gradientTex?.dispose()') && renderer3dSource.includes('this.gradientTex = gradientTex'), 'Three gradient resolution changes must recreate and dispose their canvas texture');
+const gradientSource = fs.readFileSync(path.join(root, 'lib', 'gradient.ts'), 'utf8');
+check(gradientSource.includes('const renderSpec = spec.softness > 0 ? { ...spec, softness: 0 } : spec'), 'background rasters must receive exactly one softness pass');
 
 if (failures.length) {
   console.error(`Gradient verification failed (${failures.length}/${assertions})`);

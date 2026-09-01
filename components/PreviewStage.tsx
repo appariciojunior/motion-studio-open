@@ -53,6 +53,7 @@ export default function PreviewStage() {
     // advancing), or once after any state/texture change while paused. An idle
     // paused preview draws nothing — no wasted GPU/CPU at 60fps on a still image.
     const loop = () => {
+      if (!mounted || initGeneration !== initGenerationRef.current || !rendererRef.current) return;
       const st = useSceneStore.getState();
 
       // freeze/resume card video decoding together with the timeline

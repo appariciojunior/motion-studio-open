@@ -11,10 +11,11 @@ Advanced mode, but they must not define their own gradient document shape.
 - Modes: `basic`, `advanced`.
 - Shapes: `linear`, `radial`, `conic`, `mesh`, `warped-field`, `twin-radial`.
 - Stops: sorted for rendering, minimum 2, maximum 8, stable IDs.
-- Softness: `0..1`; combines a one-dimensional Gaussian feather on the colour
-  ramp with a spatial Gaussian blur on the rendered field. Raster edges are
-  extended before filtering so the background remains opaque corner-to-corner.
-  `0` preserves the native linear interpolation used by existing documents.
+- Softness: `0..1`; rendered backgrounds receive one spatial Gaussian blur
+  pass. Raster edges are extended before filtering so the background remains
+  opaque corner-to-corner. The point sampler used by 3D vertex fills keeps a
+  one-dimensional Gaussian approximation because it has no complete image to
+  post-filter. `0` preserves native linear interpolation in existing documents.
 - Angle convention: `0deg` runs left to right and increases clockwise in screen
   space. Renderer-specific angle conventions are converted at the boundary.
 - Center, radius and 3D coordinates are normalized to `0..1`.
@@ -62,8 +63,10 @@ through the normal autosave path after an edit.
 ## Rendering and performance
 
 Basic Linear/Radial uses native Canvas 2D interpolation at up to the logical
-canvas resolution. Advanced fields use a 384px long-edge procedural texture and
-are scaled by the GPU. Static gradients are signature-cached; only a non-zero
+canvas resolution. Advanced fields use a shape- and motion-sensitive raster
+budget and are scaled by the GPU. Softness is applied before that scaling, with
+a radius proportional to the short edge so Basic, Advanced, 2D and 3D retain
+the same apparent blur. Static gradients are signature-cached; only a non-zero
 Flow value invalidates the texture as the timeline advances.
 
 Flow follows a circular time path, so phase `0` and `1` are identical and video
