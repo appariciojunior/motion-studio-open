@@ -16,7 +16,10 @@ const Chevron = () => (
 // selects it and expands its panel showing the real 3D thumb, finish swatches,
 // and animation preset cards. Same accordion pattern as TemplatesCard.
 export default function MockupPanel() {
-  const modelUrl = use3DStore((s) => (s.models[s.effectId] ?? defaultModelFor(s.effectId)).url);
+  // This panel always edits Mockup, even during the render in which a project
+  // switch is still settling. Reading s.effectId here could briefly point the
+  // device picker at the generic 3D model slot.
+  const modelUrl = use3DStore((s) => (s.models.mockup ?? defaultModelFor('mockup')).url);
   const mockupAnimation = use3DStore((s) => s.mockupAnimation || 'static');
   const setMockupAnimation = use3DStore((s) => s.setMockupAnimation);
 

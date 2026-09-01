@@ -10,6 +10,7 @@ import { modeForSection, sectionFromPathname } from '@/lib/navSections';
 import { capturePoster } from '@/lib/projectPoster';
 import { flushScene, startSceneAutosave } from '@/lib/scenePersist';
 import { flushThreeD, startThreeDAutosave } from '@/lib/three3dPersist';
+import { preloadMockupProject } from '@/lib/mockupPreload';
 import { useHistoryStore } from '@/store/useHistoryStore';
 import { useProjectStore } from '@/store/useProjectStore';
 import { useUIStore } from '@/store/useUIStore';
@@ -144,6 +145,25 @@ export default function EditorShell({ children }: { children?: React.ReactNode }
     if (existing) openProject(existing.id);
     else createProject(`Project ${projects.length + 1}`, wanted);
   }, [activeProjectId, createProject, openProject, projects, projectsBooted, section]);
+
+  // Mockup GLBs can be much larger than the rest of the editor (the XDR is
+  // ~13 MB). Parse the most recent Mockup project's device during an idle turn
+  // in the other sections, so Library → Mockup only has to clone/setup it.
+  useEffect(() => {
+    if (!projectsBooted || section === 'mockup') return;
+    const mockup = projects.find((project) => project.mode === 'mockup');
+    const run = () => { void preloadMockupProject(mockup?.id); };
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+    if (idleWindow.requestIdleCallback) {
+      const handle = idleWindow.requestIdleCallback(run, { timeout: 500 });
+      return () => idleWindow.cancelIdleCallback?.(handle);
+    }
+    const handle = globalThis.setTimeout(run, 150);
+    return () => globalThis.clearTimeout(handle);
+  }, [projects, projectsBooted, section]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
