@@ -521,11 +521,20 @@ export class SceneRenderer {
       if (key !== this.gradientKey) {
         this.gradientKey = key;
         const resized = !this.gradientCanvas || this.gradientCanvas.width !== rw || this.gradientCanvas.height !== rh;
-        if (!this.gradientCanvas) this.gradientCanvas = document.createElement('canvas');
-        paintGradientCanvas(this.gradientCanvas, spec, rw, rh, phase);
+        // Texture.from(canvas) caches by the canvas object's identity. Resizing
+        // that same object from a Basic full-resolution ramp to an Advanced
+        // raster leaves Pixi's production texture source at the old bounds;
+        // the smaller image then appears as a tile in the bottom-left corner.
+        // A fresh resource identity forces Pixi to allocate matching bounds.
+        let gradientCanvas = this.gradientCanvas;
+        if (!gradientCanvas || resized) {
+          gradientCanvas = document.createElement('canvas');
+          this.gradientCanvas = gradientCanvas;
+        }
+        paintGradientCanvas(gradientCanvas, spec, rw, rh, phase);
         if (!this.gradientTexture || resized) {
           this.gradientTexture?.destroy(true);
-          this.gradientTexture = PIXI.Texture.from(this.gradientCanvas);
+          this.gradientTexture = PIXI.Texture.from(gradientCanvas);
           this.gradientSprite.texture = this.gradientTexture;
         } else {
           this.gradientTexture.source.update();

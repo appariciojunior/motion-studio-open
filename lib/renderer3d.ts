@@ -629,13 +629,21 @@ export class SceneRenderer3D implements IRenderer {
       const [rw, rh] = advancedRasterSize(this.width, this.height, gradientRasterMaxEdge(spec));
       const sig = `${rw}x${rh}|${gradientSignature(spec, phase)}`;
       if (this.gradientSig !== sig) {
-        if (!this.gradientCanvas) this.gradientCanvas = document.createElement('canvas');
-        paintGradientCanvas(this.gradientCanvas, spec, rw, rh, phase);
-        if (!this.gradientTex) {
-          this.gradientTex = new THREE.CanvasTexture(this.gradientCanvas);
-          this.gradientTex.colorSpace = THREE.SRGBColorSpace;
+        const resized = !this.gradientCanvas || this.gradientCanvas.width !== rw || this.gradientCanvas.height !== rh;
+        let gradientCanvas = this.gradientCanvas;
+        if (!gradientCanvas || resized) {
+          gradientCanvas = document.createElement('canvas');
+          this.gradientCanvas = gradientCanvas;
         }
-        this.gradientTex.needsUpdate = true;
+        paintGradientCanvas(gradientCanvas, spec, rw, rh, phase);
+        let gradientTex = this.gradientTex;
+        if (!gradientTex || resized) {
+          gradientTex?.dispose();
+          gradientTex = new THREE.CanvasTexture(gradientCanvas);
+          gradientTex.colorSpace = THREE.SRGBColorSpace;
+          this.gradientTex = gradientTex;
+        }
+        gradientTex.needsUpdate = true;
         this.gradientSig = sig;
       }
       this.scene.background = this.gradientTex;
