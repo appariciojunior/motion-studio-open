@@ -16,7 +16,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Template } from '@/lib/types';
 import { frameColour, onThemeChange } from '@/lib/thumbStill';
-import { cachedThumb, scheduleThumb } from '@/lib/thumbQueue';
+import { cachedThumb, pauseThumbQueue, scheduleThumb } from '@/lib/thumbQueue';
 import {
   CTX_BASE,
   attachCanvas,
@@ -85,6 +85,7 @@ export default function TemplateThumb3D({
     let running = false;
     let startedAt = 0;
     let hovered = false, focused = false, autoVisible = false;
+    let resumeQueue: (() => void) | null = null;
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
     let lastDrawn = -1;
@@ -109,9 +110,8 @@ export default function TemplateThumb3D({
       detachCanvas();
       setPreviewing(false);
       if (releaseActive === stop) releaseActive = null;
-      // Leave a still that matches where the animation stopped, so the card does
-      // not jump back to frame 40 under the pointer.
-      try { setStill(snapshotThumb(template, THUMB_FRAME)); } catch { /* noop */ }
+      resumeQueue?.();
+      resumeQueue = null;
     };
 
     const start = () => {
@@ -120,8 +120,13 @@ export default function TemplateThumb3D({
       releaseActive?.();
       releaseActive = stop;
       running = true;
-      startedAt = performance.now();
+      resumeQueue = pauseThumbQueue();
+      // Draw the still pose before exposing the shared canvas. Otherwise its
+      // first paint can be a stale frame from whichever card owned it last.
+      renderThumbFrame(template, THUMB_FRAME);
       attachCanvas(host);
+      startedAt = performance.now() - (THUMB_FRAME / PREVIEW_FPS) * 1000;
+      lastDrawn = THUMB_FRAME;
       setPreviewing(true);
       raf = requestAnimationFrame(tick);
     };

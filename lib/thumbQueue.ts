@@ -15,6 +15,37 @@ const cache = new Map<string, string>();
 const pending = new Map<string, Promise<string | null>>();
 const jobs: Job[] = [];
 let draining = false;
+let pauseDepth = 0;
+let resumeWaiters: Array<() => void> = [];
+
+/**
+ * Keep queued still captures away from the shared renderers while a live
+ * preview owns their canvas. Captures resume as soon as the last preview lets
+ * go. The release function is idempotent so effect cleanup is safe.
+ */
+export function pauseThumbQueue(): () => void {
+  pauseDepth++;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    pauseDepth = Math.max(0, pauseDepth - 1);
+    if (pauseDepth === 0) {
+      const waiters = resumeWaiters;
+      resumeWaiters = [];
+      waiters.forEach((resolve) => resolve());
+    }
+  };
+}
+
+export async function waitForThumbQueue(): Promise<void> {
+  // A preview can move from one card to another in the same pointer event. In
+  // that case the old owner resumes the queue and the new owner pauses it again
+  // before this continuation runs, so re-check after every wake-up.
+  while (pauseDepth > 0) {
+    await new Promise<void>((resolve) => resumeWaiters.push(resolve));
+  }
+}
 
 function idle(): Promise<void> {
   return new Promise((resolve) => {
@@ -35,6 +66,8 @@ async function drain() {
       const job = jobs.shift()!;
       if (job.cancelled) continue;
       await idle();
+      await waitForThumbQueue();
+      if (job.cancelled) continue;
       try {
         const value = await job.task();
         if (value) cache.set(job.key, value);
