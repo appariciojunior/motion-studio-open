@@ -88,8 +88,8 @@ export default function ThreeStage3D({ effectId: forcedEffectId }: { effectId?: 
     // ExportDialog can extract/capture frames from this stage without knowing
     // which engine is behind it.
     const threeRenderer: IRenderer = {
-      init: async () => {},
-      resize: () => {},
+      init: async () => { },
+      resize: () => { },
       getFrameState: (f) => { useSceneStore.getState().setFrame(f); },
       renderFrame: (f) => {
         if (threeEngineRef.current) {
@@ -119,8 +119,8 @@ export default function ThreeStage3D({ effectId: forcedEffectId }: { effectId?: 
       seekVideos: async (f) => { await threeEngineRef.current?.seekVideos?.(f); },
       endVideoExport: () => { threeEngineRef.current?.endVideoExport?.(); },
       extractCanvas: () => canvasRef.current!,
-      syncAssets: () => {},
-      destroy: () => {},
+      syncAssets: () => { },
+      destroy: () => { },
     };
     setRendererInstance(threeRenderer);
 
