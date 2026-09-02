@@ -22,6 +22,7 @@ import {
   attachCanvas,
   detachCanvas,
   renderThumbFrame,
+  retainThumb3d,
   snapshotThumb,
 } from '@/three3d/thumbScene';
 
@@ -46,6 +47,9 @@ export default function TemplateThumb3D({
   const hostRef = useRef<HTMLDivElement>(null);
   const [still, setStill] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
+
+  // Retem o contexto GL enquanto esta miniatura existe; a ultima a sair devolve.
+  useEffect(() => retainThumb3d(), []);
   const [themeVersion, setThemeVersion] = useState(0);
 
   useEffect(() => onThemeChange(() => setThemeVersion((n) => n + 1)), []);
