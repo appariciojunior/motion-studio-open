@@ -30,7 +30,7 @@ export interface GradientSpec {
   mode: GradientMode;
   shape: GradientShape;
   stops: GradientStop[];
-  softness: number; // 0..1; eases colour transitions without blurring the layer
+  softness: number; // 0..1; spatially blurs rendered fields (point samples use a 1-D approximation)
   angle: number; // 0deg = left to right; clockwise in screen space
   center: { x: number; y: number };
   radius: number;
@@ -174,7 +174,11 @@ export function gradientSignature(spec: GradientSpec, phase = 0): string {
 
 export function gradientCss(specInput: GradientSpec): string {
   const spec = normalizeGradientSpec(specInput);
-  const stops = gradientRenderStops(spec).map((s) => {
+  // CSS is a startup/editor fallback. Keep authored stops here: expanding the
+  // one-dimensional softness kernel into extra stops and then blurring the
+  // real canvas applied softness twice, shifted endpoint colours and produced
+  // a very wide dark wedge at the seam of conic gradients.
+  const stops = sortedStops(spec).map((s) => {
     const color = s.opacity == null || s.opacity >= 1 ? s.color : `${s.color}${Math.round(s.opacity * 255).toString(16).padStart(2, '0')}`;
     return `${color} ${Math.round(s.position * 1000) / 10}%`;
   }).join(', ');
@@ -210,10 +214,6 @@ function mixColor(a: RGB, b: RGB, t: number): RGB {
     a[2] + (b[2] - a[2]) * k,
     a[3] + (b[3] - a[3]) * k,
   ];
-}
-
-function rgbHex(color: RGB): string {
-  return `#${color.slice(0, 3).map((channel) => Math.round(channel).toString(16).padStart(2, '0')).join('')}`;
 }
 
 function prepareStops(spec: GradientSpec): PreparedStop[] {
@@ -257,26 +257,17 @@ function samplePreparedStops(stops: PreparedStop[], t: number, softness = 0): RG
 
 export function sampleGradientRGB(specInput: GradientSpec, t: number): RGB {
   const spec = normalizeGradientSpec(specInput);
-  return samplePreparedStops(prepareStops(spec), t, spec.softness);
+  // Used by the stop editor when inserting a new authored colour. Softness is
+  // a render treatment, so it must not silently bake modified colours back
+  // into the gradient document.
+  return sampleLinearStops(prepareStops(spec), t);
 }
 
 export function gradientRenderStops(specInput: GradientSpec): GradientStop[] {
-  const spec = normalizeGradientSpec(specInput);
-  const stops = sortedStops(spec);
-  if (spec.softness <= 0) return stops;
-
-  const prepared = prepareStops(spec);
-  const sampleCount = Math.max(32, (stops.length - 1) * 16);
-  return Array.from({ length: sampleCount + 1 }, (_, sample) => {
-    const position = sample / sampleCount;
-    const color = samplePreparedStops(prepared, position, spec.softness);
-    return {
-      id: `soft-${sample}`,
-      position,
-      color: rgbHex(color),
-      opacity: color[3] / 255,
-    };
-  });
+  // Authored stops remain the renderer contract. Raster backgrounds apply
+  // softness spatially after painting; expanding the ramp here caused every
+  // canvas path to receive the effect twice.
+  return sortedStops(normalizeGradientSpec(specInput));
 }
 
 function hash2(x: number, y: number): number {
@@ -385,7 +376,9 @@ export function sampleGradientPoint(specInput: GradientSpec, x: number, y: numbe
 }
 
 function addNativeStops(gradient: CanvasGradient, spec: GradientSpec) {
-  for (const stop of gradientRenderStops(spec)) {
+  // The rendered canvas receives one spatial blur pass below. Feeding the
+  // already-feathered stop ramp into it would double the effect.
+  for (const stop of sortedStops(spec)) {
     const color = stop.opacity == null || stop.opacity >= 1
       ? stop.color
       : `${stop.color}${Math.round(stop.opacity * 255).toString(16).padStart(2, '0')}`;
@@ -396,7 +389,15 @@ function addNativeStops(gradient: CanvasGradient, spec: GradientSpec) {
 export function gradientBlurRadius(specInput: GradientSpec, width: number, height: number): number {
   const spec = normalizeGradientSpec(specInput);
   if (spec.softness <= 0) return 0;
-  return Math.min(32, Math.max(0, Math.min(width, height)) * 0.035 * spec.softness);
+  // Express the radius as a share of the short edge. Basic and Advanced use
+  // different raster budgets, so a fixed raster-pixel cap made the same value
+  // look different after their textures were scaled to the stage. The active
+  // raster budgets already bound real render cost; the final guard only
+  // protects direct callers with unusually large canvases.
+  // Canvas/CSS blur treats this number as a Gaussian deviation; the visible
+  // transition spans roughly six times the radius. 1.8% therefore produces a
+  // deliberate ~11% feather at Softness 1 instead of washing out the field.
+  return Math.min(64, Math.max(0, Math.min(width, height)) * 0.018 * spec.softness);
 }
 
 type BlurBuffers = { source: HTMLCanvasElement; padded: HTMLCanvasElement };
@@ -469,6 +470,11 @@ export function paintGradientCanvas(
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
 
+  // Softness is a single spatial operation for rendered backgrounds. The
+  // shared point sampler retains its 1-D convolution as a fallback for 3D
+  // vertex fills, where there is no complete image to post-filter.
+  const renderSpec = spec.softness > 0 ? { ...spec, softness: 0 } : spec;
+
   // Basic gradients use the browser's native, high-resolution interpolation.
   if (spec.mode === 'basic' && (spec.shape === 'linear' || spec.shape === 'radial')) {
     let gradient: CanvasGradient;
@@ -482,7 +488,7 @@ export function paintGradientCanvas(
       const cx = w / 2, cy = h / 2;
       gradient = ctx.createLinearGradient(cx - vx * half, cy - vy * half, cx + vx * half, cy + vy * half);
     }
-    addNativeStops(gradient, spec);
+    addNativeStops(gradient, renderSpec);
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, w, h);
     applyGradientBlur(canvas, spec);
@@ -494,11 +500,11 @@ export function paintGradientCanvas(
   // Normalisation, sorting, hex parsing and opacity composition are invariant
   // across this raster. Preparing once here removes hundreds of thousands of
   // object allocations from every Advanced frame.
-  const preparedStops = prepareStops(spec);
-  const meshPalette = spec.shape === 'mesh' ? prepareMeshPalette(preparedStops) : undefined;
+  const preparedStops = prepareStops(renderSpec);
+  const meshPalette = renderSpec.shape === 'mesh' ? prepareMeshPalette(preparedStops) : undefined;
   for (let py = 0; py < h; py++) {
     for (let px = 0; px < w; px++) {
-      const c = samplePreparedGradientPoint(spec, preparedStops, (px + 0.5) / w, (py + 0.5) / h, phase, meshPalette);
+      const c = samplePreparedGradientPoint(renderSpec, preparedStops, (px + 0.5) / w, (py + 0.5) / h, phase, meshPalette);
       const i = (py * w + px) * 4;
       data[i] = Math.round(c[0]); data[i + 1] = Math.round(c[1]);
       data[i + 2] = Math.round(c[2]); data[i + 3] = Math.round(c[3]);
