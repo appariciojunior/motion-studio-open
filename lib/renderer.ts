@@ -77,7 +77,14 @@ function scaleTint(tint: number, k: number): number {
 }
 
 // A single white rounded texture, tinted per placeholder card.
-function makePlaceholderTexture(app: PIXI.Application): PIXI.Texture {
+//
+// `app.renderer` can be null, and being explicit about it matters: a browser
+// hands out a finite number of GL contexts, and when they run out `app.init()`
+// resolves with no renderer at all. This then threw "Cannot read properties of
+// null (reading 'clear')" from inside generateTexture — a message that says
+// nothing about the real cause and took the whole editor down with it.
+function makePlaceholderTexture(app: PIXI.Application): PIXI.Texture | null {
+  if (!app.renderer) return null;
   const g = new PIXI.Graphics();
   g.roundRect(0, 0, 480, 600, 8).fill(0xffffff);
   return app.renderer.generateTexture(g);
@@ -152,7 +159,18 @@ export class SceneRenderer {
     this.app.stage.addChild(this.content, this.overlay);
     this.overlay.addChild(this.safeGfx);
 
-    this.placeholder = makePlaceholderTexture(this.app);
+    const placeholder = makePlaceholderTexture(this.app);
+    if (!placeholder) {
+      // Sem contexto GL nao ha o que renderizar. Falhar aqui, alto e claro, e
+      // melhor do que seguir com um renderer meio construido e estourar depois
+      // num ponto que nao explica a causa.
+      this.ready = false;
+      throw new Error(
+        'SceneRenderer: o navegador nao concedeu contexto WebGL '
+        + '(provavelmente esgotado por outros canvas na pagina).',
+      );
+    }
+    this.placeholder = placeholder;
     this.ready = true;
     this.resize(width, height);
     this.syncAssets();
@@ -543,11 +561,20 @@ export class SceneRenderer {
       if (key !== this.gradientKey) {
         this.gradientKey = key;
         const resized = !this.gradientCanvas || this.gradientCanvas.width !== rw || this.gradientCanvas.height !== rh;
-        if (!this.gradientCanvas) this.gradientCanvas = document.createElement('canvas');
-        paintGradientCanvas(this.gradientCanvas, spec, rw, rh, phase);
+        // Texture.from(canvas) caches by the canvas object's identity. Resizing
+        // that same object from a Basic full-resolution ramp to an Advanced
+        // raster leaves Pixi's production texture source at the old bounds;
+        // the smaller image then appears as a tile in the bottom-left corner.
+        // A fresh resource identity forces Pixi to allocate matching bounds.
+        let gradientCanvas = this.gradientCanvas;
+        if (!gradientCanvas || resized) {
+          gradientCanvas = document.createElement('canvas');
+          this.gradientCanvas = gradientCanvas;
+        }
+        paintGradientCanvas(gradientCanvas, spec, rw, rh, phase);
         if (!this.gradientTexture || resized) {
           this.gradientTexture?.destroy(true);
-          this.gradientTexture = PIXI.Texture.from(this.gradientCanvas);
+          this.gradientTexture = PIXI.Texture.from(gradientCanvas);
           this.gradientSprite.texture = this.gradientTexture;
         } else {
           this.gradientTexture.source.update();
