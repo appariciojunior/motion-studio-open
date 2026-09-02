@@ -6,6 +6,7 @@ import { catalogTemplateList, getTemplate } from '@/templates';
 import { ControlRow, controlVisible } from './Controls';
 import EasingPanel from './EasingPanel';
 import TrackInspector from './TrackInspector';
+import type { ControlDef } from '@/lib/types';
 
 // Renders the SCENE + TIMING sections (no card wrapper — the page composes cards).
 export default function ScenePanel() {
@@ -26,7 +27,15 @@ export default function ScenePanel() {
   const primaryControls = visibleControls.filter((def) => !def.advanced);
   const advancedControls = visibleControls.filter((def) => def.advanced);
   const sections = ['Layout', 'Motion', 'Depth', 'Finish'] as const;
-  const hasSections = primaryControls.some((def) => def.section);
+
+  const getControlSection = (def: ControlDef): 'Layout' | 'Motion' | 'Depth' | 'Finish' => {
+    if (def.section) return def.section;
+    const k = def.key.toLowerCase();
+    if (k.includes('speed') || k.includes('motion') || k.includes('spin') || k.includes('flow') || k.includes('dir') || k.includes('hold') || k.includes('sec') || k.includes('wobble') || k.includes('drift')) return 'Motion';
+    if (k.includes('tilt') || k.includes('zoom') || k.includes('persp') || k.includes('depth') || k.includes('cam') || k.includes('dist') || k.includes('curve') || k.includes('align')) return 'Depth';
+    if (k.includes('radius') || k.includes('fade') || k.includes('light') || k.includes('shadow') || k.includes('blur') || k.includes('grain')) return 'Finish';
+    return 'Layout';
+  };
 
   return (
     <>
@@ -50,16 +59,18 @@ export default function ScenePanel() {
         {trackCount > 1 && (
           <div className="ctl-hint">Editing the motion of <b>{activeTrackName}</b>.</div>
         )}
-        {hasSections ? sections.map((section) => {
-          const controls = primaryControls.filter((def) => (def.section ?? 'Layout') === section);
+        {sections.map((section) => {
+          const controls = primaryControls.filter((def) => getControlSection(def) === section);
           if (!controls.length) return null;
-          return <div className="ctl-section" key={section}>
-            <div className="ctl-section-title">{section}</div>
-            {controls.map((def) => <ControlRow key={def.key} def={def} value={values[def.key]} onChange={(val) => setValue(def.key, val)} />)}
-          </div>;
-        }) : primaryControls.map((def) => (
-          <ControlRow key={def.key} def={def} value={values[def.key]} onChange={(val) => setValue(def.key, val)} />
-        ))}
+          return (
+            <div className="ctl-section" key={section}>
+              <div className="ctl-section-title">{section}</div>
+              {controls.map((def) => (
+                <ControlRow key={def.key} def={def} value={values[def.key]} onChange={(val) => setValue(def.key, val)} />
+              ))}
+            </div>
+          );
+        })}
         {advancedControls.length > 0 && (
           <div className="ctl-advanced">
             <button

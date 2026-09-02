@@ -7,6 +7,7 @@ import FillRow from './FillRow';
 import type { ControlDef } from '@/lib/types';
 import { fillPatchForGradient, gradientFromFill } from '@/lib/gradient';
 
+const BG_ALPHA: ControlDef = { key: 'bg-alpha', label: 'Alpha', type: 'slider', min: 0, max: 100, step: 1, default: 100 };
 const amtDef: ControlDef = { key: 'a', label: 'Texture Amount', type: 'slider', min: 0, max: 100, step: 1, default: 0 };
 const scaleDef: ControlDef = { key: 's', label: 'Texture Scale', type: 'slider', min: 0.5, max: 10, step: 0.1, default: 3 };
 const sunDef: ControlDef = { key: 'sun', label: 'Sunlight', type: 'slider', min: 0, max: 100, step: 1, default: 0 };
@@ -59,6 +60,7 @@ export default function BackgroundFill({ hideTexture }: { hideTexture?: boolean 
           onColor={(which, hex) => setBgFill({ [which]: hex })}
           onGradient={(gradient) => setBgFill(fillPatchForGradient(gradient))}
         />
+        <ControlRow def={BG_ALPHA} value={bgFill.alpha ?? 100} onChange={(v) => setBgFill({ alpha: Number(v) })} />
         {!hideTexture && <ControlRow def={amtDef} value={bgTexAmount} onChange={(v) => setBgTexAmount(v)} />}
         {!hideTexture && <ControlRow def={scaleDef} value={bgTexScale} onChange={(v) => setBgTexScale(v)} />}
         <ControlRow def={sunDef} value={sunIntensity} onChange={(v) => setSunIntensity(v)} />

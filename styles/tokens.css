@@ -1,9 +1,9 @@
 /* ============================================================
    MOTION STUDIO — DESIGN TOKENS
    Light UI from the Figma reference (file 7NtsGHDBicdNLMt48Y6BOX,
-   node 0:2702): flat white panels separated by 1px #e5e7eb borders
-   on a #e5e7eb canvas area, Tailwind-gray palette, Inter, and
-   fully square corners. Dark theme kept under [data-theme="dark"].
+   node 0:2702): white tool surfaces on a #e5e7eb canvas area,
+   Tailwind-gray palette, Inter, and square inner controls. The workspace
+   shell uses separated panel islands; dark theme lives under [data-theme="dark"].
    ============================================================ */
 :root {
   /* ---- Surfaces ---- */

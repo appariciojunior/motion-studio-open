@@ -116,6 +116,7 @@ export interface FillSpec {
   c1: string;
   c2: string;
   gradient?: GradientSpec;
+  alpha?: number;
 }
 
 // Artwork on a device's screen. `url` is live-session only — a blob: string is

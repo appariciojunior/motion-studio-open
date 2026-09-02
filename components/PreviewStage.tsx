@@ -7,6 +7,7 @@ import { setRendererInstance } from '@/lib/rendererInstance';
 import { useSceneStore } from '@/store/useSceneStore';
 import { getTemplate } from '@/templates';
 
+// Live 2D/WebGL preview stage
 export default function PreviewStage() {
   const stageRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<IRenderer | null>(null);
