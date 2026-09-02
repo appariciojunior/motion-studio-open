@@ -41,7 +41,7 @@ Module._resolveFilename = function (request, parent, isMain, options) {
 };
 
 const { effects, effectDefaults } = require('../effects');
-const { pixiFragment } = require('../effects/adapters/glsl');
+const { pixiFragment, threeFragment } = require('../effects/adapters/glsl');
 
 const CHROME = [
   'C:/Program Files/Google/Chrome/Application/chrome.exe',
@@ -55,6 +55,20 @@ for (const [id, fx] of Object.entries(effects)) {
   const d = effectDefaults(id);
   payload[id] = {
     fragment: pixiFragment(fx),
+    // O fragment do three tambem, para o teste de PARIDADE. O #include do three
+    // nao compila cru, e a conversao final para sRGB e justamente o que se quer
+    // comparar — entao ele e trocado pela transformada explicita.
+    fragmentThree: threeFragment(fx)
+      .replace('#include <colorspace_fragment>', 'gl_FragColor = vec4(fx_toSrgb(gl_FragColor.rgb), gl_FragColor.a);')
+      // O vertex compartilhado deste teste emite vTextureCoord; renomeia para
+      // linkar, em vez de manter dois vertex shaders.
+      .replace(/vUv/g, 'vTextureCoord')
+      .replace('varying vec2 vTextureCoord;', 'in vec2 vTextureCoord;')
+      .replace(/gl_FragColor/g, 'fx_out')
+      .replace(/texture2D[(]/g, 'texture(')
+      // Cabecalho de ES 3.00 na frente: o vertex compartilhado deste teste e
+      // 300 es, e misturar versoes nao linka.
+      .replace(/^/, ["#version 300 es", "precision highp float;", "out vec4 fx_out;", ""].join(String.fromCharCode(10))),
     u0: fx.shader.uniforms(d, { width: 256, height: 256, time: 0 }),
     u1: fx.shader.uniforms(d, { width: 256, height: 256, time: 1 }),
     // Os valores dos CONTROLES vao junto: o esperado de um teste tem de vir da
@@ -118,6 +132,16 @@ void main(){ vTextureCoord = aPosition; gl_Position = vec4(aPosition*2.0-1.0, 0.
       ruido: makeTex((x, y) => { const i = y * W + x; return [(i*37)%256, (i*91)%256, (i*17)%256]; }),
       // degrade horizontal liso: revela banding (posterize) e a trama (halftone)
       degrade: makeTex((x) => { const v = Math.round((x / (W - 1)) * 255); return [v, v, v]; }),
+      // O MESMO degrade, mas em espaco LINEAR — que e o que o three recebe de
+      // verdade (ele trabalha linear e converte na saida). Alimentar o lado
+      // three com a textura sRGB era erro do teste: dava 136/255 de divergencia
+      // ate em pixelate e wave, que so deslocam coordenada e nao podem divergir.
+      degradeLin: makeTex((x) => {
+        const srgb = x / (W - 1);
+        const lin = srgb <= 0.04045 ? srgb / 12.92 : Math.pow((srgb + 0.055) / 1.055, 2.4);
+        const v = Math.round(lin * 255);
+        return [v, v, v];
+      }),
       // quadro branco centrado: revela deslocamento lateral (wave)
       quadro: makeTex((x, y) => (Math.abs(x - W/2) < 40 && Math.abs(y - H/2) < 40 ? [255,255,255] : [0,0,0])),
     };
@@ -289,6 +313,38 @@ void main(){ vTextureCoord = aPosition; gl_Position = vec4(aPosition*2.0-1.0, 0.
       r.medidas.pixelate = { desvio_intra_bloco: +dv.toFixed(3), desvio_original: +desvio(run(fx.pixelate.fragment, { uSize: [1, 1] }, TEX.ruido)).toFixed(3) };
       if (dv > 0.5) r.falhas.push(`pixelate: os blocos de ${N}px nao ficaram uniformes (desvio ${dv.toFixed(2)})`);
     } catch (e) { r.falhas.push('pixelate: ' + String(e.message).slice(0, 160)); }
+
+    // ---- PARIDADE ENTRE ENGINES ----
+    //
+    // O teste que faltava, e que teria pegado a divergencia de espaco de cor: o
+    // contrato promete que UM shader vale nos dois engines, e ninguem estava
+    // comparando as duas saidas. O three trabalha em linear e converte na saida;
+    // o Pixi entrega sRGB. Sem tratar isso, o posterize caia em niveis
+    // completamente diferentes (0,64,128,191,255 contra 0,137,188,225,255).
+    //
+    // Compara sobre o degrade, que e onde a diferenca de espaco aparece mais.
+    for (const id of Object.keys(fx)) {
+      try {
+        const a = run(fx[id].fragment, fx[id].u0, TEX.degrade);
+        const b = run(fx[id].fragmentThree, fx[id].u0, TEX.degradeLin);
+        let maior = 0, soma = 0, n = 0;
+        for (let i = 0; i < a.length; i += 4) {
+          const d = Math.abs(a[i] - b[i]);
+          if (d > maior) maior = d;
+          soma += d; n++;
+        }
+        const media = soma / n;
+        r.medidas['paridade:' + id] = { maiorDif: maior, mediaDif: +media.toFixed(2) };
+        // 6 de 255 cobre arredondamento e a ida-e-volta da transformada; acima
+        // disso os dois engines estao desenhando coisas diferentes.
+        // A tolerancia e pela MEDIA, nao pelo pico: a ida-e-volta
+        // sRGB->linear->sRGB passa por um byte de 8 bits, e nos escuros — onde a
+        // curva sRGB e mais inclinada — um unico passo de quantizacao vira
+        // varios niveis de volta. O pico e um artefato disso; a media diz se os
+        // dois engines estao desenhando a mesma coisa.
+        if (media > 4) r.falhas.push('paridade ' + id + ': pixi e three divergem, media ' + media.toFixed(2) + '/255 (pico ' + maior + ')');
+      } catch (e) { r.falhas.push('paridade ' + id + ': ' + String(e.message).slice(0, 200)); }
+    }
 
     return r;
   }, payload);
