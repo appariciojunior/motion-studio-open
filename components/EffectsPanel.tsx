@@ -93,16 +93,26 @@ export default function EffectsPanel() {
           const def = getEffect(e.effectId);
           if (!def) return null;
           return (
+            // `draggable` vive no GRIP, não no card. No card, qualquer arrasto
+            // que começasse dentro dele — inclusive num slider — iniciava o
+            // drag HTML5 e a reordenação roubava o gesto: era impossível
+            // arrastar um controle de efeito. O card segue sendo o ALVO do
+            // soltar, que é o que onDragOver/onDrop fazem.
             <div
               key={e.instanceId}
               className={`effect-card ${e.enabled ? '' : 'disabled'}`}
-              draggable
-              onDragStart={() => setDragIdx(i)}
               onDragOver={(ev) => ev.preventDefault()}
               onDrop={() => { if (dragIdx !== null && dragIdx !== i) reorderEffects(dragIdx, i); setDragIdx(null); }}
             >
               <div className="effect-card-head">
-                <span className="drag-grip">⣿</span>
+                <span
+                  className="drag-grip"
+                  draggable
+                  onDragStart={() => setDragIdx(i)}
+                  onDragEnd={() => setDragIdx(null)}
+                  role="button"
+                  aria-label={`Reorder ${def.meta.name}`}
+                >⣿</span>
                 <span className="effect-title">{def.meta.name}</span>
                 <button className="icon-btn" onClick={() => toggleEffect(e.instanceId)}>
                   <svg width="12" height="12" viewBox="0 0 16 16" fill="none">

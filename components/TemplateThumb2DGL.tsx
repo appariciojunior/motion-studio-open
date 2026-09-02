@@ -21,6 +21,7 @@ import {
   detachCanvas2d,
   getShared2d,
   renderThumbFrame2d,
+  retainThumb2d,
   snapshotThumb2d,
 } from '@/lib/thumbScene2d';
 
@@ -46,6 +47,9 @@ export default function TemplateThumb2DGL({
   const [still, setStill] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [themeVersion, setThemeVersion] = useState(0);
+
+  // Retem o contexto GL enquanto esta miniatura existe; a ultima a sair devolve.
+  useEffect(() => retainThumb2d(), []);
 
   useEffect(() => onThemeChange(() => setThemeVersion((n) => n + 1)), []);
 
