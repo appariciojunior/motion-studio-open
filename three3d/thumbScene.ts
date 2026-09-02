@@ -334,3 +334,44 @@ export function detachCanvas() {
   const ctx = shared;
   if (ctx?.canvas.parentElement) ctx.canvas.parentElement.removeChild(ctx.canvas);
 }
+
+// ---- ciclo de vida do contexto ----
+//
+// Mesmo motivo do lado Pixi: este modulo tomava um contexto GL e nunca o
+// devolvia, e com os dois somados o PALCO ficava sem. Medido: o canvas do palco
+// existia com zero contexto e `app.renderer` vinha null, derrubando o editor em
+// makePlaceholderTexture.
+//
+// Contagem de referencias, nao ordem de inicializacao: cada miniatura montada
+// retem, cada desmontada solta, e a ultima a sair devolve o contexto.
+let refs = 0;
+
+export function retainThumb3d(): () => void {
+  refs++;
+  let solto = false;
+  return () => {
+    if (solto) return;
+    solto = true;
+    refs = Math.max(0, refs - 1);
+    if (refs === 0) disposeShared3d();
+  };
+}
+
+function disposeShared3d() {
+  const ctx = shared;
+  shared = null;
+  if (!ctx) return;
+  try {
+    detachCanvas();
+    ctx.geomCache.forEach((g) => g.dispose());
+    ctx.geomCache.clear();
+    ctx.plane.dispose();
+    ctx.tones.forEach((t) => t.dispose());
+    ctx.slots.forEach((s) => { s.front.material.dispose(); s.back.material.dispose(); });
+    ctx.slots.length = 0;
+    ctx.renderer.dispose();
+    // dispose() solta os recursos mas NAO o contexto; sem isto o navegador
+    // segue contando este canvas contra o limite.
+    ctx.renderer.forceContextLoss();
+  } catch { /* um contexto que já foi não precisa ir de novo */ }
+}

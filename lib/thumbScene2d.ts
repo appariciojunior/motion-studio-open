@@ -310,3 +310,40 @@ export async function attachCanvas2d(host: HTMLElement) {
 export function detachCanvas2d() {
   if (shared?.canvas.parentElement) shared.canvas.parentElement.removeChild(shared.canvas);
 }
+
+// ---- ciclo de vida do contexto ----
+//
+// Um contexto GL e recurso finito e este modulo tomava um e nunca devolvia. Com
+// o three das miniaturas fazendo o mesmo, o PALCO ficava sem: medido, o canvas
+// do palco existia com zero contexto e `app.renderer` vinha null, o que fazia
+// makePlaceholderTexture estourar em `generateTexture` e derrubava o editor.
+//
+// Contagem de referencias em vez de ordem de inicializacao, que seria fragil:
+// cada miniatura montada retem, cada uma desmontada solta, e quando a ultima sai
+// (o usuario deixou o catalogo) o contexto e devolvido.
+let refs = 0;
+
+export function retainThumb2d(): () => void {
+  refs++;
+  let solto = false;
+  return () => {
+    if (solto) return;
+    solto = true;
+    refs = Math.max(0, refs - 1);
+    if (refs === 0) disposeShared2d();
+  };
+}
+
+function disposeShared2d() {
+  const ctx = shared;
+  shared = null;
+  booting = null;
+  whiteCache.clear();
+  if (!ctx) return;
+  try {
+    detachCanvas2d();
+    // `true` para o contexto tambem: sem isso o canvas guarda o contexto e a
+    // devolucao nao acontece de verdade.
+    ctx.app.destroy(true, { children: true, texture: true });
+  } catch { /* um contexto que já foi não precisa ir de novo */ }
+}
