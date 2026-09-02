@@ -50,6 +50,7 @@ export interface ActiveEffect {
 export interface BackgroundSettings {
   source: 'color' | 'image' | 'card'; // solid/gradient · uploaded image · reflected from the featured card
   color: string;
+  alpha: number;                      // overall background opacity, 0..100
   gradient: boolean;
   color2: string;
   gradientSpec?: GradientSpec;           // v2; legacy color/gradient fields remain readable
@@ -318,6 +319,7 @@ function initialSceneState() {
     background: {
       source: 'color' as const,
       color: '#0d0d0d',
+      alpha: 100,
       gradient: false,
       color2: '#1f1f1f',
       gradientSpec: createGradientSpec('#0d0d0d', '#1f1f1f'),
@@ -363,12 +365,12 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       // 1.33s (1s at count 12, 1.25s on Hinge 05).
       const spinnerDuration = id === 'spinner-06' ? 80
         : id === 'spinner-03' || id === 'spinner-05' ? 64
-        : id === 'spinner-04' ? 36
-        : id === 'fan-01' ? 24
-        : id === 'fan-03' ? 18
-        : id === 'hinge-05' ? 15
-        // Hinge 01-04 at count 9/12, and Spinner 01/02 + Fan 02 at count 6.
-        : 12;
+          : id === 'spinner-04' ? 36
+            : id === 'fan-01' ? 24
+              : id === 'fan-03' ? 18
+                : id === 'hinge-05' ? 15
+                  // Hinge 01-04 at count 9/12, and Spinner 01/02 + Fan 02 at count 6.
+                  : 12;
       // Flicker/Pulse 03-12 (`flicker-r01..r10`) each bake a cards/sec `speed`
       // computed from the reference's own clip length (see templates/flicker.ts
       // refFlicker). That rate only lands on the intended lap count when the
@@ -380,7 +382,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       const isPulseRefPreset = id.startsWith('flicker-r');
       const pulseDuration = id === 'flicker-r02' ? 4 : id === 'flicker-r10' ? 3
         : (id === 'flicker-r06' || id === 'flicker-r07' || id === 'flicker-r08' || id === 'flicker-r09') ? 8
-        : 6; // flicker-r01, r03, r04, r05
+          : 6; // flicker-r01, r03, r04, r05
       // Flip advances one card every `stepTime` seconds, but `loopCycles` snaps
       // the clip to a whole number of passes through the pool — so the authored
       // 2s step only survives when the clip is a multiple of count * stepTime.
@@ -468,7 +470,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         'ring-r06': 12.8, 'ring-r07': 12.8, 'ring-r08': 12.8, 'ring-r09': 12.8, 'ring-r10': 16,
         'ring-r11': 12.8, 'ring-r12': 20, 'ring-r13': 12.8, 'ring-r14': 12.8, 'ring-r15': 20,
         'coil-01': 10, 'coil-02': 10, 'coil-03': 10, 'coil-04': 15, 'coil-05': 12,
-        'coil-06': 12, 'coil-07': 20, 'coil-08': 15, 'coil-09': 24, 
+        'coil-06': 12, 'coil-07': 20, 'coil-08': 15, 'coil-09': 24,
         'carousel3d-01': 8, 'carousel3d-02': 9,
         'carousel3d-03': 8, 'carousel3d-04': 12, 'carousel3d-05': 20,
         'deck-r01': 7, 'deck-r02': 7, 'deck-r03': 7, 'deck-r04': 7, 'deck-r05': 10,
@@ -481,9 +483,9 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       const isRunwayRefPreset = runwayRefDuration !== undefined;
       const referenceAspect = (isSpinnerPreset || isStickerPreset || isPosterPreset || isArcPreset) ? '4:5'
         : isOrbit3dPreset ? (ORBIT_3D_SQUARE.has(id) ? '1:1' : '4:5')
-        : isWheelRefPreset ? '1:1'
-        : isRunwayRefPreset || isRef2dPreset || isGlobeRefPreset || isRef3dPreset ? '3:4'
-        : null;
+          : isWheelRefPreset ? '1:1'
+            : isRunwayRefPreset || isRef2dPreset || isGlobeRefPreset || isRef3dPreset ? '3:4'
+              : null;
       const referenceCanvas = referenceAspect ? dimsFor(referenceAspect) : null;
       // A blank scene has no track to patch, so the first pick BECOMES Layer 1.
       // Without this the click would land on nothing and picking a template in a
@@ -508,10 +510,10 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         cardShape: group === 'Spinner' || isOrbit3dPreset || isArcPreset || isWheelRefPreset ? 'auto' : isStickerPreset ? '1:1' : isPosterPreset ? '4:5' : s.cardShape,
         duration: isSpinnerPreset ? spinnerDuration : isStickerPreset ? stickerDuration : isPosterPreset ? posterDuration
           : isPulseRefPreset ? pulseDuration : isFlipPreset ? 12 : isOrbit3dPreset ? orbitDuration
-          : isArcPreset ? arcDuration : isWheelRefPreset ? wheelRefDuration
-          : isRunwayRefPreset ? runwayRefDuration
-          : isRef2dPreset ? ref2dDuration : isGlobeRefPreset ? globeRefDuration
-          : isRef3dPreset ? ref3dDuration : s.duration,
+            : isArcPreset ? arcDuration : isWheelRefPreset ? wheelRefDuration
+              : isRunwayRefPreset ? runwayRefDuration
+                : isRef2dPreset ? ref2dDuration : isGlobeRefPreset ? globeRefDuration
+                  : isRef3dPreset ? ref3dDuration : s.duration,
         ...((isSpinnerPreset || isStickerPreset || isPosterPreset) && !s.background.userSet ? {
           background: { ...s.background, source: 'color' as const, color: '#FFFFFF', gradient: false },
         } : {}),
@@ -677,11 +679,11 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       const origin: 'remote' | 'upload' = blob || item.url.startsWith('blob:') ? 'upload' : 'remote';
       if (demoIndex >= 0) {
         const previous = next[demoIndex];
-        if (blob) idbPut(previous.id, blob).catch(() => {});
+        if (blob) idbPut(previous.id, blob).catch(() => { });
         next[demoIndex] = { ...previous, ...item, visible: true, origin, crop: undefined };
       } else {
         const id = nid('asset');
-        if (blob) idbPut(id, blob).catch(() => {});
+        if (blob) idbPut(id, blob).catch(() => { });
         next.push({ ...item, id, visible: true, origin });
       }
     }
@@ -698,8 +700,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         next.push({ ...demoSourceForSlot(next.length), id: nid('asset'), visible: true, origin: 'demo' });
       }
       const prev = next[index];
-      if (prev.origin === 'upload') idbDelete(prev.id).catch(() => {});
-      if (blob) idbPut(prev.id, blob).catch(() => {});
+      if (prev.origin === 'upload') idbDelete(prev.id).catch(() => { });
+      if (blob) idbPut(prev.id, blob).catch(() => { });
       next[index] = { ...prev, name: it.name, url: it.url, kind: it.kind, origin, visible: true, crop: undefined };
       return { assets: next };
     });
@@ -708,7 +710,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     const current = get().assets;
     const index = current.findIndex((asset) => asset.id === id);
     const a = current[index];
-    if (a?.origin === 'upload') idbDelete(id).catch(() => {});
+    if (a?.origin === 'upload') idbDelete(id).catch(() => { });
     if (index < 0) return;
     // Removal must remove the media item itself. Replacing it with a demo asset
     // made the card look deleted while keeping a permanent, undeletable slot in
@@ -727,7 +729,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       return { assets: next };
     }),
   clearAssets: () => {
-    for (const a of get().assets) if (a.origin === 'upload') idbDelete(a.id).catch(() => {});
+    for (const a of get().assets) if (a.origin === 'upload') idbDelete(a.id).catch(() => { });
     set((s) => ({
       assets: Array.from({ length: Math.max(DEMO_ASSETS.length, s.assets.length) }, (_, index) => ({
         ...demoSourceForSlot(index),
@@ -769,9 +771,9 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       const rawTracks: MotionTrack[] = hasTrackList
         ? partial.tracks!
         : [makeTrack(partial.activeTemplateId ?? s.activeTemplateId, 'Layer 1', {
-            values: partial.values,
-            easing: partial.easing,
-          })];
+          values: partial.values,
+          easing: partial.easing,
+        })];
 
       // Drop tracks whose template no longer exists, and re-merge the rest over
       // live defaults. A scene that references only removed templates keeps the

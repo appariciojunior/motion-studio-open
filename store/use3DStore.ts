@@ -142,9 +142,9 @@ function migrateFill(fill: FillSpec): FillSpec {
 // Nice out-of-the-box fills for the bundled dayse groups (generic keys, still
 // applied only when those groups are present — other models fall back to none).
 const DEFAULT_FILLS: Record<string, FillSpec> = {
-  Cube:     { type: 'radial', c1: '#f4d21c', c2: '#e88a2a', gradient: createGradientSpec('#f4d21c', '#e88a2a', 'radial') },
+  Cube: { type: 'radial', c1: '#f4d21c', c2: '#e88a2a', gradient: createGradientSpec('#f4d21c', '#e88a2a', 'radial') },
   Cylinder: { type: 'linear', c1: '#1c5622', c2: '#63c24c', gradient: createGradientSpec('#1c5622', '#63c24c') },
-  Plane:    { type: 'linear', c1: '#ffffff', c2: '#9a9a9a', gradient: createGradientSpec('#ffffff', '#9a9a9a') },
+  Plane: { type: 'linear', c1: '#ffffff', c2: '#9a9a9a', gradient: createGradientSpec('#ffffff', '#9a9a9a') },
 };
 
 // Default nudge that centres the bundled dayse model in the stage.
@@ -299,7 +299,7 @@ export const use3DStore = create<ThreeDState>((set) => ({
     if (media === null) {
       // Drop the replaced bytes: nothing references them once the slot is empty,
       // and IndexedDB has no eviction of its own.
-      if (prev?.id) idbDelete(prev.id).catch(() => {});
+      if (prev?.id) idbDelete(prev.id).catch(() => { });
       set((s) => ({ screenMedia: { ...s.screenMedia, [slot]: null } }));
       return;
     }
@@ -311,7 +311,7 @@ export const use3DStore = create<ThreeDState>((set) => ({
   },
   clearScreenMedia: () => {
     for (const m of Object.values(use3DStore.getState().screenMedia)) {
-      if (m?.id) idbDelete(m.id).catch(() => {});
+      if (m?.id) idbDelete(m.id).catch(() => { });
     }
     set({ screenMedia: {} });
   },
@@ -336,7 +336,7 @@ export const use3DStore = create<ThreeDState>((set) => ({
   // will never reference them again, and IndexedDB evicts nothing on its own.
   reset3D: () => {
     for (const m of Object.values(use3DStore.getState().screenMedia)) {
-      if (m?.id) idbDelete(m.id).catch(() => {});
+      if (m?.id) idbDelete(m.id).catch(() => { });
     }
     set(() => initial3DState());
   },

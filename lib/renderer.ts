@@ -51,10 +51,10 @@ function taperCorners(w: number, h: number, taper: NonNullable<LayerTransform['t
   const hw = w / 2, hh = h / 2;
   const ix = hw * (1 - r), iy = hh * (1 - r);
   switch (taper.edge) {
-    case 'top':    return [-hw + ix, -hh, hw - ix, -hh, hw, hh, -hw, hh];
+    case 'top': return [-hw + ix, -hh, hw - ix, -hh, hw, hh, -hw, hh];
     case 'bottom': return [-hw, -hh, hw, -hh, hw - ix, hh, -hw + ix, hh];
-    case 'left':   return [-hw, -hh + iy, hw, -hh, hw, hh, -hw, hh - iy];
-    default:       return [-hw, -hh, hw, -hh + iy, hw, hh - iy, -hw, hh]; // 'right'
+    case 'left': return [-hw, -hh + iy, hw, -hh, hw, hh, -hw, hh - iy];
+    default: return [-hw, -hh, hw, -hh + iy, hw, hh - iy, -hw, hh]; // 'right'
   }
 }
 
@@ -440,9 +440,9 @@ export class SceneRenderer {
     const frac = Math.max(0, Math.min(1, cornerRadiusPct / 100));
     const c = clip
       ? {
-          x0: Math.max(0, Math.min(1, clip.x0)), y0: Math.max(0, Math.min(1, clip.y0)),
-          x1: Math.max(0, Math.min(1, clip.x1)), y1: Math.max(0, Math.min(1, clip.y1)),
-        }
+        x0: Math.max(0, Math.min(1, clip.x0)), y0: Math.max(0, Math.min(1, clip.y0)),
+        x1: Math.max(0, Math.min(1, clip.x1)), y1: Math.max(0, Math.min(1, clip.y1)),
+      }
       : null;
     const partial = !!c && (c.x0 > 0 || c.y0 > 0 || c.x1 < 1 || c.y1 < 1);
     const key = partial ? `${frac}|${c!.x0}|${c!.y0}|${c!.x1}|${c!.y1}` : `${frac}`;
@@ -520,9 +520,13 @@ export class SceneRenderer {
   // ---- overlays ----
   private drawOverlays(s: SceneState) {
     const { width, height } = s;
+    const backgroundAlpha = Math.max(0, Math.min(1, (s.background.alpha ?? 100) / 100));
 
     // background
     this.bg.clear();
+    this.bg.alpha = backgroundAlpha;
+    this.gradientSprite.alpha = backgroundAlpha;
+    this.bgSprite.alpha = backgroundAlpha;
     if (s.background.source === 'color' && s.background.gradient) {
       const spec = normalizeGradientSpec(s.background.gradientSpec, s.background.color, s.background.color2);
       const phase = ((s.frame / Math.max(1, s.duration * s.fps)) % 1 + 1) % 1;

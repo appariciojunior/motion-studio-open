@@ -69,6 +69,7 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
   const fps = useSceneStore((s) => s.fps);
   const duration = useSceneStore((s) => s.duration);
   const audioUrl = useSceneStore((s) => s.audioUrl);
+  const backgroundAlpha = useSceneStore((s) => s.background.alpha ?? 100);
   const playing = useSceneStore((s) => s.playing);
   const setPlaying = useSceneStore((s) => s.setPlaying);
   const demoSlots = useSceneStore(countDemoSlotsInUse);
@@ -365,141 +366,148 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
 
         <div className="modal-body export-modal-body">
           <>
-          <div className="ctl-row">
-            <label className="ctl-label">
-              <span className="export-label-desktop">Format</span>
-              <span className="export-label-mobile">Output</span>
-            </label>
-            <div className="ctl-input">
-              <div className="pills pills-fit">
-                {(['mp4', 'gif', 'webm'] as Fmt[]).map((f) => (
-                  <button key={f} className={`pill ${format === f ? 'active' : ''}`} onClick={() => setFormat(f)}>{f.toUpperCase()}</button>
-                ))}
+            <div className="ctl-row">
+              <label className="ctl-label">
+                <span className="export-label-desktop">Format</span>
+                <span className="export-label-mobile">Output</span>
+              </label>
+              <div className="ctl-input">
+                <div className="pills pills-fit">
+                  {(['mp4', 'gif', 'webm'] as Fmt[]).map((f) => (
+                    <button key={f} className={`pill ${format === f ? 'active' : ''}`} onClick={() => setFormat(f)}>{f.toUpperCase()}</button>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="ctl-row">
-            <label className="ctl-label">Resolution</label>
-            <div className="ctl-input">
-              <div className="pills pills-fit">
-                {(Object.keys(RES_SHORT) as Exclude<Res, 'exact'>[]).map((r) => (
-                  <button key={r} className={`pill ${res === r ? 'active' : ''}`} onClick={() => setRes(r)}>{RES_LABEL[r]}</button>
-                ))}
-                {aspect === 'custom' && (
-                  <button className={`pill ${res === 'exact' ? 'active' : ''}`} onClick={() => setRes('exact')} title={`Exact canvas size ${customW}×${customH}`}>
-                    {customW}×{customH}
-                  </button>
-                )}
+            <div className="ctl-row">
+              <label className="ctl-label">Resolution</label>
+              <div className="ctl-input">
+                <div className="pills pills-fit">
+                  {(Object.keys(RES_SHORT) as Exclude<Res, 'exact'>[]).map((r) => (
+                    <button key={r} className={`pill ${res === r ? 'active' : ''}`} onClick={() => setRes(r)}>{RES_LABEL[r]}</button>
+                  ))}
+                  {aspect === 'custom' && (
+                    <button className={`pill ${res === 'exact' ? 'active' : ''}`} onClick={() => setRes('exact')} title={`Exact canvas size ${customW}×${customH}`}>
+                      {customW}×{customH}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="ctl-hint">
-            {(() => {
-              const t = targetFor(res, { width, height, customW, customH, aspect });
-              return `Output ${t.width}×${t.height} px`;
-            })()}
-          </div>
+            <div className="ctl-hint">
+              {(() => {
+                const t = targetFor(res, { width, height, customW, customH, aspect });
+                return `Output ${t.width}×${t.height} px`;
+              })()}
+            </div>
 
-          {/* GIF keeps frame delay in hundredths of a second, so most fps values
+            {backgroundAlpha < 100 && (
+              <div className="ctl-hint" role="status">
+                {format === 'webm'
+                  ? 'Background alpha is preserved in the WebM export.'
+                  : 'Background alpha is previewed here, but transparent video export requires WebM.'}
+              </div>
+            )}
+
+            {/* GIF keeps frame delay in hundredths of a second, so most fps values
               cannot be expressed exactly. State the playback rate the file will
               really carry — this is a property of the format, not of gifenc. */}
-          {format === 'gif' && Math.abs(gifEffectiveFps(fps) - fps) > 0.05 && (
-            <div className="ctl-hint">
-              GIF stores delays in 1/100 s, so {fps} fps plays back at {gifEffectiveFps(fps).toFixed(1)} fps.
-            </div>
-          )}
+            {format === 'gif' && Math.abs(gifEffectiveFps(fps) - fps) > 0.05 && (
+              <div className="ctl-hint">
+                GIF stores delays in 1/100 s, so {fps} fps plays back at {gifEffectiveFps(fps).toFixed(1)} fps.
+              </div>
+            )}
 
-          {/* Only the combinations that still need native ffmpeg are blocked
+            {/* Only the combinations that still need native ffmpeg are blocked
               here — GIF and plain MP4 encode in this tab. The format pills stay
               reachable so switching to a workable one is one click away. */}
-          {serverUnavailable && (
-            <div className="export-static-note" role="alert">
-              <p>
-                {audioUrl
-                  ? 'Muxing an audio track still needs native ffmpeg, which this hosted build has no server to run.'
-                  : 'MP4 needs WebCodecs, which this browser doesn’t provide, and this hosted build has no server to run ffmpeg on.'}
-                {' '}GIF exports here without either — switch the format above, or run it locally:
-              </p>
-              <pre><code>{`git clone https://github.com/appariciojunior/motion-studio-open.git
+            {serverUnavailable && (
+              <div className="export-static-note" role="alert">
+                <p>
+                  {audioUrl
+                    ? 'Muxing an audio track still needs native ffmpeg, which this hosted build has no server to run.'
+                    : 'MP4 needs WebCodecs, which this browser doesn’t provide, and this hosted build has no server to run ffmpeg on.'}
+                  {' '}GIF exports here without either — switch the format above, or run it locally:
+                </p>
+                <pre><code>{`git clone https://github.com/appariciojunior/motion-studio-open.git
 cd motion-studio-open
 npm install && brew install ffmpeg
 npm run dev`}</code></pre>
-              <a className="btn full" href="https://github.com/appariciojunior/motion-studio-open" target="_blank" rel="noreferrer">
-                View on GitHub
-              </a>
-            </div>
-          )}
-
-          {phase === 'idle' && !confirmDemo && !serverUnavailable && (
-            <button className="btn primary full export-primary-action" onClick={() => demoSlots > 0 ? setConfirmDemo(true) : run()}>
-              <ExportIcon size={16} />
-              <span className="export-action-desktop">Start export</span>
-              <span className="export-action-mobile">Export</span>
-            </button>
-          )}
-
-          {phase === 'idle' && confirmDemo && (
-            <div className="export-demo-warning" role="alert">
-              <strong>{demoSlots} demo {demoSlots === 1 ? 'slot is' : 'slots are'} still in use</strong>
-              <p>Demo images will appear in the exported file unless you replace them in Media.</p>
-              <div className="export-demo-actions">
-                <button className="btn" onClick={() => setConfirmDemo(false)}>Cancel</button>
-                <button className="btn primary" onClick={run}>Export anyway</button>
+                <a className="btn full" href="https://github.com/appariciojunior/motion-studio-open" target="_blank" rel="noreferrer">
+                  View on GitHub
+                </a>
               </div>
-            </div>
-          )}
+            )}
 
-          {phase === 'preparing' && <div className="progress"><span>Preparing videos…</span></div>}
+            {phase === 'idle' && !confirmDemo && !serverUnavailable && (
+              <button className="btn primary full export-primary-action" onClick={() => demoSlots > 0 ? setConfirmDemo(true) : run()}>
+                <ExportIcon size={16} />
+                <span className="export-action-desktop">Start export</span>
+                <span className="export-action-mobile">Export</span>
+              </button>
+            )}
 
-          {phase === 'capturing' && (
-            <div className="progress">
-              <div className="progress-bar"><div style={{ width: `${(captured / total) * 100}%` }} /></div>
-              <span>Capturing frames {captured}/{total}</span>
-            </div>
-          )}
-
-          {phase === 'encoding' && <div className="progress"><span>Encoding with ffmpeg…</span></div>}
-
-          {phase === 'done' && (
-            <div className="export-done">
-              <p>
-                Done{engine === 'browser'
-                  ? ` — encoded in-browser (${
-                      format === 'gif' ? 'gifenc'
-                      : format === 'webm' ? 'WebCodecs VP9'
-                      : 'WebCodecs H.264'}).`
-                  : <>. Generated in <code>/exports</code>:</>}
-              </p>
-              <ul>
-                {outputs.map((f) => (
-                  <li key={f.name}><a href={f.url} download={f.name}>{f.name}</a></li>
-                ))}
-              </ul>
-              {canPickDir && (
-                <>
-                  <button className="btn primary full" onClick={saveToFolder} disabled={saving}>
-                    {saving ? 'Saving…' : savedTo ? 'Save to another folder…' : 'Choose folder & save'}
-                  </button>
-                  {savedTo && <p className="ctl-hint">Saved to <code>{savedTo}</code>.</p>}
-                  {saveErr && <div className="export-error">Save failed: {saveErr}</div>}
-                </>
-              )}
-            </div>
-          )}
-
-          {phase === 'error' && (
-            <div className="export-error">
-              Export failed: {err}
-              {/ffmpeg|ENOENT/i.test(err) && (
-                <div className="export-hint">
-                  ffmpeg isn’t installed. Install it, then retry:<br />
-                  <code>brew install ffmpeg</code>
+            {phase === 'idle' && confirmDemo && (
+              <div className="export-demo-warning" role="alert">
+                <strong>{demoSlots} demo {demoSlots === 1 ? 'slot is' : 'slots are'} still in use</strong>
+                <p>Demo images will appear in the exported file unless you replace them in Media.</p>
+                <div className="export-demo-actions">
+                  <button className="btn" onClick={() => setConfirmDemo(false)}>Cancel</button>
+                  <button className="btn primary" onClick={run}>Export anyway</button>
                 </div>
-              )}
-            </div>
-          )}
+              </div>
+            )}
+
+            {phase === 'preparing' && <div className="progress"><span>Preparing videos…</span></div>}
+
+            {phase === 'capturing' && (
+              <div className="progress">
+                <div className="progress-bar"><div style={{ width: `${(captured / total) * 100}%` }} /></div>
+                <span>Capturing frames {captured}/{total}</span>
+              </div>
+            )}
+
+            {phase === 'encoding' && <div className="progress"><span>Encoding with ffmpeg…</span></div>}
+
+            {phase === 'done' && (
+              <div className="export-done">
+                <p>
+                  Done{engine === 'browser'
+                    ? ` — encoded in-browser (${format === 'gif' ? 'gifenc'
+                      : format === 'webm' ? 'WebCodecs VP9'
+                        : 'WebCodecs H.264'}).`
+                    : <>. Generated in <code>/exports</code>:</>}
+                </p>
+                <ul>
+                  {outputs.map((f) => (
+                    <li key={f.name}><a href={f.url} download={f.name}>{f.name}</a></li>
+                  ))}
+                </ul>
+                {canPickDir && (
+                  <>
+                    <button className="btn primary full" onClick={saveToFolder} disabled={saving}>
+                      {saving ? 'Saving…' : savedTo ? 'Save to another folder…' : 'Choose folder & save'}
+                    </button>
+                    {savedTo && <p className="ctl-hint">Saved to <code>{savedTo}</code>.</p>}
+                    {saveErr && <div className="export-error">Save failed: {saveErr}</div>}
+                  </>
+                )}
+              </div>
+            )}
+
+            {phase === 'error' && (
+              <div className="export-error">
+                Export failed: {err}
+                {/ffmpeg|ENOENT/i.test(err) && (
+                  <div className="export-hint">
+                    ffmpeg isn’t installed. Install it, then retry:<br />
+                    <code>brew install ffmpeg</code>
+                  </div>
+                )}
+              </div>
+            )}
           </>
         </div>
       </div>
