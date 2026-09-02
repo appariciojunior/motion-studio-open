@@ -386,9 +386,10 @@ export function sampleGradientPoint(specInput: GradientSpec, x: number, y: numbe
 
 function addNativeStops(gradient: CanvasGradient, spec: GradientSpec) {
   for (const stop of gradientRenderStops(spec)) {
-    const color = stop.opacity == null || stop.opacity >= 1
+    const alpha = stop.opacity == null ? 1 : Math.max(0, Math.min(1, stop.opacity));
+    const color = alpha >= 1
       ? stop.color
-      : `${stop.color}${Math.round(stop.opacity * 255).toString(16).padStart(2, '0')}`;
+      : `rgba(${parseColor(stop.color, alpha).slice(0, 3).join(',')},${alpha})`;
     gradient.addColorStop(stop.position, color);
   }
 }
@@ -483,6 +484,7 @@ export function paintGradientCanvas(
       gradient = ctx.createLinearGradient(cx - vx * half, cy - vy * half, cx + vx * half, cy + vy * half);
     }
     addNativeStops(gradient, spec);
+    ctx.clearRect(0, 0, w, h);
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, w, h);
     applyGradientBlur(canvas, spec);

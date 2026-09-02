@@ -245,7 +245,9 @@ export class SceneRenderer3D implements IRenderer {
           if (blendMode == 1) blend = min(vec3(1.0), base.rgb + straight);
           else if (blendMode == 2) blend = vec3(1.0) - (vec3(1.0) - base.rgb) * (vec3(1.0) - straight);
           else if (blendMode == 3) blend = base.rgb * straight;
-          gl_FragColor = vec4(mix(base.rgb, blend, a), 1.0);
+          float outA = clamp(base.a + a * (1.0 - base.a), 0.0, 1.0);
+          vec3 outRgb = mix(base.rgb, blend, a);
+          gl_FragColor = vec4(outRgb, outA);
         }
       `,
     });
@@ -258,6 +260,7 @@ export class SceneRenderer3D implements IRenderer {
     const outputMaterial = new THREE.ShaderMaterial({
       depthTest: false,
       depthWrite: false,
+      transparent: true,
       uniforms: { map: { value: null } },
       vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0); }`,
       fragmentShader: `
@@ -626,8 +629,12 @@ export class SceneRenderer3D implements IRenderer {
     const s = useSceneStore.getState();
 
     // Background parity with Pixi: solid, gradient, uploaded image, or an
-    // asset reflected from the active motion layer.
-    if (s.background.source === 'color' && s.background.gradient) {
+    // asset reflected from the active motion layer, or transparent.
+    const bgAlpha = Math.max(0, Math.min(1, (s.background.alpha ?? 100) / 100));
+    if (bgAlpha === 0) {
+      this.scene.background = null;
+      this.renderer.setClearColor(0x000000, 0);
+    } else if (s.background.source === 'color' && s.background.gradient) {
       const spec = normalizeGradientSpec(s.background.gradientSpec, s.background.color, s.background.color2);
       const phase = ((s.frame / Math.max(1, s.duration * s.fps)) % 1 + 1) % 1;
       const [rw, rh] = advancedRasterSize(this.width, this.height, gradientRasterMaxEdge(spec));
@@ -643,6 +650,7 @@ export class SceneRenderer3D implements IRenderer {
         this.gradientSig = sig;
       }
       this.scene.background = this.gradientTex;
+      this.renderer.setClearColor(0x000000, bgAlpha);
     } else if (s.background.source === 'image' && s.background.imageUrl) {
       this.syncBackgroundTexture(s.background.imageUrl, s.background.blur);
     } else if (s.background.source === 'card') {
@@ -650,9 +658,18 @@ export class SceneRenderer3D implements IRenderer {
       const assetIndex = active ? trackAssetIndices(active, s.assets)[0] : undefined;
       const url = assetIndex === undefined ? null : s.assets[assetIndex]?.url;
       if (url && !isVideoSource(url, s.assets[assetIndex!]?.kind)) this.syncBackgroundTexture(url, s.background.blur);
-      else this.scene.background = new THREE.Color(s.background.color);
+      else {
+        this.scene.background = new THREE.Color(s.background.color);
+        this.renderer.setClearColor(new THREE.Color(s.background.color), bgAlpha);
+      }
     } else {
-      this.scene.background = new THREE.Color(s.background.color);
+      if (bgAlpha < 1) {
+        this.scene.background = null;
+        this.renderer.setClearColor(new THREE.Color(s.background.color), bgAlpha);
+      } else {
+        this.scene.background = new THREE.Color(s.background.color);
+        this.renderer.setClearColor(new THREE.Color(s.background.color), 1);
+      }
     }
 
     // HUD ortho camera matches the logical canvas (y up; positions flipped)
@@ -1084,9 +1101,13 @@ export class SceneRenderer3D implements IRenderer {
       if (!this.ready || this.destroyed || !this.renderer) return;
       const s = useSceneStore.getState();
 
-      // The accumulator begins with the opaque scene background.
+      // The accumulator begins with the scene background.
+      const rawAlpha = s.background.alpha ?? 100;
+      const alphaPct = (rawAlpha > 0 && rawAlpha <= 1) ? rawAlpha * 100 : rawAlpha;
+      const bgAlpha = Math.max(0, Math.min(1, alphaPct / 100));
+
       this.renderer.setRenderTarget(this.composeA);
-      this.renderer.setClearColor(0x000000, 1);
+      this.renderer.setClearColor(new THREE.Color(s.background.color), bgAlpha);
       this.renderer.clear(true, true, true);
       this.renderer.render(this.scene, this.camera);
 
@@ -1148,7 +1169,7 @@ export class SceneRenderer3D implements IRenderer {
 
       this.outputQuad.material.uniforms.map.value = read.texture;
       this.renderer.setRenderTarget(null);
-      this.renderer.setClearColor(0x000000, 1);
+      this.renderer.setClearColor(0x000000, 0);
       this.renderer.clear(true, true, true);
       this.renderer.render(this.outputScene, this.composeCam);
 
@@ -1164,7 +1185,12 @@ export class SceneRenderer3D implements IRenderer {
   captureFrame(frame: number): string {
     if (!this.ready || this.destroyed || !this.renderer) return '';
     this.renderFrame(frame);
-    // JPEG (q0.92) — see the Pixi renderer's captureFrame for the rationale.
+    const s = useSceneStore.getState();
+    const rawAlpha = s.background.alpha ?? 100;
+    const alphaPct = (rawAlpha > 0 && rawAlpha <= 1) ? rawAlpha * 100 : rawAlpha;
+    if (alphaPct < 100) {
+      return this.renderer.domElement?.toDataURL?.('image/png') ?? '';
+    }
     return this.renderer.domElement?.toDataURL?.('image/jpeg', 0.92) ?? '';
   }
 

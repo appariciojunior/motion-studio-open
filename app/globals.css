@@ -101,8 +101,8 @@ input[type=range] {
 }
 
 /* ============================================================
-   LAYOUT — flat white panels, 1px #e5e7eb borders, no gutters.
-   Figma order: rail | templates | canvas | scene | canvas-settings,
+   LAYOUT — separated tool islands on the stage surface.
+   Order: rail | templates | canvas | scene | canvas-settings;
    timeline bar spans the bottom (rail excluded).
    ============================================================ */
 .app {
@@ -111,23 +111,15 @@ input[type=range] {
   --right-col: var(--panel-w);
   height: 100vh;
   display: grid;
-  /* The stage carries a real minimum and the side columns are allowed to shrink.
-     With rigid side columns and a minmax(0, 1fr) stage, the four fixed tracks
-     (64 + 296 + 280 + 280 = 920px) win every tie and the stage is what collapses:
-     measured on a 1024px window, the stage column came out 104px and the canvas
-     8x5. Giving the stage the floor and the panels the give inverts that, and it
-     does so without a media query — so the collapse toggles keep working instead
-     of fighting a rule that forces the columns to zero. */
   grid-template-columns:
     var(--rail-w) minmax(0, var(--templates-col)) minmax(min(320px, 100%), 1fr) minmax(0, var(--controls-col)) minmax(0, var(--right-col));
-  /* `auto` rather than a fixed --bottom-h: the transport row keeps that exact
-     height on its own, and the row grows only when the motion-layer lanes are
-     expanded below it. */
   grid-template-rows: minmax(0, 1fr) auto;
   grid-template-areas:
     "rail templates stage controls right"
     "rail bottom bottom bottom bottom";
-  background: var(--card);
+  gap: 0;
+  padding: 0;
+  background: var(--stage);
   overflow: hidden;
   transition: grid-template-columns 180ms ease;
 }
@@ -143,20 +135,23 @@ input[type=range] {
 
 .card {
   background: var(--card);
-  border-radius: var(--r-card);
+  border-radius: 0px;
   min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
+.app > .card {
+  border: none;
+  border-radius: 0px;
+}
+
 .card-scroll {
   overflow-y: auto;
   flex: 1;
   min-height: 0;
-  /* The inspector is a stack of functional surfaces, not one uninterrupted
-     form. The soft canvas stays visible only in the gutters between groups. */
-  background: var(--card-soft);
+  background: var(--card);
 }
 
 /* ---- section head (eyebrow + optional action) ---- */
@@ -192,21 +187,17 @@ input[type=range] {
   flex: 0 0 auto;
 }
 
-/* A real gutter between functional groups. Arqé makes inspector sections read
-   as distinct surfaces; this keeps our square, neutral visual system while
-   creating the same hierarchy instead of relying on a nearly invisible line. */
 .card-scroll > .hairline {
   width: 100%;
-  height: 12px;
+  height: 1px;
   margin: 0;
-  background: var(--card-soft);
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+  background: var(--line);
+  border: none;
 }
 
 .card-scroll > .section-head,
 .card-scroll > :first-child > .section-head {
-  padding-top: 20px;
+  padding-top: 16px;
 }
 
 .ctl-hint {
@@ -5673,23 +5664,40 @@ select.field {
   margin-top: 0;
 }
 
-.controls .section-body>.ctl-section {
+.ctl-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-row);
   padding: 0;
 }
 
-.controls .section-body>.ctl-section+.ctl-section {
-  margin-top: 16px;
-  padding-top: 16px;
+.section-body > .ctl-section + .ctl-section,
+.controls .section-body > .ctl-section + .ctl-section {
+  margin-top: 18px;
+  padding-top: 18px;
   border-top: 1px solid var(--line);
 }
 
 .ctl-section-title {
-  margin: 0 0 12px;
+  margin: 0 0 2px;
   color: var(--fg-label);
   font-size: var(--fs-eyebrow);
   font-weight: 650;
-  letter-spacing: .13em;
+  letter-spacing: .12em;
   text-transform: uppercase;
+  line-height: 15px;
+}
+
+/* Standard PNG transparency checkerboard (Photoshop / Figma / After Effects style) */
+.stage-canvas {
+  background-color: #ffffff !important;
+  background-image:
+    linear-gradient(45deg, #cbcbd2 25%, transparent 25%),
+    linear-gradient(-45deg, #cbcbd2 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #cbcbd2 75%),
+    linear-gradient(-45deg, transparent 75%, #cbcbd2 75%) !important;
+  background-size: 20px 20px !important;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0px !important;
 }
 
 .strack:focus-visible {
