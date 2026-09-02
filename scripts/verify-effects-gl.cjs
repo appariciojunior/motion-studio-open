@@ -15,6 +15,12 @@
 //    vignette   cinza uniforme -> o centro tem de ficar mais claro que a borda
 //    rgb-split  faixa branca   -> o canal R tem de se deslocar para um lado e o
 //               B para o outro, com o G parado
+//    halftone   degrade liso   -> a cobertura de tinta tem de crescer com o tom
+//    posterize  degrade liso   -> tem de virar exatamente N patamares, com 0 e 255
+//               alcancaveis (pega o erro de dividir por n em vez de n-1)
+//    scanlines  cinza uniforme -> tem de aparecer periodicidade em Y
+//    wave       quadro branco  -> tem de deslocar em x, e o deslocamento tem de
+//               VARIAR com y (senao e um shift, nao uma onda)
 //    pixelate   ruido fino     -> blocos de N px tem de zerar a variacao interna
 //
 //  Uso: node scripts/verify-effects-gl.cjs
@@ -51,6 +57,11 @@ for (const [id, fx] of Object.entries(effects)) {
     fragment: pixiFragment(fx),
     u0: fx.shader.uniforms(d, { width: 256, height: 256, time: 0 }),
     u1: fx.shader.uniforms(d, { width: 256, height: 256, time: 1 }),
+    // Os valores dos CONTROLES vao junto: o esperado de um teste tem de vir da
+    // intencao declarada, nao do uniform. Derivar o esperado do uniform e
+    // tautologia — muta-se o uniforms() e o esperado muda com ele, entao o teste
+    // sempre passa. Um teste de mutacao mostrou isso acontecendo aqui.
+    defaults: d,
   };
 }
 
@@ -105,6 +116,10 @@ void main(){ vTextureCoord = aPosition; gl_Position = vec4(aPosition*2.0-1.0, 0.
       // faixa branca de 8px no meio, para o split ter uma borda para deslocar
       faixa: makeTex((x) => (Math.abs(x - W / 2) < 4 ? [255, 255, 255] : [0, 0, 0])),
       ruido: makeTex((x, y) => { const i = y * W + x; return [(i*37)%256, (i*91)%256, (i*17)%256]; }),
+      // degrade horizontal liso: revela banding (posterize) e a trama (halftone)
+      degrade: makeTex((x) => { const v = Math.round((x / (W - 1)) * 255); return [v, v, v]; }),
+      // quadro branco centrado: revela deslocamento lateral (wave)
+      quadro: makeTex((x, y) => (Math.abs(x - W/2) < 40 && Math.abs(y - H/2) < 40 ? [255,255,255] : [0,0,0])),
     };
 
     const run = (fragment, uniforms, tex) => {
@@ -204,6 +219,61 @@ void main(){ vTextureCoord = aPosition; gl_Position = vec4(aPosition*2.0-1.0, 0.
     } catch (e) { r.falhas.push('rgb-split: ' + String(e.message).slice(0, 160)); }
 
     try {
+      // POSTERIZE: um degrade liso tem de virar N patamares — nem mais nem
+      // menos. Contar valores distintos e a medida direta disso, e ela tambem
+      // pega o erro classico de dividir por n em vez de n-1, que deixa o branco
+      // fora de alcance.
+      try {
+        // Pelos uniforms REAIS do efeito, nao um uSteps chumbado: passar o valor
+        // a mao pula a funcao uniforms() e o teste deixa de ver erro nela. Um
+        // teste de mutacao mostrou isso — trocar n-1 por n passava verde.
+        const q = run(fx.posterize.fragment, fx.posterize.u0, TEX.degrade);
+        const esperado = Math.round(fx.posterize.defaults.levels);
+        const vals = new Set();
+        for (let x = 0; x < W; x++) vals.add(q[((H >> 1) * W + x) * 4]);
+        const ordenados = [...vals].sort((a, b) => a - b);
+        r.medidas.posterize = { niveis: vals.size, esperado, min: ordenados[0], max: ordenados[ordenados.length - 1] };
+        if (vals.size !== esperado) r.falhas.push('posterize: o controle levels pediu ' + esperado + ' niveis e a tela mostrou ' + vals.size);
+        if (ordenados[ordenados.length - 1] < 250) r.falhas.push('posterize: o branco nao chega a 255 (max ' + ordenados[ordenados.length-1] + ') — sinal de dividir por n em vez de n-1');
+        if (ordenados[0] > 5) r.falhas.push('posterize: o preto nao chega a 0 (min ' + ordenados[0] + ')');
+      } catch (e) { r.falhas.push('posterize: ' + String(e.message).slice(0, 160)); }
+
+      // HALFTONE: sobre um degrade, a cobertura de tinta tem de CRESCER conforme
+      // o tom escurece. Mede a media na faixa escura contra a clara.
+      try {
+        const h = run(fx.halftone.fragment, { ...fx.halftone.u0, uCell: 8 }, TEX.degrade);
+        const media = (x0, x1) => { let s2 = 0, n = 0; for (let y = 0; y < H; y++) for (let x = x0; x < x1; x++) { s2 += h[(y*W+x)*4]; n++; } return s2/n; };
+        const escuro = media(8, 56), claro = media(W-56, W-8);
+        r.medidas.halftone = { ladoEscuro: +escuro.toFixed(1), ladoClaro: +claro.toFixed(1) };
+        if (claro <= escuro + 20) r.falhas.push('halftone: a trama nao segue o tom (escuro ' + escuro.toFixed(1) + ' vs claro ' + claro.toFixed(1) + ')');
+      } catch (e) { r.falhas.push('halftone: ' + String(e.message).slice(0, 160)); }
+
+      // SCANLINES: sobre cinza uniforme tem de aparecer periodicidade em Y, e a
+      // media tem de CAIR (as linhas escurecem). Compara linhas pares e impares
+      // no espacamento pedido.
+      try {
+        const base = run(fx.scanlines.fragment, { ...fx.scanlines.u0, uStrength: 0, uCurve: 0 }, TEX.cinza);
+        const sc = run(fx.scanlines.fragment, { ...fx.scanlines.u0, uSpacing: 4, uStrength: 0.6, uCurve: 0 }, TEX.cinza);
+        const linha = (px, y) => { let s2 = 0; for (let x = 0; x < W; x++) s2 += px[(y*W+x)*4]; return s2/W; };
+        const cresta = linha(sc, H>>1), vale = linha(sc, (H>>1) + 2);
+        const mediaBase = linha(base, H>>1), mediaSc = linha(sc, H>>1);
+        r.medidas.scanlines = { linhaA: +cresta.toFixed(1), linhaB: +vale.toFixed(1), semEfeito: +mediaBase.toFixed(1) };
+        if (Math.abs(cresta - vale) < 8) r.falhas.push('scanlines: sem periodicidade em Y (linhas a 2px: ' + cresta.toFixed(1) + ' vs ' + vale.toFixed(1) + ')');
+      } catch (e) { r.falhas.push('scanlines: ' + String(e.message).slice(0, 160)); }
+
+      // WAVE: com uSpeed 0 a fase e fixa; o quadro centrado tem de sair DESLOCADO
+      // em x conforme y, e nao apenas borrado. Mede o centroide em duas alturas.
+      try {
+        const w0 = run(fx.wave.fragment, { uAmount: 0, uFreq: 3, uSpeed: 0 }, TEX.quadro);
+        const w1 = run(fx.wave.fragment, { uAmount: 30, uFreq: 3, uSpeed: 0 }, TEX.quadro);
+        const centro = (px, y) => { let soma = 0, peso = 0; for (let x = 0; x < W; x++) { const v = px[(y*W+x)*4]; soma += v*x; peso += v; } return peso > 0 ? soma/peso : -1; };
+        const yA = (H>>1) - 30, yB = (H>>1) + 30;
+        const semA = centro(w0, yA), comA = centro(w1, yA), comB = centro(w1, yB);
+        r.medidas.wave = { semOnda: +semA.toFixed(2), comOnda_yA: +comA.toFixed(2), comOnda_yB: +comB.toFixed(2) };
+        if (Math.abs(comA - semA) < 3) r.falhas.push('wave: nao deslocou nada (' + semA.toFixed(2) + ' -> ' + comA.toFixed(2) + ')');
+        if (Math.abs(comA - comB) < 3) r.falhas.push('wave: o deslocamento nao varia com y — isso e um shift, nao uma onda');
+      } catch (e) { r.falhas.push('wave: ' + String(e.message).slice(0, 160)); }
+
       // PIXELATE: blocos de N px zeram a variacao interna.
       const N = 16;
       const p = run(fx.pixelate.fragment, { uSize: [N, N] }, TEX.ruido);
