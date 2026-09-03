@@ -53,7 +53,7 @@ const coil: Template = {
   meta: {
     id: 'coil-01',
     name: 'Helix 05',
-    group: 'Helix',
+    group: 'Helix & Spiral',
     engine: 'webgl',
     isNew: true,
     defaultEasing: { id: 'linear' },
