@@ -18,6 +18,33 @@ export const CARD_SHAPES: Record<string, number> = {
   '16:9': 16 / 9,
 };
 
+// A shape the user typed, carried in the SAME string field the preset keys
+// use — "3:7" sits where "4:5" would. Nothing downstream learns a new shape of
+// data: persistence, history, both renderers, the export path and the
+// thumbnails all keep passing one string through cardAspectFor.
+//
+// The bounds are not taste. This ratio reaches coverCrop as a divisor, so a
+// zero, a negative or a NaN would take the crop with it; and past 10:1 the
+// card is a hairline that reads as a rendering fault rather than as a choice.
+// Out of range parses as "not a shape", which falls through to the template's
+// own aspect — the same place an unknown string has always landed.
+export const CUSTOM_SHAPE_MIN = 0.1;
+export const CUSTOM_SHAPE_MAX = 10;
+
+const SHAPE_PATTERN = /^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/;
+
+export function parseCardShape(shape?: string): number | null {
+  if (!shape) return null;
+  const parts = SHAPE_PATTERN.exec(shape.trim());
+  if (!parts) return null;
+  const w = Number(parts[1]);
+  const h = Number(parts[2]);
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return null;
+  const ratio = w / h;
+  if (ratio < CUSTOM_SHAPE_MIN || ratio > CUSTOM_SHAPE_MAX) return null;
+  return ratio;
+}
+
 // The card shape a template lays out. Full-bleed templates ('canvas') always
 // crop to the canvas aspect — a part-screen card there would leave gaps. For
 // everything else the user's scene-level shape wins; 'auto' falls back to the
@@ -29,7 +56,12 @@ export function cardAspectFor(
   shape?: string,
 ): number {
   if (meta.cardAspect === 'canvas') return width / Math.max(1, height);
+  // Presets are looked up before parsing so their exact stored numbers win:
+  // "16:9" as a key is 16/9 to full precision, and re-deriving it from the
+  // label would be the same number by luck rather than by definition.
   if (shape && CARD_SHAPES[shape]) return CARD_SHAPES[shape];
+  const custom = parseCardShape(shape);
+  if (custom !== null) return custom;
   return typeof meta.cardAspect === 'number' ? meta.cardAspect : 4 / 5;
 }
 

@@ -18,7 +18,14 @@ const BG_SOURCES: { id: 'color' | 'image' | 'card'; label: string }[] = [
 
 // Pixel input that commits on blur/Enter so half-typed values don't
 // resize the canvas mid-keystroke.
-export function DimInput({ value, onCommit }: { value: number; onCommit: (v: number) => void }) {
+// min/max default to canvas pixels; the card shape reuses this for a ratio,
+// where 3 is a legitimate entry and a 16px floor would mark it invalid.
+export function DimInput({ value, onCommit, min = 16, max = 8192 }: {
+  value: number;
+  onCommit: (v: number) => void;
+  min?: number;
+  max?: number;
+}) {
   const [text, setText] = useState(String(value));
   useEffect(() => setText(String(value)), [value]);
   const commit = () => {
@@ -30,8 +37,8 @@ export function DimInput({ value, onCommit }: { value: number; onCommit: (v: num
     <input
       className="field dim-field"
       type="number"
-      min={16}
-      max={8192}
+      min={min}
+      max={max}
       value={text}
       onChange={(e) => setText(e.target.value)}
       onBlur={commit}

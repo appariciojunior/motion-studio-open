@@ -14,14 +14,51 @@ function fmt(sec: number) {
 }
 
 // Figma ruler: a label every 2s, three short dashes between labels.
-function buildRuler(duration: number) {
+//
+// The 2s step alone does not survive a long clip. At 60s on a 925px ruler it
+// lands 31 labels 30px apart — "0s 2s 4s … 58s 60s" packed shoulder to
+// shoulder — so past that point the step goes up to 10s and the dashes follow
+// it, three to a gap either way. Only those two cadences: seconds read in
+// twos and tens, and a 5s step would put labels on values nobody counts in.
+//
+// The choice is made against the ruler's MEASURED width rather than a
+// duration cutoff, because the same clip crowds or breathes depending on the
+// window — a 40s clip is fine on a wide screen and unreadable on a narrow
+// panel. Width 0 (the first render, before the observer has reported) falls
+// through to 2s, which is what it always was.
+const RULER_STEPS = [2, 10];
+// Two guards on the 2s step, and it takes both. The count is what keeps the
+// ruler from turning into a row of numbers — seven labels is the most this
+// strip carries before they stop being landmarks and start being noise, and
+// it is what puts the switch at 12s. The pixel gap catches the case the count
+// cannot see: the same clip on a narrow panel, where even five labels collide.
+const RULER_MAX_LABELS = 7;
+const RULER_LABEL_MIN_GAP = 56;
+
+function buildRuler(duration: number, width: number) {
+  const step = RULER_STEPS.find((s) => {
+    const gaps = Math.max(1, Math.floor(duration / s));
+    return gaps + 1 <= RULER_MAX_LABELS && (!width || width / gaps >= RULER_LABEL_MIN_GAP);
+  }) ?? RULER_STEPS[RULER_STEPS.length - 1];
   const labels: { t: number; pct: number }[] = [];
-  const dashes: number[] = [];
-  for (let t = 0; t <= duration; t += 2) {
+  const dashes: string[] = [];
+  const w = (step / duration) * 100;
+  // A 3px mark is only square if it lands ON the pixel grid. Left as a
+  // percentage it does not: 6.25% of 925 is x 289.781, the mark spreads over
+  // three columns at partial coverage, and antialiasing turns it into a blob.
+  // These are decorative subdivisions, so rounding to the nearest pixel costs
+  // nothing and is the whole difference between a square and a dot. Falls
+  // back to the percentage before the width has been measured.
+  const at = (pct: number) => (width ? `${Math.round((pct / 100) * width)}px` : `${pct}%`);
+  for (let t = 0; t <= duration; t += step) {
     labels.push({ t, pct: (t / duration) * 100 });
-    if (t + 2 <= duration) {
-      const w = (2 / duration) * 100;
-      for (let k = 1; k <= 3; k++) dashes.push(((t / duration) * 100) + (w * k) / 4);
+    // The three marks that follow this label, including into a PARTIAL last
+    // gap: a 13s clip labels 0s and 10s, and without this its final three
+    // seconds are blank and the ruler looks like it stopped early. Anything
+    // past the end is dropped rather than the gap being skipped whole.
+    for (let k = 1; k <= 3; k++) {
+      const pct = ((t / duration) * 100) + (w * k) / 4;
+      if (pct < 100) dashes.push(at(pct));
     }
   }
   return { labels, dashes };
@@ -50,6 +87,8 @@ export default function Timeline({
   const reorderTracks = useSceneStore((s) => s.reorderTracks);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [lanesOpen, setLanesOpen] = useState(false);
+  // The scrubber's measured width, which decides the ruler's label step.
+  const [axisW, setAxisW] = useState(0);
 
   const shellRef = useRef<HTMLDivElement>(null);
   const scrubberRef = useRef<HTMLDivElement>(null);
@@ -80,13 +119,21 @@ export default function Timeline({
       const a = shell.getBoundingClientRect();
       const b = scrubber.getBoundingClientRect();
       const left = `${Math.round(b.left - a.left)}px`;
-      const width = `${Math.round(b.width)}px`;
+      const px = Math.round(b.width);
+      const width = `${px}px`;
       if (shell.style.getPropertyValue('--tl-axis-left') !== left) {
         shell.style.setProperty('--tl-axis-left', left);
       }
       if (shell.style.getPropertyValue('--tl-axis-w') !== width) {
         shell.style.setProperty('--tl-axis-w', width);
       }
+      // The ruler's label step needs this as a NUMBER, not only as a var. It
+      // rides the observer that is already reading this box rather than
+      // starting a second one, and the guard keeps a re-render from being
+      // scheduled on every notification. Safe against the loop the comment
+      // above warns of: the labels live in an absolutely positioned .ruler,
+      // so how many there are cannot change the scrubber's width.
+      setAxisW((prev) => (prev === px ? prev : px));
     };
     sync();
     const ro = new ResizeObserver(sync);
@@ -111,7 +158,7 @@ export default function Timeline({
   const totalFrames = Math.max(1, Math.round(duration * fps));
   const curTime = frame / fps;
   const progress = (frame / (totalFrames - 1 || 1)) * 100;
-  const { labels, dashes } = buildRuler(duration);
+  const { labels, dashes } = buildRuler(duration, axisW);
 
   return (
     <div className={`timeline-shell ${lanesOpen ? 'lanes-open' : ''}`} ref={shellRef}>
@@ -129,8 +176,8 @@ export default function Timeline({
       <div className="scrubber" ref={scrubberRef}>
         <div className="tl-trackbar" />
         <div className="ruler">
-          {dashes.map((pct, i) => (
-            <span key={`d${i}`} className="ruler-dash" style={{ left: `${pct}%`, width: 8 }} />
+          {dashes.map((pos, i) => (
+            <span key={`d${i}`} className="ruler-dash" style={{ left: pos }} />
           ))}
           {labels.map(({ t, pct }) => (
             <span key={`l${t}`} className="ruler-label" style={{ left: `${pct}%` }}>{t}s</span>

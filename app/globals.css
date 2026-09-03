@@ -2061,10 +2061,25 @@ select.field {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+/* Same grid, same chip. The card-shape row sits inside .shape-pills, which
+   flattens its chips to 11px type and zero vertical padding for the short
+   two-option rows it was written for — on a four-column grid that just made
+   the same control look smaller than the canvas Aspect above it. Restating
+   both here keeps the two grids identical without touching the video-end row
+   that still wants the compact skin. */
 .aspect-pills .pill,
 .card-shape-pills .pill {
   min-width: 0;
+  padding-block: 5px;
   padding-inline: 4px;
+  font-size: var(--fs-ui);
+  line-height: var(--lh-ui);
+}
+
+/* The ratio fields sit under the grid, not in a .ctl-row — this panel lays
+   its labels out with .asset-meta. */
+.card-shape-dims {
+  margin-top: 6px;
 }
 
 /* crop-focus popover (per-asset cover-fit anchor) */
@@ -2518,12 +2533,34 @@ select.field {
   position: absolute;
   left: 0;
   right: 0;
-  top: 16.5px;
+  /* 17 and not the 16.5 the Figma port carried: a half-pixel origin is
+     inherited by everything inside, so the marks below landed on y 884.5 and
+     antialiasing rounded their corners off no matter how square the box was.
+     Half a pixel down is invisible; the marks being actual squares is not. */
+  top: 17px;
   height: 11px;
 }
 
+/* The subdivision marks between labels. Timeline.tsx has emitted these since
+   the first commit; c25dd3b ("Light Figma UI") switched the rule to
+   display:none while redoing the chrome, and the ruler has read as bare
+   labels ever since — the seconds between them had nothing to sit on.
+
+   Square and 3px, the same side as the slider's step marks, and dimmer than
+   the labels so they subdivide without competing. Left-aligned at their
+   position like .ruler-label above, so a mark and a label that share a
+   coordinate start on the same pixel. */
 .ruler-dash {
-  display: none;
+  position: absolute;
+  /* Every number here is a whole pixel — 4 + 3 in an 11px row — and the left
+     offset arrives already rounded from the component. A 2px mark sitting at
+     x 289.781 is spread across three pixel columns at partial coverage, and
+     what antialiasing makes of that is a soft blob: square in the box model,
+     round on the screen. Same side as the slider's step marks. */
+  top: 4px;
+  width: 3px;
+  height: 3px;
+  background: color-mix(in srgb, var(--fg-faint) 60%, transparent);
 }
 
 .ruler-label {
