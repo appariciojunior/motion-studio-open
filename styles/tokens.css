@@ -100,6 +100,31 @@
 
   /* ---- Motion ---- */
   --t-fast: 120ms;
+  /* Sliding segmented highlight. Both values are measured off the reference
+     capture, not guessed: 14.6 frames at 30 fps, and a curve fitted to 29
+     samples across two transitions (rms .037 — every named ease, expo /
+     power3-5 / circ .inOut, sits above .11). The duration is fixed: a
+     two-segment jump took the same 490ms as a one-segment jump. */
+  --t-seg:   490ms;
+  --e-seg:   cubic-bezier(.71, 0, .07, 1);
+  /* The label flip waits for the pill to get there. The curve is flat for its
+     first third, so nothing moves before ~170ms — flipping the text at 190ms
+     lands it under the pill instead of leaving white-on-white mid-travel. */
+  --t-seg-flip: 190ms;
+  /* Slider rubber band: how far the track's pushed edge gives when you drag
+     past an end. The reference stretched 26px on a 943×160 track (2.8% of the
+     width, 16% of the height); on a 34px track that is ~6px either way. */
+  --sl-rubber: 6px;
+  /* The fill carries the contrast now, the way the reference does: a solid
+     dark bar sweeping under the readout, not a white box with a hairline. It
+     reuses the inverse pair the Export button and the playhead already use,
+     so no new colour enters the palette — and because the pair already flips
+     per theme, the readout inverts correctly in both without a dark override
+     (light: #111827 bar / white text; dark: white bar / #111111 text). */
+  --sl-fill:    var(--inverse-bg);
+  --sl-fill-fg: var(--inverse-fg);
+  /* Side of the square step marks the track reveals on hover. */
+  --sl-tick:    3px;
 }
 
 :root[data-theme="dark"] {
