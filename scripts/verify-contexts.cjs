@@ -166,6 +166,54 @@ const pending = CTX_BUILDERS.filter((rel) => {
   return src.includes('easedPhase') && !src.includes('cardAspect');
 });
 
+// ---------- ciclo de vida do contexto GL ----------
+//
+// Um contexto perdido POR ORDEM DA PAGINA e contado pelo Chrome, e passado o
+// limite dele a criacao seguinte volta "A WebGL context could not be created.
+// Reason: Web page caused context loss and was blocked". Quando isso acontece
+// nada mais consegue contexto: a miniatura 3D cai para 2D, o Pixi da miniatura
+// tambem falha, e o palco morre em `renderer3d.init` — leva o editor inteiro.
+//
+// Aconteceu por dois caminhos, e os dois eram um destroy num lugar que roda A
+// CADA TROCA: as miniaturas quando `refs` chega a zero (toda troca de grupo do
+// acordeao) e o palco quando o engine muda (2D <-> webgl). Medido antes da
+// correcao: 11 perdas em 10 alternancias, linear e sem teto.
+//
+// Verificado na FONTE porque nenhum teste de unidade ve isto.
+const DERRUBA_CONTEXTO = /forceContextLoss\s*\(|\.destroy\s*\(\s*true/;
+const semComentarios = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+
+for (const rel of ['three3d/thumbScene.ts', 'lib/thumbScene2d.ts']) {
+  const codigo = semComentarios(fs.readFileSync(path.join(root, rel), 'utf8'));
+  assertions++;
+  if (DERRUBA_CONTEXTO.test(codigo)) {
+    failures.push({
+      subject: rel,
+      message: 'derruba contexto GL (forceContextLoss ou destroy(true)) — o release da miniatura roda'
+        + ' a cada troca de grupo, e o Chrome bloqueia criacao depois de somar essas perdas',
+    });
+  }
+}
+{
+  const rel = 'components/PreviewStage.tsx';
+  const codigo = semComentarios(fs.readFileSync(path.join(root, rel), 'utf8'));
+  assertions++;
+  if (/\.destroy\s*\(/.test(codigo)) {
+    failures.push({
+      subject: rel,
+      message: 'destroi o renderer do palco — isso roda a cada troca de engine e cada destroy custa uma'
+        + ' perda de contexto contada contra a pagina; estacione o renderer em vez de destruir',
+    });
+  }
+  assertions++;
+  if (!/palcos\s*\.\s*set\s*\(/.test(codigo)) {
+    failures.push({
+      subject: rel,
+      message: 'nao guarda o renderer por engine — sem o cache, trocar de engine cria contexto novo toda vez',
+    });
+  }
+}
+
 if (failures.length) {
   console.error(`\nContext verification FAILED — ${failures.length} problem(s):\n`);
   const seen = new Set();
