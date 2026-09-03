@@ -135,13 +135,29 @@ export async function encodeGifInBrowser(opts: GifExportOpts): Promise<Blob> {
     ctx.drawImage(src, 0, 0, width, height);
     const { data } = ctx.getImageData(0, 0, width, height);
 
-    // rgb565 is gifenc's default and the finer bucket: 65536 candidate colours
-    // feeding the quantiser instead of rgb444's 4096.
-    const palette = quantize(data, 256, { format: 'rgb565' });
-    const index = dither > 0
+    // Check if frame has transparency (e.g. transparent background)
+    let hasAlpha = false;
+    for (let i = 3; i < data.length; i += 16) {
+      if (data[i] < 250) {
+        hasAlpha = true;
+        break;
+      }
+    }
+
+    const format = hasAlpha ? 'rgba4444' : 'rgb565';
+    const palette = quantize(data, 256, hasAlpha ? { format: 'rgba4444', oneBitAlpha: true } : { format: 'rgb565' });
+    const index = (dither > 0 && !hasAlpha)
       ? applyPaletteDithered(data, palette, width, height, nearestColorIndex, dither)
-      : applyPalette(data, palette, 'rgb565');
-    gif.writeFrame(index, width, height, { palette, delay, repeat: 0 });
+      : applyPalette(data, palette, format);
+    const transparentIndex = hasAlpha ? palette.findIndex((c: number[]) => c[3] === 0) : -1;
+
+    gif.writeFrame(index, width, height, {
+      palette,
+      delay,
+      repeat: 0,
+      transparent: transparentIndex >= 0,
+      transparentIndex: Math.max(0, transparentIndex),
+    });
 
     onProgress?.(f + 1);
     // Quantising a 1080p frame is heavy synchronous work; yield every frame so

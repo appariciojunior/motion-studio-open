@@ -538,14 +538,22 @@ export class SceneRenderer {
   // ---- overlays ----
   private drawOverlays(s: SceneState) {
     const { width, height } = s;
-    const backgroundAlpha = Math.max(0, Math.min(1, (s.background.alpha ?? 100) / 100));
+    const rawAlpha = s.background.alpha ?? 100;
+    const alphaPct = (rawAlpha > 0 && rawAlpha <= 1) ? rawAlpha * 100 : rawAlpha;
+    const backgroundAlpha = Math.max(0, Math.min(1, alphaPct / 100));
 
     // background
     this.bg.clear();
     this.bg.alpha = backgroundAlpha;
     this.gradientSprite.alpha = backgroundAlpha;
-    this.bgSprite.alpha = backgroundAlpha;
-    if (s.background.source === 'color' && s.background.gradient) {
+
+    if (backgroundAlpha === 0) {
+      this.bg.visible = false;
+      this.gradientSprite.visible = false;
+      this.bgSprite.visible = false;
+    } else if (s.background.source === 'color' && s.background.gradient) {
+      this.bg.visible = false;
+      this.bgSprite.visible = false;
       const spec = normalizeGradientSpec(s.background.gradientSpec, s.background.color, s.background.color2);
       const phase = ((s.frame / Math.max(1, s.duration * s.fps)) % 1 + 1) % 1;
       const [rw, rh] = advancedRasterSize(width, height, gradientRasterMaxEdge(spec));
@@ -574,9 +582,14 @@ export class SceneRenderer {
       }
       this.gradientSprite.visible = true;
       this.gradientSprite.scale.set(width / rw, height / rh);
-    } else {
+    } else if (s.background.source === 'color') {
       this.gradientSprite.visible = false;
+      this.bgSprite.visible = false;
+      this.bg.visible = true;
       this.bg.rect(0, 0, width, height).fill(s.background.color);
+    } else {
+      this.bg.visible = false;
+      this.gradientSprite.visible = false;
     }
 
     // safe area guide
@@ -637,9 +650,14 @@ export class SceneRenderer {
       follow = true;
     }
 
-    if (!tex) { this.bgSprite.visible = false; return; }
+    const rawAlpha = bg.alpha ?? 100;
+    const alphaPct = (rawAlpha > 0 && rawAlpha <= 1) ? rawAlpha * 100 : rawAlpha;
+    const backgroundAlpha = Math.max(0, Math.min(1, alphaPct / 100));
+
+    if (!tex || backgroundAlpha === 0) { this.bgSprite.visible = false; return; }
 
     this.bgSprite.visible = true;
+    this.bgSprite.alpha = backgroundAlpha;
     this.bgSprite.texture = tex;
     const cover = Math.max(width / tex.width, height / tex.height) * 1.4; // headroom for drift
     this.bgSprite.scale.set(cover);
@@ -842,6 +860,9 @@ export class SceneRenderer {
   renderFrame(frame: number) {
     if (!this.ready || this.destroyed || !this.app?.renderer) return;
     try {
+      if ((this.app.renderer as any).background) {
+        (this.app.renderer as any).background.alpha = 0;
+      }
       this.getFrameState(frame);
       if (!this.ready || this.destroyed || !this.app?.renderer) return;
       this.app.renderer.render(this.app.stage);
@@ -850,14 +871,20 @@ export class SceneRenderer {
     }
   }
 
-  // Deterministic capture: realize frame, render, read pixels as a JPEG data URL.
-  // JPEG (q0.92) over PNG: ~5–10× smaller + far faster to encode at 2K/4K, and
-  // the scene always paints a background so the missing alpha channel is moot.
-  // ffmpeg re-encodes to h264/gif downstream, so there's no visible quality loss.
+  // Deterministic capture: realize frame, render, read pixels as a data URL.
+  // PNG when background has transparency (alpha < 100) so the alpha channel is preserved.
+  // JPEG (q0.92) when opaque: ~5–10× smaller + far faster to encode.
   captureFrame(frame: number): string {
     if (!this.ready || this.destroyed || !this.app?.renderer) return '';
     this.renderFrame(frame);
-    return (this.app.canvas as HTMLCanvasElement)?.toDataURL?.('image/jpeg', 0.92) ?? '';
+    const canvas = this.app.canvas as HTMLCanvasElement;
+    const s = useSceneStore.getState();
+    const rawAlpha = s.background.alpha ?? 100;
+    const alphaPct = (rawAlpha > 0 && rawAlpha <= 1) ? rawAlpha * 100 : rawAlpha;
+    if (alphaPct < 100) {
+      return canvas?.toDataURL?.('image/png') ?? '';
+    }
+    return canvas?.toDataURL?.('image/jpeg', 0.92) ?? '';
   }
 
   // Multiply the backing-store resolution for export capture. Logical

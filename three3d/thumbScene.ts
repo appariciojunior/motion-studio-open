@@ -337,41 +337,72 @@ export function detachCanvas() {
 
 // ---- ciclo de vida do contexto ----
 //
-// Mesmo motivo do lado Pixi: este modulo tomava um contexto GL e nunca o
-// devolvia, e com os dois somados o PALCO ficava sem. Medido: o canvas do palco
-// existia com zero contexto e `app.renderer` vinha null, derrubando o editor em
-// makePlaceholderTexture.
+// UM contexto, criado na primeira miniatura e mantido pela vida da pagina. Ele
+// NAO e destruido quando a ultima miniatura sai, e essa e a correcao de um bug
+// que o desenho anterior causava.
 //
-// Contagem de referencias, nao ordem de inicializacao: cada miniatura montada
-// retem, cada desmontada solta, e a ultima a sair devolve o contexto.
+// Antes, `refs` chegando a zero destruia o renderer e chamava
+// `forceContextLoss()`. Mas `refs` passa por zero em toda troca de grupo no
+// acordeao — o React desmonta as miniaturas do grupo antigo antes de montar as
+// do novo — entao cada troca custava uma perda de contexto CAUSADA PELA PAGINA.
+// O Chrome soma essas perdas por pagina e, passado o limite dele, recusa criar
+// o proximo:
+//
+//   THREE.WebGLRenderer: A WebGL context could not be created.
+//   Reason: "Web page caused context loss and was blocked"
+//
+// que e o erro relatado ao trocar de preset com efeito ativo, estourando aqui
+// em `getShared`, chamado pela fila de miniaturas. Medido no app antes desta
+// mudanca: 4 perdas de proposito nas 3 primeiras trocas de grupo. Adiar a
+// destruicao so diminuiria a frequencia; nao destruir torna o erro impossivel,
+// porque `shared` nunca volta a ser null e um segundo contexto nunca e pedido.
+//
+// O medo original era o oposto — este modulo e o do Pixi tomando contexto e
+// deixando o PALCO sem (medido na epoca: canvas do palco com zero contexto e
+// `app.renderer` null, derrubando o editor em makePlaceholderTexture). Mas isso
+// vinha de MUITOS contextos; com um singleton por engine o total da pagina fica
+// em tres (palco, miniatura 2D, miniatura 3D), medido, contra o limite de ~16
+// do navegador. Segurar dois nao chega perto de apertar.
+//
+// A contagem de referencias continua, porque a ultima miniatura a sair ainda
+// tem trabalho util: soltar o canvas de onde ele estava e jogar fora o cache de
+// geometria, que e a unica coisa aqui que cresce com o uso. Adiada, para nao
+// refazer geometria a cada troca de grupo.
+const CARENCIA_MS = 10_000;
 let refs = 0;
+let agendado: ReturnType<typeof setTimeout> | null = null;
+
+function cancelarLimpeza() {
+  if (agendado === null) return;
+  clearTimeout(agendado);
+  agendado = null;
+}
 
 export function retainThumb3d(): () => void {
   refs++;
+  cancelarLimpeza();
   let solto = false;
   return () => {
     if (solto) return;
     solto = true;
     refs = Math.max(0, refs - 1);
-    if (refs === 0) disposeShared3d();
+    if (refs > 0) return;
+    cancelarLimpeza();
+    agendado = setTimeout(() => {
+      agendado = null;
+      if (refs === 0) limparShared3d();
+    }, CARENCIA_MS);
   };
 }
 
-function disposeShared3d() {
+// Limpeza, nao destruicao: o renderer, o contexto, o plano, os tons e os
+// materiais dos slots ficam. So sai o que se refaz sozinho sob demanda.
+function limparShared3d() {
   const ctx = shared;
-  shared = null;
   if (!ctx) return;
   try {
     detachCanvas();
     ctx.geomCache.forEach((g) => g.dispose());
     ctx.geomCache.clear();
-    ctx.plane.dispose();
-    ctx.tones.forEach((t) => t.dispose());
-    ctx.slots.forEach((s) => { s.front.material.dispose(); s.back.material.dispose(); });
-    ctx.slots.length = 0;
-    ctx.renderer.dispose();
-    // dispose() solta os recursos mas NAO o contexto; sem isto o navegador
-    // segue contando este canvas contra o limite.
-    ctx.renderer.forceContextLoss();
-  } catch { /* um contexto que já foi não precisa ir de novo */ }
+  } catch { /* nada aqui e essencial: falhar em limpar nao pode quebrar a pagina */ }
 }

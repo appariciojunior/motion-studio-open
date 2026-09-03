@@ -313,37 +313,53 @@ export function detachCanvas2d() {
 
 // ---- ciclo de vida do contexto ----
 //
-// Um contexto GL e recurso finito e este modulo tomava um e nunca devolvia. Com
-// o three das miniaturas fazendo o mesmo, o PALCO ficava sem: medido, o canvas
-// do palco existia com zero contexto e `app.renderer` vinha null, o que fazia
-// makePlaceholderTexture estourar em `generateTexture` e derrubava o editor.
+// UMA Application, criada na primeira miniatura e mantida pela vida da pagina.
+// O porque completo esta em `three3d/thumbScene.ts`, e vale igual aqui: `refs`
+// passa por zero em toda troca de grupo do acordeao, e destruir a Application
+// ali derruba o contexto uma vez por troca. O Chrome soma perdas causadas pela
+// pagina e depois recusa criar contexto — "Web page caused context loss and was
+// blocked". Aqui o `destroy(true)` nao chama loseContext explicitamente, mas
+// derruba o contexto do mesmo jeito, entao o ciclo tinha de sair dos dois lados:
+// consertar so um deixa a troca de grupo derrubando contexto pelo outro.
 //
-// Contagem de referencias em vez de ordem de inicializacao, que seria fragil:
-// cada miniatura montada retem, cada uma desmontada solta, e quando a ultima sai
-// (o usuario deixou o catalogo) o contexto e devolvido.
+// Com o singleton mantido, a pagina fica em tres contextos (palco, miniatura 2D,
+// miniatura 3D) — medido — contra o limite de ~16 do navegador.
+//
+// A contagem de referencias fica porque a ultima miniatura a sair ainda solta o
+// canvas de onde ele estava. Adiada, para nao fazer isso a cada troca de grupo.
+const CARENCIA_MS = 10_000;
 let refs = 0;
+let agendado: ReturnType<typeof setTimeout> | null = null;
+
+function cancelarLimpeza2d() {
+  if (agendado === null) return;
+  clearTimeout(agendado);
+  agendado = null;
+}
 
 export function retainThumb2d(): () => void {
   refs++;
+  cancelarLimpeza2d();
   let solto = false;
   return () => {
     if (solto) return;
     solto = true;
     refs = Math.max(0, refs - 1);
-    if (refs === 0) disposeShared2d();
+    if (refs > 0) return;
+    cancelarLimpeza2d();
+    agendado = setTimeout(() => {
+      agendado = null;
+      if (refs === 0) limparShared2d();
+    }, CARENCIA_MS);
   };
 }
 
-function disposeShared2d() {
-  const ctx = shared;
-  shared = null;
-  booting = null;
-  whiteCache.clear();
-  if (!ctx) return;
+// Limpeza, nao destruicao: a Application, o contexto e o cache de texturas
+// brancas ficam. O cache e limitado (uma entrada por tamanho de card), entao
+// nao ha o que crescer.
+function limparShared2d() {
+  if (!shared) return;
   try {
     detachCanvas2d();
-    // `true` para o contexto tambem: sem isso o canvas guarda o contexto e a
-    // devolucao nao acontece de verdade.
-    ctx.app.destroy(true, { children: true, texture: true });
-  } catch { /* um contexto que já foi não precisa ir de novo */ }
+  } catch { /* nada aqui e essencial: falhar em limpar nao pode quebrar a pagina */ }
 }

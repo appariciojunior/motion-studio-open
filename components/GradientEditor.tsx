@@ -73,30 +73,19 @@ function presetSpec(current: GradientSpec, preset: (typeof PRESETS)[number]): Gr
   });
 }
 
-function StopColor({ stop, onColor }: { stop: GradientStop; onColor: (color: string) => void }) {
-  const [text, setText] = useState(stop.color.slice(1));
-  useEffect(() => setText(stop.color.slice(1)), [stop.color]);
-  const commit = () => {
-    if (/^[0-9a-f]{6}$/i.test(text)) onColor(`#${text}`);
-    else setText(stop.color.slice(1));
-  };
+import ColorPicker from './ColorPicker';
+
+function StopColor({ stop, onColor }: { stop: GradientStop; onColor: (color: string, opacity: number) => void }) {
+  const currentAlpha = Math.round((stop.opacity ?? 1) * 100);
   return (
     <div className="ctl-row">
       <label className="ctl-label">Colour</label>
-      <div className="ctl-input">
-        <div className="color gradient-stop-color">
-          <input type="color" aria-label="Stop colour" value={stop.color} onChange={(e) => onColor(e.target.value)} />
-          <input
-            className="field"
-            aria-label="Stop hex"
-            value={`#${text}`}
-            maxLength={7}
-            onChange={(e) => setText(e.target.value.replace(/^#/, ''))}
-            onBlur={commit}
-            onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-          />
-        </div>
-      </div>
+      <ColorPicker
+        color={stop.color}
+        alpha={currentAlpha}
+        showAlpha={true}
+        onChange={(hex, a) => onColor(hex, Math.max(0, Math.min(1, a / 100)))}
+      />
     </div>
   );
 }
@@ -119,7 +108,9 @@ export default function GradientEditor({ value, onChange, showMapping = false }:
   const addStopAt = (position: number) => {
     if (stops.length >= MAX_GRADIENT_STOPS) return;
     const pos = clamp(position);
-    const stop = { id: nextStopId(), position: pos, color: rgbHex(sampleGradientRGB(spec, pos)), opacity: 1 };
+    const sample = sampleGradientRGB(spec, pos);
+    const opacity = sample[3] != null ? Math.max(0, Math.min(1, Math.round((sample[3] / 255) * 100) / 100)) : 1;
+    const stop = { id: nextStopId(), position: pos, color: rgbHex(sample), opacity };
     setSelectedId(stop.id);
     emit({ stops: [...spec.stops, stop] });
   };
@@ -190,24 +181,51 @@ export default function GradientEditor({ value, onChange, showMapping = false }:
           style={{ background: gradientCss({ ...spec, mode: 'basic', shape: spec.shape === 'radial' ? 'radial' : 'linear' }) }}
           onPointerDown={(e) => { if (e.target === e.currentTarget) addStopAt(barPosition(e.clientX)); }}
         >
-          {stops.map((stop) => (
-            <button
-              key={stop.id}
-              type="button"
-              className={`gradient-stop ${selected?.id === stop.id ? 'selected' : ''}`}
-              style={{ left: `${stop.position * 100}%`, background: stop.color }}
-              aria-label={`Colour stop ${Math.round(stop.position * 100)}%`}
-              onClick={(e) => { e.stopPropagation(); setSelectedId(stop.id); }}
-              onPointerDown={(e) => {
-                e.stopPropagation();
-                setSelectedId(stop.id);
-                e.currentTarget.setPointerCapture(e.pointerId);
-              }}
-              onPointerMove={(e) => {
-                if (e.currentTarget.hasPointerCapture(e.pointerId)) replaceStop(stop.id, { position: barPosition(e.clientX) });
-              }}
-            />
-          ))}
+          {stops.map((stop) => {
+            const stopAlpha = stop.opacity ?? 1;
+            return (
+              <button
+                key={stop.id}
+                type="button"
+                className={`gradient-stop ${selected?.id === stop.id ? 'selected' : ''}`}
+                style={{
+                  left: `${stop.position * 100}%`,
+                  overflow: 'hidden',
+                  background: '#222',
+                }}
+                aria-label={`Colour stop ${Math.round(stop.position * 100)}%`}
+                onClick={(e) => { e.stopPropagation(); setSelectedId(stop.id); }}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  setSelectedId(stop.id);
+                  e.currentTarget.setPointerCapture(e.pointerId);
+                }}
+                onPointerMove={(e) => {
+                  if (e.currentTarget.hasPointerCapture(e.pointerId)) replaceStop(stop.id, { position: barPosition(e.clientX) });
+                }}
+              >
+                {/* Checkerboard background for transparent stops */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    backgroundImage: `linear-gradient(45deg, #555 25%, transparent 25%), linear-gradient(-45deg, #555 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #555 75%), linear-gradient(-45deg, transparent 75%, #555 75%)`,
+                    backgroundSize: '6px 6px',
+                    backgroundColor: '#333',
+                  }}
+                />
+                {/* Color overlay with stop opacity */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    backgroundColor: stop.color,
+                    opacity: stopAlpha,
+                  }}
+                />
+              </button>
+            );
+          })}
         </div>
         <div className="gradient-ramp-actions">
           <button className="btn" type="button" onClick={() => emit({ stops: spec.stops.map((stop) => ({ ...stop, position: 1 - stop.position })) })}>Reverse</button>
@@ -221,7 +239,7 @@ export default function GradientEditor({ value, onChange, showMapping = false }:
             <h4 className="ctl-section-title">Selected stop</h4>
             <button className="link-btn" type="button" disabled={stops.length <= 2} onClick={removeSelected}>Remove</button>
           </div>
-          <StopColor stop={selected} onColor={(color) => replaceStop(selected.id, { color })} />
+          <StopColor stop={selected} onColor={(color, opacity) => replaceStop(selected.id, { color, opacity })} />
           <ControlRow def={stopPositionDef} value={Math.round(selected.position * 100)}
             onChange={(position) => replaceStop(selected.id, { position: clamp(Number(position) / 100) })} />
         </div>

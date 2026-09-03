@@ -4,6 +4,9 @@ import { useEffect, useRef, useState } from 'react';
 import type { ControlDef } from '@/lib/types';
 import MobileSheet from './MobileSheet';
 import { useMobileInteractions } from './MobileInteractions';
+import ColorPicker from './ColorPicker';
+
+export { ColorPicker };
 
 // grows with what is typed, so nothing clips and nothing floats in empty box
 const fieldWidth = (text: string) => `calc(${Math.min(8, Math.max(3, text.length))}ch + 14px)`;
@@ -331,10 +334,35 @@ function DirectionControl({ def, value, onChange }: RowProps) {
 
 function ColorControl({ value, onChange }: { value: any; onChange: (v: any) => void }) {
   return (
-    <div className="color">
-      <input type="color" value={value} onChange={(e) => onChange(e.target.value)} />
-      <input className="field" type="text" value={value} onChange={(e) => onChange(e.target.value)} />
-    </div>
+    <ColorPicker
+      color={value || '#000000'}
+      showAlpha={false}
+      onChange={(hex) => onChange(hex)}
+    />
+  );
+}
+
+export function ColorWithOpacityControl({
+  color,
+  opacity = 100,
+  onChangeColor,
+  onChangeOpacity,
+}: {
+  color: string;
+  opacity?: number;
+  onChangeColor: (hex: string) => void;
+  onChangeOpacity?: (opacity: number) => void;
+}) {
+  return (
+    <ColorPicker
+      color={color || '#000000'}
+      alpha={opacity}
+      showAlpha={Boolean(onChangeOpacity)}
+      onChange={(hex, a) => {
+        onChangeColor(hex);
+        if (onChangeOpacity) onChangeOpacity(a);
+      }}
+    />
   );
 }
 
