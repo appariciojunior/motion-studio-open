@@ -1159,6 +1159,12 @@ input[type=range] {
   bottom: 0;
   z-index: 2;
   background: var(--sl-fill);
+  /* Inset rather than a border, so the hairline never changes the box: the
+     fill's width is a percentage of the track and the handle is positioned
+     against the same percentage, so anything that moves its edges by a pixel
+     puts the two out of step. Transparent in light, where the fill states its
+     own edge. */
+  box-shadow: inset 0 0 0 1px var(--sl-fill-edge);
   border-radius: var(--r-ctrl);
   pointer-events: none;
 }
@@ -1233,19 +1239,25 @@ input[type=range] {
    inherited variables because the mobile block redeclares .shandle's
    background outright, and a variable survives that where a selector would
    have to out-specify it. */
+/* The on-fill colours are their own tokens rather than being derived from the
+   fill. Deriving them assumed the fill was the loud, high-contrast bar the
+   reference has; both themes here ended up wanting a quiet fill a step off the
+   track instead, and a derived colour on a quiet fill lands somewhere nobody
+   chose. Naming them lets each theme say what the readout and the handle do
+   over the fill — in light, exactly what they do off it. */
 .sinv {
   position: absolute;
   inset: 0;
   z-index: 3;
   pointer-events: none;
-  --sl-handle: var(--sl-fill-fg);
-  --sl-value: color-mix(in srgb, var(--sl-fill-fg) 78%, var(--sl-fill));
+  --sl-handle: var(--sl-handle-on);
+  --sl-value: var(--sl-value-on);
 }
 
 /* The readout is a click target, and under the fill its own hover chip is
    hidden — so the copy on top has to show one. */
 .strack:has(.sval:hover):not(.is-dragging) .sinv .sval {
-  background: color-mix(in srgb, var(--sl-fill-fg) 16%, transparent);
+  background: color-mix(in srgb, var(--sl-handle-on) 16%, transparent);
 }
 
 .szero,
@@ -1254,7 +1266,7 @@ input[type=range] {
 }
 
 .sinv .szero {
-  background: color-mix(in srgb, var(--sl-fill-fg) 34%, transparent);
+  background: color-mix(in srgb, var(--sl-handle-on) 34%, transparent);
 }
 
 /* Step marks, hidden until the pointer is on the track. At rest the row
@@ -1427,11 +1439,18 @@ input[type=range] {
    frame (no stretch, no overshoot, no squash) and it never passed its target,
    so this is pure translation on --t-seg / --e-seg.
 
-   Built on :has() so no panel markup changes — twenty-two call sites across
-   twelve components already render a track plus buttons, and none of them
+   Built on :has() so no panel markup changes — twenty-six call sites across
+   fifteen components already render a track plus buttons, and none of them
    needs to learn about a thumb. --seg-n is the option count, and
    translateX(N * 100%) resolves against the pill's own width, which IS one
    slot.
+
+   Three class families, one control. .tabs/.tab is .segmented/.seg under
+   another name — same flex row, same --card-inset track, same --seg-pad, same
+   flex: 1 slots, same --seg-active-bg on .active — so it belongs in the same
+   :is() list rather than in a copy of these rules. Leaving it out is what
+   made the Templates/Custom header the one toggle in the app that still
+   blinked.
 
    The offset is written out per index rather than read from a variable on
    purpose. A transitioned property whose value comes from an UNREGISTERED
@@ -1447,20 +1466,20 @@ input[type=range] {
    .card-shape-pills), which wrap to a second row that a horizontal slide
    cannot describe. */
 @supports selector(:has(*)) {
-  :is(.segmented, .pills) {
+  :is(.segmented, .pills, .tabs) {
     position: relative;
     --seg-n: 1;
   }
 
-  :is(.segmented, .pills):has(> :nth-child(2):last-child) { --seg-n: 2; }
-  :is(.segmented, .pills):has(> :nth-child(3):last-child) { --seg-n: 3; }
-  :is(.segmented, .pills):has(> :nth-child(4):last-child) { --seg-n: 4; }
-  :is(.segmented, .pills):has(> :nth-child(5):last-child) { --seg-n: 5; }
-  :is(.segmented, .pills):has(> :nth-child(6):last-child) { --seg-n: 6; }
-  :is(.segmented, .pills):has(> :nth-child(7):last-child) { --seg-n: 7; }
-  :is(.segmented, .pills):has(> :nth-child(8):last-child) { --seg-n: 8; }
+  :is(.segmented, .pills, .tabs):has(> :nth-child(2):last-child) { --seg-n: 2; }
+  :is(.segmented, .pills, .tabs):has(> :nth-child(3):last-child) { --seg-n: 3; }
+  :is(.segmented, .pills, .tabs):has(> :nth-child(4):last-child) { --seg-n: 4; }
+  :is(.segmented, .pills, .tabs):has(> :nth-child(5):last-child) { --seg-n: 5; }
+  :is(.segmented, .pills, .tabs):has(> :nth-child(6):last-child) { --seg-n: 6; }
+  :is(.segmented, .pills, .tabs):has(> :nth-child(7):last-child) { --seg-n: 7; }
+  :is(.segmented, .pills, .tabs):has(> :nth-child(8):last-child) { --seg-n: 8; }
 
-  :is(.segmented, .pills)::before {
+  :is(.segmented, .pills, .tabs)::before {
     content: '';
     position: absolute;
     top: var(--seg-pad);
@@ -1474,19 +1493,19 @@ input[type=range] {
     pointer-events: none;
   }
 
-  :is(.segmented, .pills):has(> :nth-child(2).active)::before { transform: translateX(100%); }
-  :is(.segmented, .pills):has(> :nth-child(3).active)::before { transform: translateX(200%); }
-  :is(.segmented, .pills):has(> :nth-child(4).active)::before { transform: translateX(300%); }
-  :is(.segmented, .pills):has(> :nth-child(5).active)::before { transform: translateX(400%); }
-  :is(.segmented, .pills):has(> :nth-child(6).active)::before { transform: translateX(500%); }
-  :is(.segmented, .pills):has(> :nth-child(7).active)::before { transform: translateX(600%); }
-  :is(.segmented, .pills):has(> :nth-child(8).active)::before { transform: translateX(700%); }
+  :is(.segmented, .pills, .tabs):has(> :nth-child(2).active)::before { transform: translateX(100%); }
+  :is(.segmented, .pills, .tabs):has(> :nth-child(3).active)::before { transform: translateX(200%); }
+  :is(.segmented, .pills, .tabs):has(> :nth-child(4).active)::before { transform: translateX(300%); }
+  :is(.segmented, .pills, .tabs):has(> :nth-child(5).active)::before { transform: translateX(400%); }
+  :is(.segmented, .pills, .tabs):has(> :nth-child(6).active)::before { transform: translateX(500%); }
+  :is(.segmented, .pills, .tabs):has(> :nth-child(7).active)::before { transform: translateX(600%); }
+  :is(.segmented, .pills, .tabs):has(> :nth-child(8).active)::before { transform: translateX(700%); }
 
   /* Nothing selected (a custom canvas size, an unmatched frame preset) has to
      read as nothing selected, not as option one. */
-  :is(.segmented, .pills):not(:has(> .active))::before { opacity: 0; }
+  :is(.segmented, .pills, .tabs):not(:has(> .active))::before { opacity: 0; }
 
-  :is(.segmented, .pills) > :is(.seg, .pill) {
+  :is(.segmented, .pills, .tabs) > :is(.seg, .pill, .tab) {
     position: relative;
     z-index: 1;
     transition: color var(--t-fast) var(--t-seg-flip);
@@ -1495,32 +1514,32 @@ input[type=range] {
   /* The chip is painted by the track now, so the button stops painting its
      own — otherwise the highlight appears instantly at the destination and
      the slide has nothing left to show. */
-  :is(.segmented, .pills) > :is(.seg, .pill).active {
+  :is(.segmented, .pills, .tabs) > :is(.seg, .pill, .tab).active {
     background: transparent;
   }
 
   /* Hover feedback answers the pointer directly and must not wait on the
      travel delay. */
-  :is(.segmented, .pills) > :is(.seg, .pill):hover {
+  :is(.segmented, .pills, .tabs) > :is(.seg, .pill, .tab):hover {
     transition-delay: 0ms;
   }
 
   /* ---- opt-outs: unequal slots, wrapped grids, and more options than there
      are slot rules above ---- */
   :is(.pj-sort, .aspect-pills, .card-shape-pills)::before,
-  :is(.segmented, .pills):has(> :nth-child(9))::before {
+  :is(.segmented, .pills, .tabs):has(> :nth-child(9))::before {
     display: none;
   }
 
-  :is(.pj-sort, .aspect-pills, .card-shape-pills) > :is(.seg, .pill).active,
-  :is(.segmented, .pills):has(> :nth-child(9)) > :is(.seg, .pill).active {
+  :is(.pj-sort, .aspect-pills, .card-shape-pills) > :is(.seg, .pill, .tab).active,
+  :is(.segmented, .pills, .tabs):has(> :nth-child(9)) > :is(.seg, .pill, .tab).active {
     background: var(--seg-active-bg);
     transition-delay: 0ms;
   }
 
   @media (prefers-reduced-motion: reduce) {
-    :is(.segmented, .pills)::before { transition: none; }
-    :is(.segmented, .pills) > :is(.seg, .pill) { transition-delay: 0ms; }
+    :is(.segmented, .pills, .tabs)::before { transition: none; }
+    :is(.segmented, .pills, .tabs) > :is(.seg, .pill, .tab) { transition-delay: 0ms; }
   }
 }
 
@@ -4220,9 +4239,12 @@ select.field {
      52px readout that has to stay legible under a thumb. A solid dark fill
      would swallow both, so here the fill stays the light box it was and the
      inverted copy has nothing to do. */
-  .mobile-editor .sfill {
-    background: var(--card);
-    border: 1px solid var(--handle);
+  /* Same intent, now said with the tokens instead of a border — a real border
+     would move the fill's edges a pixel out of step with the handle, which is
+     positioned against the same percentage. */
+  .mobile-editor .strack {
+    --sl-fill: var(--card);
+    --sl-fill-edge: var(--handle);
   }
 
   .mobile-editor .sinv {

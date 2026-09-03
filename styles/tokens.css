@@ -115,14 +115,24 @@
      past an end. The reference stretched 26px on a 943×160 track (2.8% of the
      width, 16% of the height); on a 34px track that is ~6px either way. */
   --sl-rubber: 6px;
-  /* The fill carries the contrast now, the way the reference does: a solid
-     dark bar sweeping under the readout, not a white box with a hairline. It
-     reuses the inverse pair the Export button and the playhead already use,
-     so no new colour enters the palette — and because the pair already flips
-     per theme, the readout inverts correctly in both without a dark override
-     (light: #111827 bar / white text; dark: white bar / #111111 text). */
-  --sl-fill:    var(--inverse-bg);
-  --sl-fill-fg: var(--inverse-fg);
+  /* The slider fill is the box the value has reached, and in this design it is
+     a QUIET step off the track, not a loud bar. I tried the loud version — the
+     reference's own high-contrast fill, which inverts the readout glyph by
+     glyph — through --inverse-bg and then --chip-bg, and it was wrong in both
+     themes: a dark slab in a light panel, a bright slab in a dark one. The
+     palette had already answered this: --card-inset is the well, --card is
+     what sits in it, --handle draws the hairline between them. That is what
+     the slider always was, and it is what it goes back to.
+
+     So the pair below is the fill and its edge, and the two -on tokens are
+     what the readout and the handle wear where the opaque fill covers them.
+     Light wants them identical to the off-fill colours — the number must read
+     the same the whole way across, and the handle stays --handle throughout,
+     exactly as before. Dark differs on one of them; see that block. */
+  --sl-fill:      var(--card);
+  --sl-fill-edge: var(--handle);
+  --sl-handle-on: var(--handle);
+  --sl-value-on:  var(--fg-value);
   /* Side of the square step marks the track reveals on hover. */
   --sl-tick:    3px;
 }
@@ -148,6 +158,21 @@
   --fg-value:  #aaaaaa;
   --fg-muted:  #a3a3a3;
   --fg-faint:  #858585;
+  /* Dark uses --card-thumb rather than --card for the fill: --card here is
+     #171717, DARKER than the #232323 track, so the box would read as a hole
+     instead of as something sitting in the well. #2d2d2d is ten steps up —
+     a touch lighter and no more, which is what was asked for — and it is the
+     same pairing .sval:hover and --seg-active-bg already use on these tracks.
+
+     The one place dark differs from light: the handle brightens to --fg-body
+     where the fill has reached it. On a #2d2d2d fill a #595959 bar is nearly
+     lost, and this is the last trace of the reference's inversion that still
+     earns its place. The readout stays --fg-value throughout, so the number
+     reads evenly across the boundary. */
+  --sl-fill:      var(--card-thumb);
+  --sl-fill-edge: var(--handle);
+  --sl-handle-on: var(--fg-body);
+  --sl-value-on:  var(--fg-value);
   --seg-active-bg: #2d2d2d;
   --seg-active-fg: #ffffff;
   --inverse-bg: #ffffff;
