@@ -6,12 +6,24 @@ import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-
 import { CSS } from '@dnd-kit/utilities';
 import { useSceneStore, type AssetItem } from '@/store/useSceneStore';
 import { getTemplate, layerCountFor } from '@/templates';
-import { CARD_SHAPES, DEFAULT_FOCUS, cardAspectFor, type CropFocus } from '@/lib/crop';
+import { CARD_SHAPES, DEFAULT_FOCUS, cardAspectFor, parseCardShape, type CropFocus } from '@/lib/crop';
 import { isVideoSource } from '@/lib/videoTexture';
 import MobileSheet from './MobileSheet';
 import { useMobileInteractions } from './MobileInteractions';
+import { DimInput } from './CanvasPanel';
 
 const SHAPE_OPTIONS = ['auto', ...Object.keys(CARD_SHAPES)];
+// The pair the W×H fields open on. It is seeded from whatever ratio the scene
+// is already showing, written with its long side at 1000 so the numbers read
+// as pixels rather than as a fraction — 16:9 opens as 1000 × 563, 4:5 as
+// 800 × 1000. The rounding is not free: 1000 × 563 is 1.7762 where 16:9 is
+// 1.7778, so switching a preset to W×H shifts the crop by 0.09% — under a
+// tenth of a pixel on a 1000px card, and the cost of fields that read as
+// pixels instead of opening on "16" and "9".
+const PIXEL_SEED_LONG_EDGE = 1000;
+const pixelPairFor = (ratio: number): [number, number] => (ratio >= 1
+  ? [PIXEL_SEED_LONG_EDGE, Math.round(PIXEL_SEED_LONG_EDGE / ratio)]
+  : [Math.round(PIXEL_SEED_LONG_EDGE * ratio), PIXEL_SEED_LONG_EDGE]);
 
 const EyeIcon = ({ off }: { off?: boolean }) => (
   <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
@@ -198,6 +210,26 @@ export default function AssetsPanel() {
   const clearAssets = useSceneStore((s) => s.clearAssets);
   const cardShape = useSceneStore((s) => s.cardShape);
   const setCardShape = useSceneStore((s) => s.setCardShape);
+  // Custom mode cannot be read off the value alone: type 4 × 5 into the
+  // fields and the string becomes "4:5", which IS a preset key — the fields
+  // would vanish under the user mid-edit. So the mode is held locally, and a
+  // stored ratio that no preset claims re-opens it on its own. A project saved
+  // on a shape that happens to equal a preset re-opens showing that preset,
+  // which crops identically, so nothing is lost.
+  // What the cards are actually cropped to right now, whatever produced it —
+  // the seed for the pixel fields when the scene is on 'auto' and there is no
+  // preset ratio to read.
+  const resolvedAspect = useSceneStore((s) => cardAspectFor(
+    getTemplate(s.activeTemplateId).meta, s.width, s.height, s.cardShape,
+  ));
+  const [wantsCustomShape, setWantsCustomShape] = useState(false);
+  const storedIsCustom = !CARD_SHAPES[cardShape] && parseCardShape(cardShape) !== null;
+  const customShape = storedIsCustom || wantsCustomShape;
+  // A pair the user typed shows back verbatim; a preset or 'auto' is rewritten
+  // as pixels at the same ratio, so the fields never open on "16" and "9".
+  const [customW, customH] = storedIsCustom
+    ? (cardShape.split(':').map(Number) as [number, number])
+    : pixelPairFor(CARD_SHAPES[cardShape] ?? resolvedAspect);
   const videoEnd = useSceneStore((s) => s.videoEnd);
   const setVideoEnd = useSceneStore((s) => s.setVideoEnd);
   const hasVideo = useSceneStore((s) => s.assets.some((a) => a.origin !== 'demo' && isVideoSource(a.url, a.kind)));
@@ -341,17 +373,46 @@ export default function AssetsPanel() {
         {fullBleed ? (
           <div className="asset-meta"><span className="asset-name-empty">Full-bleed template — cards match the canvas</span></div>
         ) : (
-          <div className="pills shape-pills card-shape-pills">
-            {SHAPE_OPTIONS.map((opt) => (
+          <>
+            <div className="pills shape-pills card-shape-pills">
+              {SHAPE_OPTIONS.map((opt) => (
+                <button
+                  key={opt}
+                  className={`pill ${!customShape && cardShape === opt ? 'active' : ''}`}
+                  onClick={() => { setWantsCustomShape(false); setCardShape(opt); }}
+                >
+                  {opt === 'auto' ? 'Auto' : opt}
+                </button>
+              ))}
+              {/* Eight options now fill the four-column grid exactly, where
+                  seven left a ragged second row. */}
               <button
-                key={opt}
-                className={`pill ${cardShape === opt ? 'active' : ''}`}
-                onClick={() => setCardShape(opt)}
+                className={`pill ${customShape ? 'active' : ''}`}
+                onClick={() => { setWantsCustomShape(true); setCardShape(`${customW}:${customH}`); }}
               >
-                {opt === 'auto' ? 'Auto' : opt}
+                W×H
               </button>
-            ))}
-          </div>
+            </div>
+            {customShape && (
+              <>
+                {/* Labelled like the canvas custom size above it, in this
+                    panel's own idiom (.asset-meta, not .ctl-label). */}
+                <div className="asset-meta">
+                  <span>Size px</span>
+                </div>
+                <div className="dim-inputs card-shape-dims">
+                  <DimInput value={customW} min={1} max={4096} onCommit={(v) => setCardShape(`${v}:${customH}`)} />
+                  <span className="dim-x">×</span>
+                  <DimInput value={customH} min={1} max={4096} onCommit={(v) => setCardShape(`${customW}:${v}`)} />
+                </div>
+                {/* Says outright what the numbers can and cannot do. A card's
+                    on-screen size is the template's layout decision — the
+                    renderer normalizes a sprite's long edge — so what a pixel
+                    pair can carry here is its ratio, and only its ratio. */}
+                <div className="ctl-hint">The crop follows the ratio — 800 × 1000 and 4 × 5 are the same shape. Card size on the canvas stays the template&apos;s.</div>
+              </>
+            )}
+          </>
         )}
 
         {/* when a card video is shorter than the clip: restart or freeze at the end */}

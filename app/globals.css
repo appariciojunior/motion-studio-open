@@ -144,10 +144,19 @@ input[type=range] {
   overflow: hidden;
 }
 
-.app > .card {
-  border: none;
-  border-radius: 0px;
-}
+/* The panel contours. .rail, .templates, .controls, .right and .bottom each
+   declare the one border that separates them from their neighbour, and they
+   never stopped: db8bd16 added a `.app > .card { border: none }` here while
+   rewriting the layout comment from "flat panels, 1px borders, no gutters" to
+   "separated tool islands", and outranked all five at once. The islands never
+   arrived — the grid still has gap: 0 — so what was left was neither: white
+   panels flush against white panels, with rail/templates and controls/right
+   sharing an invisible seam.
+
+   Nothing is re-added below. The five rules are still in this file, and the
+   collapse states still fade them out by name (.app.left-collapsed
+   .templates, .app.right-collapsed .controls). Deleting the override is the
+   whole fix; the design was never actually removed, only outvoted. */
 
 .card-scroll {
   overflow-y: auto;
@@ -398,9 +407,12 @@ input[type=range] {
   margin-bottom: 2px;
 }
 
+/* No rule above Updates. The rail's own border-right already says where the
+   column ends, and a second line cutting across a 64px strip reads as a
+   division between two groups of navigation when there is only one — the
+   items below are the same list, parked at the bottom by margin. */
 .rail-bottom {
   padding: 8px;
-  border-top: 1px solid var(--line);
 }
 
 .rail-update,
@@ -1159,6 +1171,12 @@ input[type=range] {
   bottom: 0;
   z-index: 2;
   background: var(--sl-fill);
+  /* Inset rather than a border, so the hairline never changes the box: the
+     fill's width is a percentage of the track and the handle is positioned
+     against the same percentage, so anything that moves its edges by a pixel
+     puts the two out of step. Transparent in light, where the fill states its
+     own edge. */
+  box-shadow: inset 0 0 0 1px var(--sl-fill-edge);
   border-radius: var(--r-ctrl);
   pointer-events: none;
 }
@@ -1233,19 +1251,25 @@ input[type=range] {
    inherited variables because the mobile block redeclares .shandle's
    background outright, and a variable survives that where a selector would
    have to out-specify it. */
+/* The on-fill colours are their own tokens rather than being derived from the
+   fill. Deriving them assumed the fill was the loud, high-contrast bar the
+   reference has; both themes here ended up wanting a quiet fill a step off the
+   track instead, and a derived colour on a quiet fill lands somewhere nobody
+   chose. Naming them lets each theme say what the readout and the handle do
+   over the fill — in light, exactly what they do off it. */
 .sinv {
   position: absolute;
   inset: 0;
   z-index: 3;
   pointer-events: none;
-  --sl-handle: var(--sl-fill-fg);
-  --sl-value: color-mix(in srgb, var(--sl-fill-fg) 78%, var(--sl-fill));
+  --sl-handle: var(--sl-handle-on);
+  --sl-value: var(--sl-value-on);
 }
 
 /* The readout is a click target, and under the fill its own hover chip is
    hidden — so the copy on top has to show one. */
 .strack:has(.sval:hover):not(.is-dragging) .sinv .sval {
-  background: color-mix(in srgb, var(--sl-fill-fg) 16%, transparent);
+  background: color-mix(in srgb, var(--sl-handle-on) 16%, transparent);
 }
 
 .szero,
@@ -1254,7 +1278,7 @@ input[type=range] {
 }
 
 .sinv .szero {
-  background: color-mix(in srgb, var(--sl-fill-fg) 34%, transparent);
+  background: color-mix(in srgb, var(--sl-handle-on) 34%, transparent);
 }
 
 /* Step marks, hidden until the pointer is on the track. At rest the row
@@ -1427,11 +1451,18 @@ input[type=range] {
    frame (no stretch, no overshoot, no squash) and it never passed its target,
    so this is pure translation on --t-seg / --e-seg.
 
-   Built on :has() so no panel markup changes — twenty-two call sites across
-   twelve components already render a track plus buttons, and none of them
+   Built on :has() so no panel markup changes — twenty-six call sites across
+   fifteen components already render a track plus buttons, and none of them
    needs to learn about a thumb. --seg-n is the option count, and
    translateX(N * 100%) resolves against the pill's own width, which IS one
    slot.
+
+   Three class families, one control. .tabs/.tab is .segmented/.seg under
+   another name — same flex row, same --card-inset track, same --seg-pad, same
+   flex: 1 slots, same --seg-active-bg on .active — so it belongs in the same
+   :is() list rather than in a copy of these rules. Leaving it out is what
+   made the Templates/Custom header the one toggle in the app that still
+   blinked.
 
    The offset is written out per index rather than read from a variable on
    purpose. A transitioned property whose value comes from an UNREGISTERED
@@ -1447,20 +1478,20 @@ input[type=range] {
    .card-shape-pills), which wrap to a second row that a horizontal slide
    cannot describe. */
 @supports selector(:has(*)) {
-  :is(.segmented, .pills) {
+  :is(.segmented, .pills, .tabs) {
     position: relative;
     --seg-n: 1;
   }
 
-  :is(.segmented, .pills):has(> :nth-child(2):last-child) { --seg-n: 2; }
-  :is(.segmented, .pills):has(> :nth-child(3):last-child) { --seg-n: 3; }
-  :is(.segmented, .pills):has(> :nth-child(4):last-child) { --seg-n: 4; }
-  :is(.segmented, .pills):has(> :nth-child(5):last-child) { --seg-n: 5; }
-  :is(.segmented, .pills):has(> :nth-child(6):last-child) { --seg-n: 6; }
-  :is(.segmented, .pills):has(> :nth-child(7):last-child) { --seg-n: 7; }
-  :is(.segmented, .pills):has(> :nth-child(8):last-child) { --seg-n: 8; }
+  :is(.segmented, .pills, .tabs):has(> :nth-child(2):last-child) { --seg-n: 2; }
+  :is(.segmented, .pills, .tabs):has(> :nth-child(3):last-child) { --seg-n: 3; }
+  :is(.segmented, .pills, .tabs):has(> :nth-child(4):last-child) { --seg-n: 4; }
+  :is(.segmented, .pills, .tabs):has(> :nth-child(5):last-child) { --seg-n: 5; }
+  :is(.segmented, .pills, .tabs):has(> :nth-child(6):last-child) { --seg-n: 6; }
+  :is(.segmented, .pills, .tabs):has(> :nth-child(7):last-child) { --seg-n: 7; }
+  :is(.segmented, .pills, .tabs):has(> :nth-child(8):last-child) { --seg-n: 8; }
 
-  :is(.segmented, .pills)::before {
+  :is(.segmented, .pills, .tabs)::before {
     content: '';
     position: absolute;
     top: var(--seg-pad);
@@ -1474,19 +1505,19 @@ input[type=range] {
     pointer-events: none;
   }
 
-  :is(.segmented, .pills):has(> :nth-child(2).active)::before { transform: translateX(100%); }
-  :is(.segmented, .pills):has(> :nth-child(3).active)::before { transform: translateX(200%); }
-  :is(.segmented, .pills):has(> :nth-child(4).active)::before { transform: translateX(300%); }
-  :is(.segmented, .pills):has(> :nth-child(5).active)::before { transform: translateX(400%); }
-  :is(.segmented, .pills):has(> :nth-child(6).active)::before { transform: translateX(500%); }
-  :is(.segmented, .pills):has(> :nth-child(7).active)::before { transform: translateX(600%); }
-  :is(.segmented, .pills):has(> :nth-child(8).active)::before { transform: translateX(700%); }
+  :is(.segmented, .pills, .tabs):has(> :nth-child(2).active)::before { transform: translateX(100%); }
+  :is(.segmented, .pills, .tabs):has(> :nth-child(3).active)::before { transform: translateX(200%); }
+  :is(.segmented, .pills, .tabs):has(> :nth-child(4).active)::before { transform: translateX(300%); }
+  :is(.segmented, .pills, .tabs):has(> :nth-child(5).active)::before { transform: translateX(400%); }
+  :is(.segmented, .pills, .tabs):has(> :nth-child(6).active)::before { transform: translateX(500%); }
+  :is(.segmented, .pills, .tabs):has(> :nth-child(7).active)::before { transform: translateX(600%); }
+  :is(.segmented, .pills, .tabs):has(> :nth-child(8).active)::before { transform: translateX(700%); }
 
   /* Nothing selected (a custom canvas size, an unmatched frame preset) has to
      read as nothing selected, not as option one. */
-  :is(.segmented, .pills):not(:has(> .active))::before { opacity: 0; }
+  :is(.segmented, .pills, .tabs):not(:has(> .active))::before { opacity: 0; }
 
-  :is(.segmented, .pills) > :is(.seg, .pill) {
+  :is(.segmented, .pills, .tabs) > :is(.seg, .pill, .tab) {
     position: relative;
     z-index: 1;
     transition: color var(--t-fast) var(--t-seg-flip);
@@ -1495,32 +1526,32 @@ input[type=range] {
   /* The chip is painted by the track now, so the button stops painting its
      own — otherwise the highlight appears instantly at the destination and
      the slide has nothing left to show. */
-  :is(.segmented, .pills) > :is(.seg, .pill).active {
+  :is(.segmented, .pills, .tabs) > :is(.seg, .pill, .tab).active {
     background: transparent;
   }
 
   /* Hover feedback answers the pointer directly and must not wait on the
      travel delay. */
-  :is(.segmented, .pills) > :is(.seg, .pill):hover {
+  :is(.segmented, .pills, .tabs) > :is(.seg, .pill, .tab):hover {
     transition-delay: 0ms;
   }
 
   /* ---- opt-outs: unequal slots, wrapped grids, and more options than there
      are slot rules above ---- */
   :is(.pj-sort, .aspect-pills, .card-shape-pills)::before,
-  :is(.segmented, .pills):has(> :nth-child(9))::before {
+  :is(.segmented, .pills, .tabs):has(> :nth-child(9))::before {
     display: none;
   }
 
-  :is(.pj-sort, .aspect-pills, .card-shape-pills) > :is(.seg, .pill).active,
-  :is(.segmented, .pills):has(> :nth-child(9)) > :is(.seg, .pill).active {
+  :is(.pj-sort, .aspect-pills, .card-shape-pills) > :is(.seg, .pill, .tab).active,
+  :is(.segmented, .pills, .tabs):has(> :nth-child(9)) > :is(.seg, .pill, .tab).active {
     background: var(--seg-active-bg);
     transition-delay: 0ms;
   }
 
   @media (prefers-reduced-motion: reduce) {
-    :is(.segmented, .pills)::before { transition: none; }
-    :is(.segmented, .pills) > :is(.seg, .pill) { transition-delay: 0ms; }
+    :is(.segmented, .pills, .tabs)::before { transition: none; }
+    :is(.segmented, .pills, .tabs) > :is(.seg, .pill, .tab) { transition-delay: 0ms; }
   }
 }
 
@@ -2042,10 +2073,25 @@ select.field {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+/* Same grid, same chip. The card-shape row sits inside .shape-pills, which
+   flattens its chips to 11px type and zero vertical padding for the short
+   two-option rows it was written for — on a four-column grid that just made
+   the same control look smaller than the canvas Aspect above it. Restating
+   both here keeps the two grids identical without touching the video-end row
+   that still wants the compact skin. */
 .aspect-pills .pill,
 .card-shape-pills .pill {
   min-width: 0;
+  padding-block: 5px;
   padding-inline: 4px;
+  font-size: var(--fs-ui);
+  line-height: var(--lh-ui);
+}
+
+/* The ratio fields sit under the grid, not in a .ctl-row — this panel lays
+   its labels out with .asset-meta. */
+.card-shape-dims {
+  margin-top: 6px;
 }
 
 /* crop-focus popover (per-asset cover-fit anchor) */
@@ -2499,12 +2545,34 @@ select.field {
   position: absolute;
   left: 0;
   right: 0;
-  top: 16.5px;
+  /* 17 and not the 16.5 the Figma port carried: a half-pixel origin is
+     inherited by everything inside, so the marks below landed on y 884.5 and
+     antialiasing rounded their corners off no matter how square the box was.
+     Half a pixel down is invisible; the marks being actual squares is not. */
+  top: 17px;
   height: 11px;
 }
 
+/* The subdivision marks between labels. Timeline.tsx has emitted these since
+   the first commit; c25dd3b ("Light Figma UI") switched the rule to
+   display:none while redoing the chrome, and the ruler has read as bare
+   labels ever since — the seconds between them had nothing to sit on.
+
+   Square and 3px, the same side as the slider's step marks, and dimmer than
+   the labels so they subdivide without competing. Left-aligned at their
+   position like .ruler-label above, so a mark and a label that share a
+   coordinate start on the same pixel. */
 .ruler-dash {
-  display: none;
+  position: absolute;
+  /* Every number here is a whole pixel — 4 + 3 in an 11px row — and the left
+     offset arrives already rounded from the component. A 2px mark sitting at
+     x 289.781 is spread across three pixel columns at partial coverage, and
+     what antialiasing makes of that is a soft blob: square in the box model,
+     round on the screen. Same side as the slider's step marks. */
+  top: 4px;
+  width: 3px;
+  height: 3px;
+  background: color-mix(in srgb, var(--fg-faint) 60%, transparent);
 }
 
 .ruler-label {
@@ -2563,12 +2631,10 @@ select.field {
   cursor: pointer;
 }
 
-.tl-divider {
-  width: 1px;
-  height: 18px;
-  background: var(--line-soft);
-  flex: 0 0 auto;
-}
+/* .tl-divider is gone with its only element. It stood between the scrubber
+   and the duration field, which the gap in this flex row already separates —
+   and it was the last stroke left over from a transport that used to be
+   denser. Its rule goes with it rather than staying as dead CSS. */
 
 .dur-field {
   display: flex;
@@ -2579,16 +2645,28 @@ select.field {
   flex: 0 0 auto;
 }
 
+/* No box at rest. The duration is a readout that happens to be editable, and
+   a filled well next to the transport's buttons read as a third control
+   competing with them. It follows .sval, which is the same thing on every
+   slider in the inspector: bare until the pointer is on it, then a chip, so
+   the affordance shows up exactly when it is being looked for. */
 .dur-field input {
   width: 44px;
   height: 30px;
-  background: var(--card-inset);
+  background: transparent;
   border: none;
   border-radius: var(--r-seg);
   padding: 0 6px;
   text-align: center;
   color: var(--fg-body);
   font-variant-numeric: tabular-nums;
+  transition: background var(--t-fast);
+}
+
+.dur-field input:hover,
+.dur-field input:focus {
+  background: var(--card-thumb);
+  outline: none;
 }
 
 .export-btn {
@@ -4220,9 +4298,12 @@ select.field {
      52px readout that has to stay legible under a thumb. A solid dark fill
      would swallow both, so here the fill stays the light box it was and the
      inverted copy has nothing to do. */
-  .mobile-editor .sfill {
-    background: var(--card);
-    border: 1px solid var(--handle);
+  /* Same intent, now said with the tokens instead of a border — a real border
+     would move the fill's edges a pixel out of step with the handle, which is
+     positioned against the same percentage. */
+  .mobile-editor .strack {
+    --sl-fill: var(--card);
+    --sl-fill-edge: var(--handle);
   }
 
   .mobile-editor .sinv {
