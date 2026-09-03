@@ -9,6 +9,8 @@ html,
 body {
   margin: 0;
   height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 :root {
@@ -5553,7 +5555,7 @@ select.field {
 
 .gradient-stop.selected {
   border-color: var(--fg);
-  box-shadow: 0 0 0 1px var(--card), 0 0 0 2px var(--fg), inset 0 0 0 1px var(--card);
+  box-shadow: 0 0 0 2px var(--card);
 }
 
 .gradient-ramp-actions {
