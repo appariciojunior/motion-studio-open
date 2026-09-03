@@ -144,10 +144,19 @@ input[type=range] {
   overflow: hidden;
 }
 
-.app > .card {
-  border: none;
-  border-radius: 0px;
-}
+/* The panel contours. .rail, .templates, .controls, .right and .bottom each
+   declare the one border that separates them from their neighbour, and they
+   never stopped: db8bd16 added a `.app > .card { border: none }` here while
+   rewriting the layout comment from "flat panels, 1px borders, no gutters" to
+   "separated tool islands", and outranked all five at once. The islands never
+   arrived — the grid still has gap: 0 — so what was left was neither: white
+   panels flush against white panels, with rail/templates and controls/right
+   sharing an invisible seam.
+
+   Nothing is re-added below. The five rules are still in this file, and the
+   collapse states still fade them out by name (.app.left-collapsed
+   .templates, .app.right-collapsed .controls). Deleting the override is the
+   whole fix; the design was never actually removed, only outvoted. */
 
 .card-scroll {
   overflow-y: auto;
@@ -398,9 +407,12 @@ input[type=range] {
   margin-bottom: 2px;
 }
 
+/* No rule above Updates. The rail's own border-right already says where the
+   column ends, and a second line cutting across a 64px strip reads as a
+   division between two groups of navigation when there is only one — the
+   items below are the same list, parked at the bottom by margin. */
 .rail-bottom {
   padding: 8px;
-  border-top: 1px solid var(--line);
 }
 
 .rail-update,
