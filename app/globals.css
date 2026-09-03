@@ -2631,12 +2631,10 @@ select.field {
   cursor: pointer;
 }
 
-.tl-divider {
-  width: 1px;
-  height: 18px;
-  background: var(--line-soft);
-  flex: 0 0 auto;
-}
+/* .tl-divider is gone with its only element. It stood between the scrubber
+   and the duration field, which the gap in this flex row already separates —
+   and it was the last stroke left over from a transport that used to be
+   denser. Its rule goes with it rather than staying as dead CSS. */
 
 .dur-field {
   display: flex;
@@ -2647,16 +2645,28 @@ select.field {
   flex: 0 0 auto;
 }
 
+/* No box at rest. The duration is a readout that happens to be editable, and
+   a filled well next to the transport's buttons read as a third control
+   competing with them. It follows .sval, which is the same thing on every
+   slider in the inspector: bare until the pointer is on it, then a chip, so
+   the affordance shows up exactly when it is being looked for. */
 .dur-field input {
   width: 44px;
   height: 30px;
-  background: var(--card-inset);
+  background: transparent;
   border: none;
   border-radius: var(--r-seg);
   padding: 0 6px;
   text-align: center;
   color: var(--fg-body);
   font-variant-numeric: tabular-nums;
+  transition: background var(--t-fast);
+}
+
+.dur-field input:hover,
+.dur-field input:focus {
+  background: var(--card-thumb);
+  outline: none;
 }
 
 .export-btn {

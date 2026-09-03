@@ -192,8 +192,6 @@ export default function Timeline({
         />
       </div>
 
-      <span className="tl-divider" />
-
       <label className="dur-field">
         <input type="number" min={1} max={60} step={1} value={duration} onChange={(e) => setDuration(Math.max(1, Number(e.target.value)))} />
         <span>s</span>
