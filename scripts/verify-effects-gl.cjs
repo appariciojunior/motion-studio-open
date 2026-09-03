@@ -15,6 +15,12 @@
 //    vignette   cinza uniforme -> o centro tem de ficar mais claro que a borda
 //    rgb-split  faixa branca   -> o canal R tem de se deslocar para um lado e o
 //               B para o outro, com o G parado
+//    halftone   degrade liso   -> a cobertura de tinta tem de crescer com o tom
+//    posterize  degrade liso   -> tem de virar exatamente N patamares, com 0 e 255
+//               alcancaveis (pega o erro de dividir por n em vez de n-1)
+//    scanlines  cinza uniforme -> tem de aparecer periodicidade em Y
+//    wave       quadro branco  -> tem de deslocar em x, e o deslocamento tem de
+//               VARIAR com y (senao e um shift, nao uma onda)
 //    pixelate   ruido fino     -> blocos de N px tem de zerar a variacao interna
 //
 //  Uso: node scripts/verify-effects-gl.cjs
@@ -35,7 +41,7 @@ Module._resolveFilename = function (request, parent, isMain, options) {
 };
 
 const { effects, effectDefaults } = require('../effects');
-const { pixiFragment } = require('../effects/adapters/glsl');
+const { pixiFragment, threeFragment } = require('../effects/adapters/glsl');
 
 const CHROME = [
   'C:/Program Files/Google/Chrome/Application/chrome.exe',
@@ -49,9 +55,38 @@ for (const [id, fx] of Object.entries(effects)) {
   const d = effectDefaults(id);
   payload[id] = {
     fragment: pixiFragment(fx),
+    // O fragment do three tambem, para o teste de PARIDADE. O #include do three
+    // nao compila cru, e a conversao final para sRGB e justamente o que se quer
+    // comparar — entao ele e trocado pela transformada explicita.
+    fragmentThree: threeFragment(fx)
+      .replace('#include <colorspace_fragment>', 'gl_FragColor = vec4(fx_toSrgb(gl_FragColor.rgb), gl_FragColor.a);')
+      // O vertex compartilhado deste teste emite vTextureCoord; renomeia para
+      // linkar, em vez de manter dois vertex shaders.
+      .replace(/vUv/g, 'vTextureCoord')
+      .replace('varying vec2 vTextureCoord;', 'in vec2 vTextureCoord;')
+      .replace(/gl_FragColor/g, 'fx_out')
+      .replace(/texture2D[(]/g, 'texture(')
+      // Cabecalho de ES 3.00 na frente: o vertex compartilhado deste teste e
+      // 300 es, e misturar versoes nao linka.
+      .replace(/^/, ["#version 300 es", "precision highp float;", "out vec4 fx_out;", ""].join(String.fromCharCode(10))),
     u0: fx.shader.uniforms(d, { width: 256, height: 256, time: 0 }),
     u1: fx.shader.uniforms(d, { width: 256, height: 256, time: 1 }),
+    // Os valores dos CONTROLES vao junto: o esperado de um teste tem de vir da
+    // intencao declarada, nao do uniform. Derivar o esperado do uniform e
+    // tautologia — muta-se o uniforms() e o esperado muda com ele, entao o teste
+    // sempre passa. Um teste de mutacao mostrou isso acontecendo aqui.
+    defaults: d,
   };
+}
+
+// Uniforms em OUTROS pontos de um controle, para as medidas que precisam de
+// mais de um. Passam pela mesma `uniforms()` do efeito — chumbar o valor aqui
+// pularia a funcao e o teste deixaria de ver erro nela.
+{
+  const CTX = { width: 256, height: 256, time: 0 };
+  const d = effectDefaults('posterize');
+  payload.posterize.uMix0 = effects.posterize.shader.uniforms({ ...d, mix: 0 }, CTX);
+  payload.posterize.uMix50 = effects.posterize.shader.uniforms({ ...d, mix: 50 }, CTX);
 }
 
 (async () => {
@@ -105,6 +140,20 @@ void main(){ vTextureCoord = aPosition; gl_Position = vec4(aPosition*2.0-1.0, 0.
       // faixa branca de 8px no meio, para o split ter uma borda para deslocar
       faixa: makeTex((x) => (Math.abs(x - W / 2) < 4 ? [255, 255, 255] : [0, 0, 0])),
       ruido: makeTex((x, y) => { const i = y * W + x; return [(i*37)%256, (i*91)%256, (i*17)%256]; }),
+      // degrade horizontal liso: revela banding (posterize) e a trama (halftone)
+      degrade: makeTex((x) => { const v = Math.round((x / (W - 1)) * 255); return [v, v, v]; }),
+      // O MESMO degrade, mas em espaco LINEAR — que e o que o three recebe de
+      // verdade (ele trabalha linear e converte na saida). Alimentar o lado
+      // three com a textura sRGB era erro do teste: dava 136/255 de divergencia
+      // ate em pixelate e wave, que so deslocam coordenada e nao podem divergir.
+      degradeLin: makeTex((x) => {
+        const srgb = x / (W - 1);
+        const lin = srgb <= 0.04045 ? srgb / 12.92 : Math.pow((srgb + 0.055) / 1.055, 2.4);
+        const v = Math.round(lin * 255);
+        return [v, v, v];
+      }),
+      // quadro branco centrado: revela deslocamento lateral (wave)
+      quadro: makeTex((x, y) => (Math.abs(x - W/2) < 40 && Math.abs(y - H/2) < 40 ? [255,255,255] : [0,0,0])),
     };
 
     const run = (fragment, uniforms, tex) => {
@@ -204,6 +253,89 @@ void main(){ vTextureCoord = aPosition; gl_Position = vec4(aPosition*2.0-1.0, 0.
     } catch (e) { r.falhas.push('rgb-split: ' + String(e.message).slice(0, 160)); }
 
     try {
+      // POSTERIZE: um degrade liso tem de virar N patamares — nem mais nem
+      // menos. Contar valores distintos e a medida direta disso, e ela tambem
+      // pega o erro classico de dividir por n em vez de n-1, que deixa o branco
+      // fora de alcance.
+      try {
+        // Pelos uniforms REAIS do efeito, nao um uSteps chumbado: passar o valor
+        // a mao pula a funcao uniforms() e o teste deixa de ver erro nela. Um
+        // teste de mutacao mostrou isso — trocar n-1 por n passava verde.
+        const q = run(fx.posterize.fragment, fx.posterize.u0, TEX.degrade);
+        const esperado = Math.round(fx.posterize.defaults.levels);
+        const vals = new Set();
+        for (let x = 0; x < W; x++) vals.add(q[((H >> 1) * W + x) * 4]);
+        const ordenados = [...vals].sort((a, b) => a - b);
+        r.medidas.posterize = { niveis: vals.size, esperado, min: ordenados[0], max: ordenados[ordenados.length - 1] };
+        if (vals.size !== esperado) r.falhas.push('posterize: o controle levels pediu ' + esperado + ' niveis e a tela mostrou ' + vals.size);
+        if (ordenados[ordenados.length - 1] < 250) r.falhas.push('posterize: o branco nao chega a 255 (max ' + ordenados[ordenados.length-1] + ') — sinal de dividir por n em vez de n-1');
+        if (ordenados[0] > 5) r.falhas.push('posterize: o preto nao chega a 0 (min ' + ordenados[0] + ')');
+      } catch (e) { r.falhas.push('posterize: ' + String(e.message).slice(0, 160)); }
+
+      // POSTERIZE / MIX: o controle existe porque o efeito roda no quadro TODO,
+      // fundo incluido, e quantizar la embaixo apaga a silhueta dos cards. Duas
+      // perguntas, as duas medidas contra o que sai na tela:
+      //   mix=0   tem de ser IDENTIDADE — o degrade volta com os seus ~256
+      //           valores, nao com os 5 patamares
+      //   mix=50  tem de cair no MEIO entre a fonte e o quantizado, ponto a
+      //           ponto (o esperado vem das duas corridas medidas, nao de uma
+      //           formula reescrita aqui)
+      try {
+        const linha = (px) => { const v = []; for (let x = 0; x < W; x++) v.push(px[((H >> 1) * W + x) * 4]); return v; };
+        const fonte = linha(run(fx.posterize.fragment, fx.posterize.uMix0, TEX.degrade));
+        const quant = linha(run(fx.posterize.fragment, fx.posterize.u0, TEX.degrade));
+        const meio = linha(run(fx.posterize.fragment, fx.posterize.uMix50, TEX.degrade));
+        const niveisFonte = new Set(fonte).size;
+        let pior = 0;
+        for (let x = 0; x < W; x++) {
+          const esperado = (fonte[x] + quant[x]) / 2;
+          const dif = Math.abs(meio[x] - esperado);
+          if (dif > pior) pior = dif;
+        }
+        r.medidas['posterize:mix'] = {
+          niveis_mix0: niveisFonte, niveis_mix100: new Set(quant).size,
+          maiorDesvio_mix50: +pior.toFixed(1),
+        };
+        if (niveisFonte < 200) r.falhas.push('posterize: mix=0 nao e identidade — o degrade voltou com ' + niveisFonte + ' valores em vez de ~256');
+        if (pior > 3) r.falhas.push('posterize: mix=50 nao cai no meio entre fonte e quantizado (maior desvio ' + pior.toFixed(1) + ')');
+      } catch (e) { r.falhas.push('posterize:mix: ' + String(e.message).slice(0, 160)); }
+
+      // HALFTONE: sobre um degrade, a cobertura de tinta tem de CRESCER conforme
+      // o tom escurece. Mede a media na faixa escura contra a clara.
+      try {
+        const h = run(fx.halftone.fragment, { ...fx.halftone.u0, uCell: 8 }, TEX.degrade);
+        const media = (x0, x1) => { let s2 = 0, n = 0; for (let y = 0; y < H; y++) for (let x = x0; x < x1; x++) { s2 += h[(y*W+x)*4]; n++; } return s2/n; };
+        const escuro = media(8, 56), claro = media(W-56, W-8);
+        r.medidas.halftone = { ladoEscuro: +escuro.toFixed(1), ladoClaro: +claro.toFixed(1) };
+        if (claro <= escuro + 20) r.falhas.push('halftone: a trama nao segue o tom (escuro ' + escuro.toFixed(1) + ' vs claro ' + claro.toFixed(1) + ')');
+      } catch (e) { r.falhas.push('halftone: ' + String(e.message).slice(0, 160)); }
+
+      // SCANLINES: sobre cinza uniforme tem de aparecer periodicidade em Y, e a
+      // media tem de CAIR (as linhas escurecem). Compara linhas pares e impares
+      // no espacamento pedido.
+      try {
+        const base = run(fx.scanlines.fragment, { ...fx.scanlines.u0, uStrength: 0, uCurve: 0 }, TEX.cinza);
+        const sc = run(fx.scanlines.fragment, { ...fx.scanlines.u0, uSpacing: 4, uStrength: 0.6, uCurve: 0 }, TEX.cinza);
+        const linha = (px, y) => { let s2 = 0; for (let x = 0; x < W; x++) s2 += px[(y*W+x)*4]; return s2/W; };
+        const cresta = linha(sc, H>>1), vale = linha(sc, (H>>1) + 2);
+        const mediaBase = linha(base, H>>1), mediaSc = linha(sc, H>>1);
+        r.medidas.scanlines = { linhaA: +cresta.toFixed(1), linhaB: +vale.toFixed(1), semEfeito: +mediaBase.toFixed(1) };
+        if (Math.abs(cresta - vale) < 8) r.falhas.push('scanlines: sem periodicidade em Y (linhas a 2px: ' + cresta.toFixed(1) + ' vs ' + vale.toFixed(1) + ')');
+      } catch (e) { r.falhas.push('scanlines: ' + String(e.message).slice(0, 160)); }
+
+      // WAVE: com uSpeed 0 a fase e fixa; o quadro centrado tem de sair DESLOCADO
+      // em x conforme y, e nao apenas borrado. Mede o centroide em duas alturas.
+      try {
+        const w0 = run(fx.wave.fragment, { uAmount: 0, uFreq: 3, uSpeed: 0 }, TEX.quadro);
+        const w1 = run(fx.wave.fragment, { uAmount: 30, uFreq: 3, uSpeed: 0 }, TEX.quadro);
+        const centro = (px, y) => { let soma = 0, peso = 0; for (let x = 0; x < W; x++) { const v = px[(y*W+x)*4]; soma += v*x; peso += v; } return peso > 0 ? soma/peso : -1; };
+        const yA = (H>>1) - 30, yB = (H>>1) + 30;
+        const semA = centro(w0, yA), comA = centro(w1, yA), comB = centro(w1, yB);
+        r.medidas.wave = { semOnda: +semA.toFixed(2), comOnda_yA: +comA.toFixed(2), comOnda_yB: +comB.toFixed(2) };
+        if (Math.abs(comA - semA) < 3) r.falhas.push('wave: nao deslocou nada (' + semA.toFixed(2) + ' -> ' + comA.toFixed(2) + ')');
+        if (Math.abs(comA - comB) < 3) r.falhas.push('wave: o deslocamento nao varia com y — isso e um shift, nao uma onda');
+      } catch (e) { r.falhas.push('wave: ' + String(e.message).slice(0, 160)); }
+
       // PIXELATE: blocos de N px zeram a variacao interna.
       const N = 16;
       const p = run(fx.pixelate.fragment, { uSize: [N, N] }, TEX.ruido);
@@ -219,6 +351,38 @@ void main(){ vTextureCoord = aPosition; gl_Position = vec4(aPosition*2.0-1.0, 0.
       r.medidas.pixelate = { desvio_intra_bloco: +dv.toFixed(3), desvio_original: +desvio(run(fx.pixelate.fragment, { uSize: [1, 1] }, TEX.ruido)).toFixed(3) };
       if (dv > 0.5) r.falhas.push(`pixelate: os blocos de ${N}px nao ficaram uniformes (desvio ${dv.toFixed(2)})`);
     } catch (e) { r.falhas.push('pixelate: ' + String(e.message).slice(0, 160)); }
+
+    // ---- PARIDADE ENTRE ENGINES ----
+    //
+    // O teste que faltava, e que teria pegado a divergencia de espaco de cor: o
+    // contrato promete que UM shader vale nos dois engines, e ninguem estava
+    // comparando as duas saidas. O three trabalha em linear e converte na saida;
+    // o Pixi entrega sRGB. Sem tratar isso, o posterize caia em niveis
+    // completamente diferentes (0,64,128,191,255 contra 0,137,188,225,255).
+    //
+    // Compara sobre o degrade, que e onde a diferenca de espaco aparece mais.
+    for (const id of Object.keys(fx)) {
+      try {
+        const a = run(fx[id].fragment, fx[id].u0, TEX.degrade);
+        const b = run(fx[id].fragmentThree, fx[id].u0, TEX.degradeLin);
+        let maior = 0, soma = 0, n = 0;
+        for (let i = 0; i < a.length; i += 4) {
+          const d = Math.abs(a[i] - b[i]);
+          if (d > maior) maior = d;
+          soma += d; n++;
+        }
+        const media = soma / n;
+        r.medidas['paridade:' + id] = { maiorDif: maior, mediaDif: +media.toFixed(2) };
+        // 6 de 255 cobre arredondamento e a ida-e-volta da transformada; acima
+        // disso os dois engines estao desenhando coisas diferentes.
+        // A tolerancia e pela MEDIA, nao pelo pico: a ida-e-volta
+        // sRGB->linear->sRGB passa por um byte de 8 bits, e nos escuros — onde a
+        // curva sRGB e mais inclinada — um unico passo de quantizacao vira
+        // varios niveis de volta. O pico e um artefato disso; a media diz se os
+        // dois engines estao desenhando a mesma coisa.
+        if (media > 4) r.falhas.push('paridade ' + id + ': pixi e three divergem, media ' + media.toFixed(2) + '/255 (pico ' + maior + ')');
+      } catch (e) { r.falhas.push('paridade ' + id + ': ' + String(e.message).slice(0, 200)); }
+    }
 
     return r;
   }, payload);

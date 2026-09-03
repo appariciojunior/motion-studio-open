@@ -7,6 +7,58 @@ import { setRendererInstance } from '@/lib/rendererInstance';
 import { useSceneStore } from '@/store/useSceneStore';
 import { getTemplate } from '@/templates';
 
+// Um renderer por engine, guardado pela vida da pagina.
+//
+// Antes, trocar de engine (escolher um preset webgl com um 2D no palco, ou o
+// contrario) destruia o renderer e criava outro do zero. Os dois caminhos de
+// destruicao machucam, cada um do seu jeito:
+//
+//   - Pixi: `app.destroy()` chama `loseContext()` la dentro (esta escrito em
+//     GlContextSystem.destroy(), nao e suposicao), e o Chrome SOMA as perdas
+//     causadas pela pagina. Passado o limite dele, a criacao seguinte volta
+//     "A WebGL context could not be created. Reason: Web page caused context
+//     loss and was blocked" — e ai nada mais consegue contexto: a miniatura 3D
+//     cai para 2D, o Pixi da miniatura tambem falha, e o PALCO morre em
+//     `renderer3d.init` com unhandledRejection. O editor inteiro vai junto.
+//   - three: `dispose()` NAO solta o contexto, entao o antigo fica vivo e
+//     abandonado, contando contra o limite de ~16 contextos da pagina.
+//
+// Medido alternando Orbit 3D (webgl) e Runway (2D) dez vezes: perdas causadas
+// pela pagina subindo 2, 3, 4 ... 11, uma por troca, linear e sem teto, e 11
+// contextos criados no `stage-canvas`. Reusando, a conta para em um por engine.
+//
+// O canvas nao pode ser compartilhado entre as duas bibliotecas — atributos de
+// contexto e comportamento de perda diferem — entao cada engine guarda o SEU
+// canvas junto, e trocar de engine e trocar qual dos dois esta no DOM.
+type Palco = { renderer: IRenderer; canvas: HTMLCanvasElement };
+const palcos = new Map<'pixi' | 'webgl', Palco>();
+// Criacao em voo, para que duas montagens do mesmo engine compartilhem UMA. Sem
+// isto, o Strict Mode do dev cria dois renderers por montagem e descarta um, e
+// descartar custa uma perda de contexto contada contra a pagina.
+const emCriacao = new Map<'pixi' | 'webgl', Promise<Palco>>();
+
+function obterPalco(engine: 'pixi' | 'webgl', canvas: HTMLCanvasElement): Promise<Palco> {
+  const pronto = palcos.get(engine);
+  if (pronto) return Promise.resolve(pronto);
+  const emVoo = emCriacao.get(engine);
+  if (emVoo) return emVoo;
+  const p = (async () => {
+    const renderer: IRenderer = engine === 'webgl'
+      // three stays out of the bundle for 2D-only sessions
+      ? new (await import('@/lib/renderer3d')).SceneRenderer3D()
+      : new SceneRenderer();
+    await renderer.init(canvas);
+    const entrada: Palco = { renderer, canvas };
+    palcos.set(engine, entrada);
+    return entrada;
+  })();
+  emCriacao.set(engine, p);
+  // Uma criacao que falha nao pode ficar guardada, senao a proxima tentativa
+  // recebe a mesma falha para sempre.
+  p.finally(() => { emCriacao.delete(engine); }).catch(() => { /* tratado no chamador */ });
+  return p;
+}
+
 // Live 2D/WebGL preview stage
 export default function PreviewStage() {
   const stageRef = useRef<HTMLDivElement>(null);
@@ -43,7 +95,9 @@ export default function PreviewStage() {
     const initGeneration = ++initGenerationRef.current;
     let mounted = true;
     let renderer: IRenderer | null = null;
-    const canvas = document.createElement('canvas');
+    const guardado = palcos.get(engine);
+    // O canvas deste engine: o que ja existe, ou um novo na primeira vez.
+    const canvas = guardado?.canvas ?? document.createElement('canvas');
     canvas.className = 'stage-canvas';
     // The canvas belongs to this exact renderer generation. Keeping it in a
     // local variable prevents an obsolete async Pixi init/cleanup from ever
@@ -99,25 +153,38 @@ export default function PreviewStage() {
     // paused preview must redraw once
     const unsub = useSceneStore.subscribe(() => { dirtyRef.current = true; });
 
-    (async () => {
-      if (engine === 'webgl') {
-        // three stays out of the bundle for 2D-only sessions
-        const { SceneRenderer3D } = await import('@/lib/renderer3d');
-        renderer = new SceneRenderer3D();
-      } else {
-        renderer = new SceneRenderer();
-      }
-      if (!mounted || initGeneration !== initGenerationRef.current) return;
-      // async texture loads (images/videos) also need a redraw when they arrive
-      renderer.onDirty = () => { dirtyRef.current = true; };
-      await renderer.init(canvas);
-      if (!mounted || initGeneration !== initGenerationRef.current) { renderer.destroy(); return; }
-      rendererRef.current = renderer;
-      setRendererInstance(renderer);
+    // Religar o renderer guardado: sem init, sem contexto novo, sem perda.
+    const religar = (r: IRenderer) => {
+      r.onDirty = () => { dirtyRef.current = true; };
+      rendererRef.current = r;
+      setRendererInstance(r);
+      // O tamanho da cena pode ter mudado enquanto este engine estava parado.
+      const st = useSceneStore.getState();
+      r.resize(st.width, st.height);
       dirtyRef.current = true;
-      lastPlayingRef.current = useSceneStore.getState().playing;
+      lastPlayingRef.current = st.playing;
       rafRef.current = requestAnimationFrame(loop);
-    })();
+    };
+
+    if (guardado) {
+      religar(guardado.renderer);
+    } else {
+      (async () => {
+        const entrada = await obterPalco(engine, canvas);
+        // Sem `destroy()` num init obsoleto: a criacao e serializada por engine,
+        // entao o Strict Mode do dev (que monta, limpa e monta de novo) espera a
+        // primeira em vez de criar uma segunda para depois jogar fora. Era uma
+        // perda de contexto por montagem, e o contador do Chrome nao zera.
+        if (!mounted || initGeneration !== initGenerationRef.current) return;
+        // A criacao vencedora pode ter usado o canvas da outra tentativa.
+        if (entrada.canvas !== canvas) {
+          entrada.canvas.className = 'stage-canvas';
+          stageRef.current?.replaceChildren(entrada.canvas);
+        }
+        renderer = entrada.renderer;
+        religar(entrada.renderer);
+      })().catch(() => { /* sem contexto: a mensagem do renderer ja subiu */ });
+    }
 
     return () => {
       mounted = false;
@@ -125,8 +192,12 @@ export default function PreviewStage() {
       cancelAnimationFrame(rafRef.current);
       setRendererInstance(null);
       rendererRef.current = null;
-      renderer?.destroy();
-      if (canvas.parentNode) canvas.remove();
+      // Estacionado, nao destruido: o loop para e os videos param de decodificar,
+      // mas o renderer e o contexto ficam para a proxima vez que este engine
+      // voltar. Destruir aqui e o que causava o bloqueio de contexto do Chrome.
+      // O canvas sai do DOM sozinho, pelo replaceChildren do outro engine.
+      const parado = palcos.get(engine)?.renderer;
+      try { parado?.pauseVideos?.(); } catch { /* nada a fazer se ja parou */ }
     };
   }, [engine]);
 

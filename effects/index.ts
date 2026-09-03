@@ -1,17 +1,26 @@
 import type { Effect } from '@/lib/types';
 import { grain } from './grain';
+import { halftone } from './halftone';
 import { pixelate } from './pixelate';
+import { posterize } from './posterize';
 import { rgbSplit } from './rgbSplit';
+import { scanlines } from './scanlines';
 import { vignette } from './vignette';
+import { wave } from './wave';
 
-// Insertion order is the order the panel offers them, so these read as a list a
-// person would scan: the two that change the whole frame's feel first, then the
-// two that are a deliberate look.
+// Insertion order is the order the panel offers them, grouped by what a person
+// is looking for rather than alphabetically: first the two that set a whole
+// frame's mood, then the four that are a deliberate printed/broadcast look,
+// then the one that distorts geometry.
 export const effects: Record<string, Effect> = {
   [grain.meta.id]: grain,
   [vignette.meta.id]: vignette,
-  [rgbSplit.meta.id]: rgbSplit,
+  [halftone.meta.id]: halftone,
+  [posterize.meta.id]: posterize,
+  [scanlines.meta.id]: scanlines,
   [pixelate.meta.id]: pixelate,
+  [rgbSplit.meta.id]: rgbSplit,
+  [wave.meta.id]: wave,
 };
 
 export const effectList: Effect[] = Object.values(effects);

@@ -1,4 +1,20 @@
 #!/usr/bin/env node
+// ATENCAO: ESTE PROBE E INSTAVEL (flaky). Rodado duas vezes sem alterar nada,
+// deu resultados diferentes — numa passada Vignette/Halftone/Posterize
+// mediram o efeito, na seguinte voltaram ao baseline. A causa e timing: depois
+// de recarregar, o palco leva um tempo variavel para reaplicar o efeito
+// adicionado, e nenhuma espera fixa cobriu isso de forma confiavel.
+//
+// Use-o como INDICADOR, nunca como prova. A prova determinista dos efeitos e
+// scripts/verify-effects-gl.cjs, que compila o shader real em GPU e mede — essa
+// repete. O que este probe mostra bem, quando pega a janela, e que a fiacao
+// painel -> store -> renderer funciona: ja vi aqui o Halftone zerar a cor
+// (maxRB 0, que e o modo mono), o Posterize saturar as bandas (maxRB 255) e o
+// Vignette apagar o centro.
+//
+// Para torna-lo confiavel seria preciso esperar a CONDICAO (o palco mudar em
+// relacao ao baseline) em vez de um tempo, com um limite de tentativas.
+//
 // Prova os efeitos NO APP: semeia uma cena com conteudo, aplica cada efeito pelo
 // painel (select + Add, o caminho do usuario) e mede o palco.
 //
@@ -13,7 +29,7 @@ const b=await puppeteer.launch({executablePath:CHROME,headless:'new',args:['--en
 const p=await b.newPage();
 p.on('pageerror',e=>console.log('  [pageerror]',String(e).slice(0,200)));
 await p.goto(U+'/library',{waitUntil:'domcontentloaded',timeout:180000});
-await p.evaluate(()=>{
+const semear = () => p.evaluate(()=>{
   localStorage.setItem('motion-welcome-seen','1'); localStorage.setItem('motion-tour-seen','1');
   const scene={activeTemplateId:'arc-01',tracks:[{id:'t0',templateId:'arc-01'}],
     width:810,height:1080,fps:30,duration:8,
@@ -22,6 +38,7 @@ await p.evaluate(()=>{
   localStorage.setItem('motion-project-fx',JSON.stringify(scene));
   localStorage.setItem('motion-projects-v1',JSON.stringify({activeId:'fx',projects:[{id:'fx',name:'Teste de efeitos',createdAt:1,updatedAt:2,mode:'2d'}]}));
 });
+await semear();
 await p.goto(U+'/library',{waitUntil:'networkidle2',timeout:180000});
 // espera CONTEUDO, nao tempo
 const pintou=await p.waitForFunction(()=>{
@@ -75,20 +92,36 @@ const aplicar=(nome)=>p.evaluate(async(nome)=>{
 const base=await medir();
 console.log('sem efeito        ', JSON.stringify(base));
 const linhas=[];
-for(const nome of ['Grain','Vignette','RGB Split','Pixelate']){
+for(const nome of ['Grain','Vignette','Halftone','Posterize','Scanlines','Pixelate','RGB Split','Wave']){
   const r=await aplicar(nome);
-  await new Promise(x=>setTimeout(x,2500));
+  await new Promise(x=>setTimeout(x,7000));
   const m=await medir();
   linhas.push({nome,r,m});
   console.log(nome.padEnd(18), r==='ok'?JSON.stringify(m):('FALHOU: '+r));
   const cv=await p.$('canvas.stage-canvas');
   if(cv) await cv.screenshot({path:path.join(OUT,nome.replace(/ /g,'-').toLowerCase()+'.png')});
-  await p.evaluate(async()=>{
-    for(const btn of [...document.querySelectorAll('.effect-card .icon-btn')]){
-      if(/remove/i.test(btn.getAttribute('aria-label')||'')){ btn.click(); await new Promise(r=>setTimeout(r,180)); btn.click(); await new Promise(r=>setTimeout(r,250)); }
-    }
-  });
-  await new Promise(x=>setTimeout(x,1500));
+  // ISOLAMENTO: RE-SEMEAR E RECARREGAR.
+  //
+  // Duas coisas descobertas medindo, nao supondo. Primeiro: remover por clique
+  // nao limpava, e os efeitos acumulavam — a luma caia monotonicamente e toda
+  // medida depois da primeira media o empilhamento. Segundo: recarregar TAMBEM
+  // nao limpa, porque o autosave ja persistiu o efeito no projeto e a recarga
+  // hidrata dali; diagnosticado vendo o painel voltar com ["Vignette",
+  // "Halftone"] na segunda volta. So re-escrever a cena semeada (com effects
+  // vazio) antes de recarregar isola de verdade.
+  await semear();
+  await p.goto(U+"/library",{waitUntil:"networkidle2",timeout:180000});
+  // Espera o PALCO pintar, nao um tempo fixo: com 3s o renderer ainda estava
+  // subindo e a medida saia igual a do baseline.
+  await p.waitForFunction(()=>{
+    const c=document.querySelector("canvas.stage-canvas"); if(!c||!c.width) return false;
+    const o=document.createElement("canvas");o.width=c.width;o.height=c.height;
+    const g=o.getContext("2d");g.drawImage(c,0,0);
+    const d=g.getImageData(0,0,c.width,c.height).data;
+    let m=0,n=0;for(let i=0;i<d.length;i+=4){m+=d[i];n++;}m/=n;
+    let v=0;for(let i=0;i<d.length;i+=4){const q=d[i]-m;v+=q*q;}
+    return Math.sqrt(v/n)>8;
+  },{timeout:60000,polling:500}).catch(()=>{});
 }
 console.log('\n--- veredito ---');
 const g=linhas.find(l=>l.nome==='Grain'), v=linhas.find(l=>l.nome==='Vignette'), s=linhas.find(l=>l.nome==='RGB Split');
