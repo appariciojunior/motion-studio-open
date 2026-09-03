@@ -9,6 +9,8 @@ html,
 body {
   margin: 0;
   height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 :root {
@@ -1124,14 +1126,39 @@ input[type=range] {
   overflow: hidden;
 }
 
+/* Rubber band. Drag past either end and the pushed edge gives instead of the
+   track just stopping dead. The width and the cancelling negative margin come
+   from the component, so mid-drag this follows the pointer with no lag; the
+   transition only has to cover letting go, which the reference did in about
+   eight frames at 30fps — near enough to --t-fast.
+
+   It is the track's own width, not a transform, because in the reference the
+   glyphs inside kept their exact stride at full stretch: the box grew, the
+   content did not scale. The negative margin keeps the outer size at 100%, so
+   the flex parent has no overflow to shrink away. */
+.strack:not(.is-dragging) {
+  transition: width var(--t-fast) cubic-bezier(.2, 0, 0, 1),
+              margin var(--t-fast) cubic-bezier(.2, 0, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .strack:not(.is-dragging) {
+    transition: none;
+  }
+}
+
 /* `left` and `width` both come from the component: a range that spans zero
-   fills from its zero point rather than from the left edge. */
+   fills from its zero point rather than from the left edge.
+
+   The fill is opaque and carries the contrast, which is the whole point: it
+   has to cover the plain readout as it sweeps past, so the inverted copy in
+   .sinv can take over. A translucent fill would show both at once. */
 .sfill {
   position: absolute;
   top: 0;
   bottom: 0;
-  background: var(--card);
-  border: 1px solid var(--handle);
+  z-index: 2;
+  background: var(--sl-fill);
   border-radius: var(--r-ctrl);
   pointer-events: none;
 }
@@ -1139,26 +1166,165 @@ input[type=range] {
 .shandle {
   position: absolute;
   top: 50%;
+  z-index: 1;
   transform: translate(-50%, -50%);
-  width: 2px;
+  /* Width matches --sl-tick so that when the bar splits, what is left are
+     SQUARES and not standing rectangles — at 2px the marks came out 2×4. The
+     reference's own bar is 8px on a 163px track against 9px marks, so square
+     is what it does too; it just gets there with a chunkier bar than a 34px
+     track can carry. Square corners for the same reason every other corner
+     here is square. */
+  width: var(--sl-tick);
   height: 16px;
-  border-radius: 1px;
-  background: var(--handle);
+  border-radius: 0;
+  background: var(--sl-handle, var(--handle));
   pointer-events: none;
+}
+
+/* Where the readout is in the way, the bar does not strike through it: the
+   two halves step OUTSIDE the number and shrink to short marks.
+
+   That outward step is the part a punched hole cannot fake, and the reference
+   states it plainly. Free bar: y 922-993 of a 163px track (frames 25 and
+   299). Split: marks at y 913-921 and 994-1002 (frame 180) — their INNER
+   edges (±36.5 from centre) land on the free bar's ENDS (±36), so the halves
+   travel outward past where the bar was rather than being cut in place.
+
+   Ported by silhouette: the split spans 20px of a 34px track, 59% against the
+   reference's 55%. The one deliberate deviation is the mark itself — it is a
+   --sl-tick square, where the ratio asks for 1.8px, because 1.8px on this
+   track is invisible. Being a square is not incidental: the reference's marks
+   are 8×9 on its own scale, so anything taller than it is wide reads as a
+   standing rectangle rather than as half a bar stepping aside. The remaining
+   14px gap clears the 12px digits with room on both sides. */
+.shandle.is-split {
+  height: 20px;
+  background: linear-gradient(
+    var(--sl-handle, var(--handle)) 0 var(--sl-tick),
+    transparent var(--sl-tick) calc(20px - var(--sl-tick)),
+    var(--sl-handle, var(--handle)) calc(20px - var(--sl-tick)) 20px
+  );
 }
 
 .sval {
   position: absolute;
   right: 8px;
   top: 50%;
+  z-index: 1;
   transform: translateY(-50%);
   font-size: var(--fs-ui);
   line-height: var(--lh-ui);
-  color: var(--fg-value);
+  color: var(--sl-value, var(--fg-value));
   font-variant-numeric: tabular-nums;
   padding: 2px 6px;
   border-radius: var(--r-seg);
   cursor: text;
+}
+
+/* The inverted copy. Same handle, same readout, same coordinates — clipped by
+   the component to exactly the fill's span, so a glyph straddling the leading
+   edge is cut down the middle and reads light on the left, dark on the right.
+   That per-glyph cut is the reference's signature moment.
+
+   It sits ABOVE the fill and the plain copy sits BELOW it, so the two never
+   composite over each other: outside the span the fill is not there and the
+   plain copy shows; inside it the opaque fill has already hidden the plain
+   copy. No complement clip, no antialiasing fringe. Colours arrive as
+   inherited variables because the mobile block redeclares .shandle's
+   background outright, and a variable survives that where a selector would
+   have to out-specify it. */
+.sinv {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  --sl-handle: var(--sl-fill-fg);
+  --sl-value: color-mix(in srgb, var(--sl-fill-fg) 78%, var(--sl-fill));
+}
+
+/* The readout is a click target, and under the fill its own hover chip is
+   hidden — so the copy on top has to show one. */
+.strack:has(.sval:hover):not(.is-dragging) .sinv .sval {
+  background: color-mix(in srgb, var(--sl-fill-fg) 16%, transparent);
+}
+
+.szero,
+.slider-bubble {
+  z-index: 3;
+}
+
+.sinv .szero {
+  background: color-mix(in srgb, var(--sl-fill-fg) 34%, transparent);
+}
+
+/* Step marks, hidden until the pointer is on the track. At rest the row
+   should read as one clean bar; the marks are only worth anything once you
+   are actually aiming. Square, like every other corner here.
+
+   One element instead of a node per mark: the tile is exactly one interval
+   wide and paints a 2px square at its start, and the whole layer is shifted
+   right by one interval so the first mark lands on the first stop rather than
+   on the left edge. That pushes the last mark onto the right edge, where the
+   track's overflow clips it — leaving only the interior stops, which is what
+   the reference shows. --tick-n comes from the component because it is the
+   control's own step count, not a constant.
+
+   It sits at z-index 1, under the fill, so the marks vanish as the bar covers
+   them and only the empty part of the track is dotted. */
+.sticks {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--t-fast);
+  transform: translateX(calc(100% / var(--tick-n)));
+  background-image: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--fg) 30%, transparent) 0 var(--sl-tick),
+    transparent var(--sl-tick)
+  );
+  background-size: calc(100% / var(--tick-n)) var(--sl-tick);
+  background-repeat: repeat-x;
+  background-position: 0 center;
+}
+
+/* Touch has no hover, so the drag itself is the reveal. */
+.strack:hover .sticks,
+.strack.is-dragging .sticks {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sticks {
+    transition: none;
+  }
+}
+
+.sval-input {
+  z-index: 4;
+}
+
+/* A plate the height of the type, so nothing else crosses the number: it is
+   what keeps the step marks from running under the digits, and it backs the
+   gap the split handle opens. Each copy paints the surface it actually sits
+   on — the plain one is only ever seen on the track, the inverted one only
+   ever on the fill. It stops 1px short of the split marks (±5 against ±6),
+   so it hides the ruler without eating the handle. */
+.sval::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 10px;
+  transform: translateY(-50%);
+  background: var(--card-inset);
+  z-index: -1;
+}
+
+.sinv .sval::before {
+  background: var(--sl-fill);
 }
 
 /* the readout is a click target, so it has to look like one on hover — an
@@ -1253,6 +1419,109 @@ input[type=range] {
 .pill.active {
   background: var(--seg-active-bg);
   color: var(--seg-active-fg);
+}
+
+/* Sliding highlight — the active chip travels to the option you picked
+   instead of blinking there. Geometry and timing are measured off the
+   reference capture, frame by frame: the pill's width never left 325px in any
+   frame (no stretch, no overshoot, no squash) and it never passed its target,
+   so this is pure translation on --t-seg / --e-seg.
+
+   Built on :has() so no panel markup changes — twenty-two call sites across
+   twelve components already render a track plus buttons, and none of them
+   needs to learn about a thumb. --seg-n is the option count, and
+   translateX(N * 100%) resolves against the pill's own width, which IS one
+   slot.
+
+   The offset is written out per index rather than read from a variable on
+   purpose. A transitioned property whose value comes from an UNREGISTERED
+   custom property does not animate and does not even land: measured here, the
+   pill's computed transform sat at matrix(1,0,0,1,0,0) for 700ms after the
+   click while --seg-i already read 1. Registering it with @property fixes
+   that, but @property lands later than :has() in Safari, so a literal
+   translateX per rule is the version that cannot half-work. */
+
+/* Three families opt out at the bottom of this block and keep the instant
+   highlight: .pj-sort, whose segments are content-sized (flex: 0 0 auto), so
+   the slots are unequal; and the four-column grids (.aspect-pills /
+   .card-shape-pills), which wrap to a second row that a horizontal slide
+   cannot describe. */
+@supports selector(:has(*)) {
+  :is(.segmented, .pills) {
+    position: relative;
+    --seg-n: 1;
+  }
+
+  :is(.segmented, .pills):has(> :nth-child(2):last-child) { --seg-n: 2; }
+  :is(.segmented, .pills):has(> :nth-child(3):last-child) { --seg-n: 3; }
+  :is(.segmented, .pills):has(> :nth-child(4):last-child) { --seg-n: 4; }
+  :is(.segmented, .pills):has(> :nth-child(5):last-child) { --seg-n: 5; }
+  :is(.segmented, .pills):has(> :nth-child(6):last-child) { --seg-n: 6; }
+  :is(.segmented, .pills):has(> :nth-child(7):last-child) { --seg-n: 7; }
+  :is(.segmented, .pills):has(> :nth-child(8):last-child) { --seg-n: 8; }
+
+  :is(.segmented, .pills)::before {
+    content: '';
+    position: absolute;
+    top: var(--seg-pad);
+    bottom: var(--seg-pad);
+    left: var(--seg-pad);
+    width: calc((100% - 2 * var(--seg-pad)) / var(--seg-n));
+    border-radius: var(--r-seg);
+    background: var(--seg-active-bg);
+    transform: translateX(0);
+    transition: transform var(--t-seg) var(--e-seg), opacity var(--t-fast);
+    pointer-events: none;
+  }
+
+  :is(.segmented, .pills):has(> :nth-child(2).active)::before { transform: translateX(100%); }
+  :is(.segmented, .pills):has(> :nth-child(3).active)::before { transform: translateX(200%); }
+  :is(.segmented, .pills):has(> :nth-child(4).active)::before { transform: translateX(300%); }
+  :is(.segmented, .pills):has(> :nth-child(5).active)::before { transform: translateX(400%); }
+  :is(.segmented, .pills):has(> :nth-child(6).active)::before { transform: translateX(500%); }
+  :is(.segmented, .pills):has(> :nth-child(7).active)::before { transform: translateX(600%); }
+  :is(.segmented, .pills):has(> :nth-child(8).active)::before { transform: translateX(700%); }
+
+  /* Nothing selected (a custom canvas size, an unmatched frame preset) has to
+     read as nothing selected, not as option one. */
+  :is(.segmented, .pills):not(:has(> .active))::before { opacity: 0; }
+
+  :is(.segmented, .pills) > :is(.seg, .pill) {
+    position: relative;
+    z-index: 1;
+    transition: color var(--t-fast) var(--t-seg-flip);
+  }
+
+  /* The chip is painted by the track now, so the button stops painting its
+     own — otherwise the highlight appears instantly at the destination and
+     the slide has nothing left to show. */
+  :is(.segmented, .pills) > :is(.seg, .pill).active {
+    background: transparent;
+  }
+
+  /* Hover feedback answers the pointer directly and must not wait on the
+     travel delay. */
+  :is(.segmented, .pills) > :is(.seg, .pill):hover {
+    transition-delay: 0ms;
+  }
+
+  /* ---- opt-outs: unequal slots, wrapped grids, and more options than there
+     are slot rules above ---- */
+  :is(.pj-sort, .aspect-pills, .card-shape-pills)::before,
+  :is(.segmented, .pills):has(> :nth-child(9))::before {
+    display: none;
+  }
+
+  :is(.pj-sort, .aspect-pills, .card-shape-pills) > :is(.seg, .pill).active,
+  :is(.segmented, .pills):has(> :nth-child(9)) > :is(.seg, .pill).active {
+    background: var(--seg-active-bg);
+    transition-delay: 0ms;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :is(.segmented, .pills)::before { transition: none; }
+    :is(.segmented, .pills) > :is(.seg, .pill) { transition-delay: 0ms; }
+  }
 }
 
 /* custom canvas size (W × H px) */
@@ -3943,8 +4212,27 @@ select.field {
     height: 24px;
     border: 6px solid var(--card);
     border-radius: 50%;
-    background: var(--fg);
+    background: var(--sl-handle, var(--fg));
     box-shadow: 0 0 0 1px var(--handle);
+  }
+
+  /* Touch keeps its own slider: a 24px knob riding outside the track, and a
+     52px readout that has to stay legible under a thumb. A solid dark fill
+     would swallow both, so here the fill stays the light box it was and the
+     inverted copy has nothing to do. */
+  .mobile-editor .sfill {
+    background: var(--card);
+    border: 1px solid var(--handle);
+  }
+
+  .mobile-editor .sinv {
+    display: none;
+  }
+
+  /* Same reason: the touch handle is a 24px round knob, and a band cut
+     through it reads as a broken knob, not as a bar making way. */
+  .mobile-editor .sval::before {
+    display: none;
   }
 
   .mobile-editor .sval {
@@ -4029,6 +4317,19 @@ select.field {
     flex: 0 0 auto;
     min-width: 64px;
     scroll-snap-align: start;
+  }
+
+  /* Here the pills are content-sized AND the row scrolls, so the sliding
+     highlight has neither equal slots nor a fixed origin to travel in — it
+     would land on the wrong chip the moment the row is scrolled. Only
+     .pills-fit (flex: 1 1 0, no scroll, just below) keeps it. */
+  .mobile-editor .pills:not(.pills-fit)::before {
+    display: none;
+  }
+
+  .mobile-editor .pills:not(.pills-fit) > .pill.active {
+    background: var(--seg-active-bg);
+    transition-delay: 0ms;
   }
 
   .mobile-editor .pills.pills-fit {
@@ -5553,7 +5854,7 @@ select.field {
 
 .gradient-stop.selected {
   border-color: var(--fg);
-  box-shadow: 0 0 0 1px var(--card), 0 0 0 2px var(--fg), inset 0 0 0 1px var(--card);
+  box-shadow: 0 0 0 2px var(--card);
 }
 
 .gradient-ramp-actions {

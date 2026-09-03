@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import type { ControlDef } from '@/lib/types';
 import MobileSheet from './MobileSheet';
 import { useMobileInteractions } from './MobileInteractions';
@@ -41,6 +42,14 @@ function renderControl(def: ControlDef, value: any, onChange: (v: any) => void) 
   }
 }
 
+// Dragging past an end gives the track's pushed edge instead of stopping
+// dead. Asymptotic, so the stretch never runs away however far the pointer
+// travels: 55px of overshoot spends about 63% of the allowance, 150px spends
+// 94%. The ceiling itself is --sl-rubber, read off the element so the token
+// stays the one source of truth.
+const RUBBER_FALLOFF = 55;
+const rubberBand = (over: number, max: number) => (over <= 0 ? 0 : max * (1 - Math.exp(-over / RUBBER_FALLOFF)));
+
 // Figma spec: the whole 34px track is the slider. Fill #2d2d2d over #232323,
 // a 2×16px #424242 bar as handle, value inside the track right-aligned
 // (12px #aaa), click the value to type an exact number.
@@ -67,13 +76,58 @@ function SliderControl({ def, value, onChange }: RowProps) {
   const handleLeft = signed && pct === zeroPct
     ? `${pct}%`
     : `clamp(6px, calc(${pct}% + ${handleInset}px), calc(100% - 6px))`;
+  // The handle takes a different shape where it runs under the readout, so
+  // the component has to know when that is — CSS cannot compare two boxes.
+  // Both widths come from a ResizeObserver, never from a per-frame read: they
+  // only change when the panel resizes or the number gains a digit, and
+  // measuring inside the drag would mean a synchronous layout every move.
+  const valRef = useRef<HTMLSpanElement>(null);
+  const [boxes, setBoxes] = useState({ track: 0, val: 0 });
   const decimals = def.precision ?? (step < 1 ? Math.min(3, Math.ceil(-Math.log10(step))) : 0);
+  // Step marks. Where the control has few stops they ARE the stops, so a mark
+  // means "the value lands here"; past a handful they would be a picket fence,
+  // and fifths read as a ruler instead of as a lie about where values snap.
+  // The ceiling is what keeps a coarse slider from being denser than a fine
+  // one — a 0-100 step-1 row gets four marks, and so does a six-stop row.
+  const stopCount = Math.round((max - min) / step);
+  const tickN = Number.isFinite(stopCount) && stopCount >= 2 && stopCount <= 6 ? stopCount : 5;
+  // Where the handle sits, in the track's own pixels — the same clamp the
+  // stylesheet applies to handleLeft, so the two never disagree.
+  const handleCentre = boxes.track
+    ? Math.min(Math.max(6, (pct / 100) * boxes.track + handleInset), boxes.track - 6)
+    : 0;
+  // .sval is right: 8px and its measured width already carries its padding.
+  const splitHandle = !mobile && !editing && boxes.track > 0 && boxes.val > 0
+    && handleCentre + 2 > boxes.track - 8 - boxes.val
+    && handleCentre - 2 < boxes.track - 8;
+
+  // Signed: positive stretches the right edge, negative the left. Zero means
+  // the pointer is on the track and the box is its plain self. The ref is
+  // what the maths reads — several pointermove events land between renders,
+  // and the state value would still be the one from the last paint.
+  const [rubber, setRubber] = useState(0);
+  const rubberNow = useRef(0);
+  const rubberMax = useRef(6);
+  const applyRubber = (next: number) => {
+    if (next === rubberNow.current) return;
+    rubberNow.current = next;
+    setRubber(next);
+  };
 
   const setFromX = (clientX: number, fine = false) => {
     const el = trackRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    const t = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    // rect is the STRETCHED box mid-drag, so the overshoot has to be measured
+    // against the resting edges — otherwise each frame stretches from the
+    // last one and the band creeps outward with the pointer standing still.
+    const held = rubberNow.current;
+    const restLeft = rect.left + Math.max(0, -held);
+    const restRight = rect.right - Math.max(0, held);
+    if (clientX > restRight) applyRubber(rubberBand(clientX - restRight, rubberMax.current));
+    else if (clientX < restLeft) applyRubber(-rubberBand(restLeft - clientX, rubberMax.current));
+    else applyRubber(0);
+    const t = Math.max(0, Math.min(1, (clientX - restLeft) / (restRight - restLeft)));
     const effectiveStep = fine ? step * 0.1 : step;
     const snapped = Math.round((min + t * (max - min)) / effectiveStep) * effectiveStep;
     onChange(Number(Math.max(min, Math.min(max, snapped)).toFixed(4)));
@@ -119,22 +173,59 @@ function SliderControl({ def, value, onChange }: RowProps) {
     setSheetOpen(false);
   };
 
+  // Letting go has to put the edge back even if the pointer never came home.
+  // Re-runs when the readout unmounts for typing, so the observer is never
+  // holding a node that is gone.
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track) return;
+    const measure = () => setBoxes({
+      track: track.getBoundingClientRect().width,
+      val: valRef.current?.getBoundingClientRect().width ?? 0,
+    });
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(track);
+    if (valRef.current) ro.observe(valRef.current);
+    return () => ro.disconnect();
+  }, [editing]);
+
+  const endDrag = () => {
+    pressed.current = false;
+    setDragging(false);
+    applyRubber(0);
+  };
+
   return (
     <div
       ref={trackRef}
       className={`strack ${mobile ? 'strack-mobile' : ''} ${dragging ? 'is-dragging' : ''}`}
       tabIndex={0}
+      // Signed sliders and the readout both live off the track's own box, so
+      // the band grows the box and cancels it with a margin: the outer size
+      // stays 100%, the flex parent sees no overflow, and nothing inside is
+      // scaled — which is how the reference behaved at full stretch.
+      style={rubber === 0 ? undefined : {
+        width: `calc(100% + ${Math.abs(rubber).toFixed(2)}px)`,
+        ...(rubber > 0
+          ? { marginRight: `${(-rubber).toFixed(2)}px` }
+          : { marginLeft: `${rubber.toFixed(2)}px` }),
+      }}
       onPointerDown={(e) => {
         if (editing) return;
         try { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); } catch { /* no live pointer: nothing to capture */ }
+        // Read the allowance once per drag rather than per move: the token is
+        // the single source of truth, getComputedStyle is not free.
+        const declared = parseFloat(getComputedStyle(e.currentTarget).getPropertyValue('--sl-rubber'));
+        rubberMax.current = Number.isFinite(declared) ? declared : 6;
         pressed.current = true;
         setDragging(true);
         setFromX(e.clientX, e.shiftKey);
       }}
       onPointerMove={(e) => { if (!editing && pressed.current && e.buttons === 1) setFromX(e.clientX, e.shiftKey); }}
-      onPointerUp={() => { pressed.current = false; setDragging(false); }}
-      onPointerCancel={() => { pressed.current = false; setDragging(false); }}
-      onLostPointerCapture={() => { pressed.current = false; setDragging(false); }}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+      onLostPointerCapture={endDrag}
       onKeyDown={(e) => {
         if (editing) return;
         if (e.key === 'Enter') { e.preventDefault(); startEdit(); return; }
@@ -158,9 +249,11 @@ function SliderControl({ def, value, onChange }: RowProps) {
           empty. Filling from the edge made a signed slider look like a
           magnitude bar — Card Bend at 0 showed a half-full track, which reads
           as "half on" rather than "neutral". */}
+      {/* Plain copy first, so the opaque fill paints over it. */}
+      <div className="sticks" style={{ '--tick-n': tickN } as CSSProperties} />
+      <div className={`shandle ${splitHandle ? 'is-split' : ''}`} style={{ left: handleLeft }} />
       <div className="sfill" style={{ left: `${fillLeft}%`, width: `${fillWidth}%` }} />
       {signed && <div className="szero" style={{ left: `${zeroPct}%` }} />}
-      <div className="shandle" style={{ left: handleLeft }} />
       {mobile && dragging && <output className="slider-bubble" style={{ left: `${pct}%` }}>{num.toFixed(decimals)}{def.unit ?? ''}</output>}
       {editing ? (
         <input
@@ -202,6 +295,7 @@ function SliderControl({ def, value, onChange }: RowProps) {
         />
       ) : (
         <span
+          ref={valRef}
           className="sval"
           title={mobile ? 'Tap to enter an exact value' : 'Click to type an exact value'}
           // pointerdown only shields the track from starting a drag — pressing
@@ -219,6 +313,25 @@ function SliderControl({ def, value, onChange }: RowProps) {
         >
           {num.toFixed(decimals)}{def.unit ?? ''}
         </span>
+      )}
+      {/* The same handle and the same readout at the same coordinates, in the
+          on-fill colours, clipped to exactly the fill's span. A glyph sitting
+          on the leading edge is cut down the middle — that split is what the
+          gesture reads as in the reference, not the bar's width. Hidden while
+          typing: the input owns the corner then. */}
+      {!editing && (
+        <div
+          className="sinv"
+          aria-hidden="true"
+          style={{ clipPath: `inset(0 ${(100 - (fillLeft + fillWidth)).toFixed(3)}% 0 ${fillLeft.toFixed(3)}%)` }}
+        >
+          <div className={`shandle ${splitHandle ? 'is-split' : ''}`} style={{ left: handleLeft }} />
+          {/* The zero anchor sits exactly where the fill begins, so on a
+              signed slider it is half under the bar — a --fg tick on a --fg
+              fill is nothing at all. It needs the inverted copy too. */}
+          {signed && <div className="szero" style={{ left: `${zeroPct}%` }} />}
+          <span className="sval">{num.toFixed(decimals)}{def.unit ?? ''}</span>
+        </div>
       )}
       {mobile && sheetOpen && (
         <MobileSheet title={def.label} onClose={() => setSheetOpen(false)}>
