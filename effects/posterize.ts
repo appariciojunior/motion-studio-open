@@ -21,19 +21,35 @@ export const posterize: Effect = {
   meta: { id: 'posterize', name: 'Posterize' },
   controls: [
     { key: 'levels', label: 'Levels', type: 'slider', min: 2, max: 16, step: 1, default: 5 },
+    // Mix exists because the effect runs on the WHOLE composed frame, the scene
+    // background included, and quantizing is destructive down there: a #1a1a1a
+    // background (26) lands on level 0 at five levels, so the background and
+    // every dark card region collapse into the same pure black and the cards
+    // lose their silhouette. Measured on the stage at levels 5: the pixels
+    // still distinguishable from the background fell from 301213 to 172828.
+    //
+    // Full strength stays the default, so scenes saved before this control
+    // render exactly as they did — their stored values carry no `mix` at all,
+    // and the uniform reads 100 when it is missing.
+    { key: 'mix', label: 'Mix', type: 'slider', min: 0, max: 100, step: 1, default: 100, unit: '%' },
   ],
   shader: {
-    uniformTypes: { uSteps: 'float' },
+    uniformTypes: { uSteps: 'float', uMix: 'float' },
     // n-1 computed here, on the CPU, so the shader never risks dividing by zero
     // if the slider floor ever moves down to 1.
-    uniforms: (v) => ({ uSteps: Math.max(1, Math.round(Number(v.levels ?? 5)) - 1) }),
+    uniforms: (v) => ({
+      uSteps: Math.max(1, Math.round(Number(v.levels ?? 5)) - 1),
+      uMix: Math.max(0, Math.min(1, Number(v.mix ?? 100) / 100)),
+    }),
     fragment: `
 vec4 fxMain(vec2 p) {
   vec4 col = fxSample(p);
   // +0.5 rounds to the nearest level; without it every pixel falls to the level
   // below and the image darkens by half a step.
   vec3 q = floor(col.rgb * uSteps + 0.5) / uSteps;
-  return vec4(q, col.a);
+  // Blends against the ORIGINAL sample, so Mix at 0 is exact identity and the
+  // separation the levels threw away comes back proportionally.
+  return vec4(mix(col.rgb, q, uMix), col.a);
 }`,
   },
 };

@@ -79,6 +79,16 @@ for (const [id, fx] of Object.entries(effects)) {
   };
 }
 
+// Uniforms em OUTROS pontos de um controle, para as medidas que precisam de
+// mais de um. Passam pela mesma `uniforms()` do efeito — chumbar o valor aqui
+// pularia a funcao e o teste deixaria de ver erro nela.
+{
+  const CTX = { width: 256, height: 256, time: 0 };
+  const d = effectDefaults('posterize');
+  payload.posterize.uMix0 = effects.posterize.shader.uniforms({ ...d, mix: 0 }, CTX);
+  payload.posterize.uMix50 = effects.posterize.shader.uniforms({ ...d, mix: 50 }, CTX);
+}
+
 (async () => {
   if (!CHROME) { console.error('Chrome nao encontrado'); process.exit(2); }
   const browser = await puppeteer.launch({
@@ -261,6 +271,34 @@ void main(){ vTextureCoord = aPosition; gl_Position = vec4(aPosition*2.0-1.0, 0.
         if (ordenados[ordenados.length - 1] < 250) r.falhas.push('posterize: o branco nao chega a 255 (max ' + ordenados[ordenados.length-1] + ') — sinal de dividir por n em vez de n-1');
         if (ordenados[0] > 5) r.falhas.push('posterize: o preto nao chega a 0 (min ' + ordenados[0] + ')');
       } catch (e) { r.falhas.push('posterize: ' + String(e.message).slice(0, 160)); }
+
+      // POSTERIZE / MIX: o controle existe porque o efeito roda no quadro TODO,
+      // fundo incluido, e quantizar la embaixo apaga a silhueta dos cards. Duas
+      // perguntas, as duas medidas contra o que sai na tela:
+      //   mix=0   tem de ser IDENTIDADE — o degrade volta com os seus ~256
+      //           valores, nao com os 5 patamares
+      //   mix=50  tem de cair no MEIO entre a fonte e o quantizado, ponto a
+      //           ponto (o esperado vem das duas corridas medidas, nao de uma
+      //           formula reescrita aqui)
+      try {
+        const linha = (px) => { const v = []; for (let x = 0; x < W; x++) v.push(px[((H >> 1) * W + x) * 4]); return v; };
+        const fonte = linha(run(fx.posterize.fragment, fx.posterize.uMix0, TEX.degrade));
+        const quant = linha(run(fx.posterize.fragment, fx.posterize.u0, TEX.degrade));
+        const meio = linha(run(fx.posterize.fragment, fx.posterize.uMix50, TEX.degrade));
+        const niveisFonte = new Set(fonte).size;
+        let pior = 0;
+        for (let x = 0; x < W; x++) {
+          const esperado = (fonte[x] + quant[x]) / 2;
+          const dif = Math.abs(meio[x] - esperado);
+          if (dif > pior) pior = dif;
+        }
+        r.medidas['posterize:mix'] = {
+          niveis_mix0: niveisFonte, niveis_mix100: new Set(quant).size,
+          maiorDesvio_mix50: +pior.toFixed(1),
+        };
+        if (niveisFonte < 200) r.falhas.push('posterize: mix=0 nao e identidade — o degrade voltou com ' + niveisFonte + ' valores em vez de ~256');
+        if (pior > 3) r.falhas.push('posterize: mix=50 nao cai no meio entre fonte e quantizado (maior desvio ' + pior.toFixed(1) + ')');
+      } catch (e) { r.falhas.push('posterize:mix: ' + String(e.message).slice(0, 160)); }
 
       // HALFTONE: sobre um degrade, a cobertura de tinta tem de CRESCER conforme
       // o tom escurece. Mede a media na faixa escura contra a clara.
