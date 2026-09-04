@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { AVAILABLE_NAV_SECTIONS, modeForSection, sectionFromPathname, type NavSectionId } from '@/lib/navSections';
+import { isSectionAvailable, modeForSection, NAV_SECTIONS, sectionFromPathname, type NavSectionId } from '@/lib/navSections';
 import LogoMark from '@/components/LogoMark';
 import { useUIStore } from '@/store/useUIStore';
 import { useProjectStore } from '@/store/useProjectStore';
@@ -23,10 +23,12 @@ const ICONS: Record<NavSectionId, React.ReactNode> = {
   board: <BoardIcon />,
 };
 
-// Only what a person can actually open: a gated section is closed at the route
-// too, so offering it here would be a button that lands on the Library.
-const NAV = AVAILABLE_NAV_SECTIONS.filter((section) => !section.experimental);
-const EXPERIMENTAL_NAV = AVAILABLE_NAV_SECTIONS.filter((section) => section.experimental);
+// A gated section still shows in the rail, greyed and inert: the work exists and
+// saying so is honest, but the route is closed (lib/navSections isSectionAvailable)
+// so it must not be a link — a link would navigate and land on the Library, which
+// reads as a bug rather than as "not yet".
+const NAV = NAV_SECTIONS.filter((section) => !section.experimental);
+const EXPERIMENTAL_NAV = NAV_SECTIONS.filter((section) => section.experimental);
 const HAS_EXPERIMENTS = EXPERIMENTAL_NAV.length > 0;
 
 export default function IconRail() {
@@ -127,17 +129,31 @@ export default function IconRail() {
         >
           <div className="rail-experimental-inner">
             {EXPERIMENTAL_NAV.map((n) => (
-              <Link
-                key={n.id}
-                href={n.href}
-                tabIndex={experimentalsOpen ? 0 : -1}
-                onClick={() => leaveSection(n.id)}
-                aria-current={active === n.id ? 'page' : undefined}
-                className={`rail-item rail-subitem ${active === n.id ? 'active' : ''}`}
-              >
-                <span className="rail-ico">{ICONS[n.id]}</span>
-                <span className="rail-label">{n.label}</span>
-              </Link>
+              isSectionAvailable(n.id) ? (
+                <Link
+                  key={n.id}
+                  href={n.href}
+                  tabIndex={experimentalsOpen ? 0 : -1}
+                  onClick={() => leaveSection(n.id)}
+                  aria-current={active === n.id ? 'page' : undefined}
+                  className={`rail-item rail-subitem ${active === n.id ? 'active' : ''}`}
+                >
+                  <span className="rail-ico">{ICONS[n.id]}</span>
+                  <span className="rail-label">{n.label}</span>
+                </Link>
+              ) : (
+                // Not a Link and not a disabled <button>: a button would still take
+                // focus on click in some browsers, and there is nothing to press.
+                <span
+                  key={n.id}
+                  aria-disabled="true"
+                  title={`${n.label} is still being built — not available in this build`}
+                  className="rail-item rail-subitem rail-locked"
+                >
+                  <span className="rail-ico">{ICONS[n.id]}</span>
+                  <span className="rail-label">{n.label}</span>
+                </span>
+              )
             ))}
           </div>
         </div>

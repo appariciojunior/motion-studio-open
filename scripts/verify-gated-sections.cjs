@@ -60,20 +60,23 @@ const OPEN = ['projects', 'library', 'mockup'];
     check(!nav.isSectionAvailable(id), `${id} must be unavailable in a production build`);
     check(nav.sectionFromPathname(`/${id}`) === nav.DEFAULT_SECTION,
       `/${id} must resolve to the default section, not to ${id} — the route is the door`);
-    check(!nav.AVAILABLE_NAV_SECTIONS.some((s) => s.id === id),
-      `${id} must not be offered in the rail`);
+    // Visible but closed: the rail still lists it (greyed, inert), so it has to
+    // stay in NAV_SECTIONS. Dropping it from the list would take the label away
+    // and leave only the route gate, which is not what was asked for.
+    check(nav.NAV_SECTIONS.some((s) => s.id === id),
+      `${id} must remain listed so the rail can draw it greyed out`);
   }
   for (const id of OPEN) {
     check(nav.isSectionAvailable(id), `${id} must stay available`);
     check(nav.sectionFromPathname(`/${id}`) === id, `/${id} must still resolve to ${id}`);
   }
-  // Every gated section is gone, so the rail has no Experiments group left to
-  // draw. IconRail keys that off an empty list; assert the list really is empty
-  // so a section added later without `gated` shows up here as a failure.
-  check(nav.AVAILABLE_NAV_SECTIONS.every((s) => !s.experimental),
-    'no experimental section may remain in the rail of a built app');
-  check(nav.AVAILABLE_NAV_SECTIONS.length === OPEN.length,
-    `the rail must offer exactly ${OPEN.length} sections, got ${nav.AVAILABLE_NAV_SECTIONS.length}`);
+  // Nothing openable may be experimental, and nothing experimental may be
+  // openable — the two groups have to line up, or a section added later without
+  // `gated` would quietly ship inside the Experiments drawer.
+  for (const section of nav.NAV_SECTIONS) {
+    check(!!section.experimental === !nav.isSectionAvailable(section.id),
+      `${section.id}: experimental and gated must agree in a built app`);
+  }
 }
 
 // ---------- open: development, and an explicit override ----------

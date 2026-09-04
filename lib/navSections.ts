@@ -46,21 +46,20 @@ export const DEFAULT_SECTION: NavSectionId = 'library';
 const SECTION_IDS = new Set<string>(NAV_SECTIONS.map((section) => section.id));
 
 /**
- * A gated section is closed everywhere, not just hidden in the rail. The route
- * folders under app/(editor) still exist and still resolve — every page.tsx
- * there returns null and EditorShell picks the stage from this function — so
- * dropping the rail button alone would leave /web reachable to anyone who typed
- * it. Answering DEFAULT_SECTION here is what actually shuts the door.
+ * A gated section is closed at the route, which is the only place that closes
+ * it. The route folders under app/(editor) still exist and still resolve —
+ * every page.tsx there returns null and EditorShell picks the stage from
+ * sectionFromPathname — so a rail that merely stopped drawing the button would
+ * leave /web reachable to anyone who typed it.
+ *
+ * The rail keeps drawing the button, greyed and inert (IconRail rail-locked):
+ * the section exists and saying so is honest. This function is what the rail
+ * asks to decide between a link and a dead label.
  */
 export function isSectionAvailable(id: string | null | undefined): boolean {
   const section = NAV_SECTIONS.find((item) => item.id === id);
   return !!section && (!section.gated || EXPERIMENTS_ENABLED);
 }
-
-/** What the rail may offer. NAV_SECTIONS stays the full list, for route lookup. */
-export const AVAILABLE_NAV_SECTIONS: NavSection[] = NAV_SECTIONS.filter((section) =>
-  isSectionAvailable(section.id),
-);
 
 /**
  * `/mockup` → 'mockup'. `/` → the default section, because the index route is
