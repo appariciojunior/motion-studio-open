@@ -87,6 +87,10 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
   const [saveErr, setSaveErr] = useState('');
   // Distinct from saveErr: not a failure, a nudge. See saveToFolder.
   const [saveHint, setSaveHint] = useState('');
+  // Set once a folder attempt has come back with nothing. The retry then omits
+  // the picker's `id`, which is the only way to stop a remembered directory
+  // overriding startIn — see saveToFolder.
+  const [pickerIgnoresMemory, setPickerIgnoresMemory] = useState(false);
   const [confirmDemo, setConfirmDemo] = useState(false);
   // Probed after mount: WebCodecs is absent during SSR, and branching the first
   // render on it would desync hydration.
@@ -159,17 +163,26 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
     setSaving(true);
     try {
       try {
-        // startIn matters. The browser keeps a blocklist of directories this API
-        // refuses — drive roots, Windows and Program Files, the macOS Library,
-        // and the user's HOME ROOT, which on Windows is where the picker lands
-        // with no startIn. Picking one of those shows the browser's own
-        // "contains system files" dialog and leaves the picker open; the way out
-        // is Cancel, and the call then rejects with AbortError — the SAME error
+        // The browser keeps a blocklist of directories this API refuses — drive
+        // roots, Windows and Program Files, the macOS Library, and the user's
+        // HOME ROOT. Picking one shows the browser's own "contains system files"
+        // dialog, and backing out of it rejects with AbortError: the SAME error
         // a plain cancel gives, so the two cannot be told apart afterwards.
-        // Hence both halves of this fix: open somewhere always-allowed, and make
-        // the AbortError branch say what might have happened.
+        //
+        // `startIn` alone does not prevent it. Per the spec, when `startIn` is a
+        // well-known directory it is only a FALLBACK: "If there is an existing
+        // mapping from the given ID to a path, this mapping is used. Otherwise,
+        // the path suggested via the WellKnownDirectory is used." So `id` wins,
+        // and a browser that remembers somewhere unusable keeps reopening there
+        // no matter what startIn says. Adding startIn while keeping id — which
+        // is what the first fix did — helps only a first-time user.
+        //
+        // Dropping `id` removes the mapping from the equation and lets startIn
+        // decide. That also forgets the last folder, which is worth keeping, so
+        // it is not dropped up front: the first attempt remembers, and an
+        // attempt that came back empty-handed retries without it.
         const dir = await window.showDirectoryPicker({
-          id: 'motion-exports',
+          ...(pickerIgnoresMemory ? {} : { id: 'motion-exports' }),
           mode: 'readwrite',
           startIn: 'downloads',
         });
@@ -184,10 +197,14 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
       } catch (e: any) {
         if (e?.name === 'AbortError') {
           // Cancelling and being refused arrive here as the same error, so this
-          // has to cover both without accusing the user of either. Saying it
-          // costs a line and turns a dead end into a next step; the silent
-          // `return` that used to be here is what made this look broken.
-          setSaveHint('Nothing was saved. If the browser said the folder contains system files: drive roots, Windows, Program Files and your user folder itself are off limits to it — pick a folder inside one of those, or save the files one by one.');
+          // has to cover both without accusing the user of either, and it has to
+          // name the button that always works rather than describe a rule.
+          setPickerIgnoresMemory(true);
+          // The label below changes with the file count, so point at the button
+          // by position rather than by a name that might not match it.
+          setSaveHint(pickerIgnoresMemory
+            ? 'Still nothing saved. Use the button below instead — it asks per file, never asks for a folder, and is not subject to the directories the browser holds back.'
+            : 'Nothing was saved. Some folders are off limits to the browser — drive roots, Windows, Program Files and your user folder itself. Trying the folder again will now start from Downloads; the button below always works.');
           return;
         }
         if (e?.name !== 'NotAllowedError' && e?.name !== 'SecurityError') throw e;
@@ -532,14 +549,24 @@ npm run dev`}</code></pre>
                 </ul>
                 {canPickDir && (
                   <>
-                    <button className="btn primary full" onClick={saveToFolder} disabled={saving}>
-                      {saving ? 'Saving…' : savedTo ? 'Save to another folder…' : 'Choose folder & save'}
-                    </button>
-                    {/* Second, not hidden: this one asks per file and never
-                        takes a directory handle, so it works in the places the
-                        folder picker refuses. */}
-                    <button className="btn full" onClick={saveFilesOnly} disabled={saving}>
-                      {outputs.length > 1 ? 'Save files one by one…' : 'Save file…'}
+                    {/* One file is the normal case — every in-browser export
+                        produces exactly one. For that, picking a FOLDER buys
+                        nothing: it is the same single dialog as saving the file,
+                        and it is the one the browser refuses over its blocked
+                        directories. So the folder route only appears when there
+                        is actually more than one file to place, which is the
+                        only time it saves the user a dialog. */}
+                    {outputs.length > 1 && (
+                      <button className="btn primary full" onClick={saveToFolder} disabled={saving}>
+                        {saving ? 'Saving…' : savedTo ? 'Save to another folder…' : 'Choose folder & save'}
+                      </button>
+                    )}
+                    <button
+                      className={`btn full ${outputs.length > 1 ? '' : 'primary'}`}
+                      onClick={saveFilesOnly}
+                      disabled={saving}
+                    >
+                      {saving ? 'Saving…' : outputs.length > 1 ? 'Save files one by one…' : 'Save file…'}
                     </button>
                     {savedTo && <p className="ctl-hint">Saved to <code>{savedTo}</code>.</p>}
                     {saveHint && <p className="ctl-hint">{saveHint}</p>}
