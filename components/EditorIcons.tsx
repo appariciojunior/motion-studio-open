@@ -393,6 +393,18 @@ export function FullscreenIcon(props: EditorIconProps) {
 // with a gap, which is what this was, reads as an arrow instead.
 // Isometric here is a second named perspective exception to rule 07: a
 // stack of planes is a depth concept the same way the 3D shelf is.
+// A page with text on it. Deliberately NOT a book: LibraryIcon is already three
+// standing spines, and two book glyphs one above the other in the same rail read
+// as the same button twice. This one is portrait and narrower than the square
+// icons (Canvas, Media, Mockup), so the silhouette alone separates it — the
+// arrangement does the work, not the detail, which is what survives at 20px.
+export function DocsIcon(props: EditorIconProps) {
+  return <svg {...iconProps(props)}>
+    <path d="M4.5 3h11v14h-11Z"/>
+    <path d="M7 7h6M7 10h6M7 13h3.5" opacity=".5"/>
+  </svg>;
+}
+
 export function LayersIcon(props: EditorIconProps) {
   return <svg {...iconProps(props)}>
     <path d="M10 4.5L17 8L10 11.5L3 8Z"/>

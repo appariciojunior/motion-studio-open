@@ -12,7 +12,7 @@ import { preloadMockupProject } from '@/lib/mockupPreload';
 import { IS_HOSTED_DEPLOYMENT } from '@/lib/deployment';
 import NewsNotifier from './NewsNotifier';
 import UpdateNotifier from './UpdateNotifier';
-import { AddIcon, BoardIcon, ChevronDownIcon, ExperimentalsIcon, LibraryIcon, MockupIcon, ProjectsIcon, ThemeGlyph, ThreeDIcon, WebIcon } from './EditorIcons';
+import { AddIcon, BoardIcon, ChevronDownIcon, DocsIcon, ExperimentalsIcon, LibraryIcon, MockupIcon, ProjectsIcon, ThemeGlyph, ThreeDIcon, WebIcon } from './EditorIcons';
 
 const ICONS: Record<NavSectionId, React.ReactNode> = {
   projects: <ProjectsIcon />,
@@ -161,6 +161,16 @@ export default function IconRail() {
       </div>
       <div className="rail-bottom">
         {IS_HOSTED_DEPLOYMENT ? <NewsNotifier /> : <UpdateNotifier />}
+        {/* /docs sits outside the (editor) route group and does NOT mount
+            EditorShell, so opening it drops the Pixi and three contexts instead
+            of keeping a second set alive behind a reader. It is therefore not a
+            section — it stays out of NAV_SECTIONS — and it takes no active
+            state: the docs bring their own chrome, so this rail is not even on
+            screen while you are reading them. */}
+        <Link href="/docs" className="rail-item" title="Documentation">
+          <span className="rail-ico"><DocsIcon /></span>
+          <span className="rail-label">Docs</span>
+        </Link>
         <button
           className="rail-item rail-theme"
           onClick={toggleTheme}
