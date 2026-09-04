@@ -5,12 +5,9 @@ import { use3DStore, defaultModelFor } from '@/store/use3DStore';
 import { DEVICES, findDevice, selectDevice } from '@/three3d/devices';
 import { MOCKUP_ANIMATIONS } from '@/three3d/animations';
 import { MockupAnimThumb } from './MockupThumb';
+import { ChevronRightIcon } from './EditorIcons';
 
-const Chevron = () => (
-  <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-    <path d="M4.5 2.5L8 6l-3.5 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-  </svg>
-);
+const Chevron = () => <ChevronRightIcon size={12}/>;
 
 // Left column in Mockup mode — accordion list of devices. Clicking a device
 // selects it and expands its panel showing the real 3D thumb, finish swatches,

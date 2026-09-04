@@ -12,7 +12,7 @@ import { preloadMockupProject } from '@/lib/mockupPreload';
 import { IS_HOSTED_DEPLOYMENT } from '@/lib/deployment';
 import NewsNotifier from './NewsNotifier';
 import UpdateNotifier from './UpdateNotifier';
-import { AddIcon, BoardIcon, ChevronDownIcon, ExperimentalsIcon, LibraryIcon, MockupIcon, MoonIcon, ProjectsIcon, SunIcon, ThreeDIcon, WebIcon } from './EditorIcons';
+import { AddIcon, BoardIcon, ChevronDownIcon, ExperimentalsIcon, LibraryIcon, MockupIcon, ProjectsIcon, ThemeGlyph, ThreeDIcon, WebIcon } from './EditorIcons';
 
 const ICONS: Record<NavSectionId, React.ReactNode> = {
   projects: <ProjectsIcon />,
@@ -147,11 +147,9 @@ export default function IconRail() {
           title={theme === 'dark' ? 'Light theme' : 'Dark theme'}
         >
           <span className="rail-ico">
-            {theme === 'dark' ? (
-              <SunIcon />
-            ) : (
-              <MoonIcon />
-            )}
+            {/* One glyph that morphs — a ternary swap has nothing to animate.
+                Which face shows is decided in CSS, off :root[data-theme]. */}
+            <ThemeGlyph />
           </span>
           <span className="rail-label">{theme === 'dark' ? 'Light' : 'Dark'}</span>
         </button>

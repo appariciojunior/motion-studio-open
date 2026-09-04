@@ -8,6 +8,7 @@ import { useSceneStore, type ActiveEffect } from '@/store/useSceneStore';
 import { effectList, getEffect, effectDefaults } from '@/effects';
 import { ControlRow } from './Controls';
 import { useMobileInteractions } from './MobileInteractions';
+import { CloseIcon, EyeIcon, EyeOffIcon } from './EditorIcons';
 
 function MobileEffectCard({
   effect,
@@ -30,7 +31,7 @@ function MobileEffectCard({
         <button className="mobile-effect-grip" aria-label={`Reorder ${def.meta.name}`} {...attributes} {...listeners}>⠿</button>
         <span className="effect-title">{def.meta.name}</span>
         <button className="icon-btn" aria-label={effect.enabled ? `Disable ${def.meta.name}` : `Enable ${def.meta.name}`} onClick={onToggle}>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z" stroke="currentColor" strokeWidth="1.3" /><circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.3" /></svg>
+          {effect.enabled ? <EyeIcon size={16}/> : <EyeOffIcon size={16}/>}
         </button>
         <button className={`icon-btn ${confirming ? 'danger' : ''}`} aria-label={confirming ? `Confirm remove ${def.meta.name}` : `Remove ${def.meta.name}`} onClick={() => confirming ? onRemove() : setConfirming(true)} onBlur={() => setConfirming(false)}>
           {confirming ? <span className="mobile-remove-confirm">Remove?</span> : <span aria-hidden="true">×</span>}
@@ -115,14 +116,10 @@ export default function EffectsPanel() {
                 >⣿</span>
                 <span className="effect-title">{def.meta.name}</span>
                 <button className="icon-btn" onClick={() => toggleEffect(e.instanceId)}>
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                    <path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z" stroke="currentColor" strokeWidth="1.3" />
-                    <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.3" />
-                    {!e.enabled && <path d="M2.5 13.5l11-11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />}
-                  </svg>
+                  {e.enabled ? <EyeIcon size={12}/> : <EyeOffIcon size={12}/>}
                 </button>
                 <button className="icon-btn" onClick={() => removeEffect(e.instanceId)}>
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
+                  <CloseIcon size={12}/>
                 </button>
               </div>
               <div className="effect-card-body">

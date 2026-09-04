@@ -11,6 +11,7 @@ import { isVideoSource } from '@/lib/videoTexture';
 import MobileSheet from './MobileSheet';
 import { useMobileInteractions } from './MobileInteractions';
 import { DimInput } from './CanvasPanel';
+import { AddIcon, ChevronDownIcon, ChevronUpIcon, CloseIcon, CropIcon, EyeIcon as Eye, EyeOffIcon, GripIcon } from './EditorIcons';
 
 const SHAPE_OPTIONS = ['auto', ...Object.keys(CARD_SHAPES)];
 // The pair the W×H fields open on. It is seeded from whatever ratio the scene
@@ -25,21 +26,7 @@ const pixelPairFor = (ratio: number): [number, number] => (ratio >= 1
   ? [PIXEL_SEED_LONG_EDGE, Math.round(PIXEL_SEED_LONG_EDGE / ratio)]
   : [Math.round(PIXEL_SEED_LONG_EDGE * ratio), PIXEL_SEED_LONG_EDGE]);
 
-const EyeIcon = ({ off }: { off?: boolean }) => (
-  <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-    <path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z" stroke="currentColor" strokeWidth="1.3"/>
-    <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.3"/>
-    {off && <path d="M2.5 13.5l11-11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>}
-  </svg>
-);
-
-const XIcon = () => (
-  <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
-);
-
-const CropIcon = () => (
-  <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 1.5v10.5h10.5M1.5 4H12v10.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-);
+const AssetEyeIcon = ({ off }: { off?: boolean }) => (off ? <EyeOffIcon size={12}/> : <Eye size={12}/>);
 
 // 3×3 focal-point picker: images cover-fill their card without stretching;
 // the focus chooses which part survives the crop.
@@ -92,12 +79,6 @@ function MobileCropSheet({ asset, onClose }: { asset: AssetItem; onClose: () => 
     </MobileSheet>
   );
 }
-
-const GripIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor" aria-hidden="true">
-    {[5, 9, 13].flatMap((y) => [7, 11].map((x) => <circle key={`${x}-${y}`} cx={x} cy={y} r="1" />))}
-  </svg>
-);
 
 function MobileAssetRow({
   asset,
@@ -153,9 +134,9 @@ function MobileAssetRow({
       style={{ transform: CSS.Transform.toString(transform), transition }}
     >
       <div className="mobile-asset-actions" aria-hidden={!open}>
-        <button onClick={() => { onCrop(); onOpen(false); }}><CropIcon /><span>Crop</span></button>
-        <button onClick={() => { onToggle(); onOpen(false); }}><EyeIcon off={!asset.visible} /><span>{asset.visible ? 'Hide' : 'Show'}</span></button>
-        <button className="danger" onClick={() => { onRemove(); onOpen(false); }}><XIcon /><span>Remove</span></button>
+        <button onClick={() => { onCrop(); onOpen(false); }}><CropIcon size={12}/><span>Crop</span></button>
+        <button onClick={() => { onToggle(); onOpen(false); }}><AssetEyeIcon off={!asset.visible} /><span>{asset.visible ? 'Hide' : 'Show'}</span></button>
+        <button className="danger" onClick={() => { onRemove(); onOpen(false); }}><CloseIcon size={12}/><span>Remove</span></button>
       </div>
       <div
         className="mobile-asset-face"
@@ -182,7 +163,7 @@ function MobileAssetRow({
           {...attributes}
           {...listeners}
         >
-          <GripIcon />
+          <GripIcon size={18}/>
         </button>
       </div>
     </li>
@@ -486,7 +467,7 @@ export default function AssetsPanel() {
             <DragOverlay>
               {activeDragId && (() => {
                 const asset = sortableEntries.find((entry) => entry.asset.id === activeDragId)?.asset;
-                return asset ? <div className="mobile-asset-overlay"><span className="asset-thumb asset-thumb-empty" /><span>{asset.name}</span><GripIcon /></div> : null;
+                return asset ? <div className="mobile-asset-overlay"><span className="asset-thumb asset-thumb-empty" /><span>{asset.name}</span><GripIcon size={18}/></div> : null;
               })()}
             </DragOverlay>
             {cropOpenId && (() => {
@@ -512,7 +493,7 @@ export default function AssetsPanel() {
                   // persisted upload still resolving from IndexedDB (or its bytes
                   // are gone) — show a clickable placeholder, never src="".
                   <span className="asset-thumb asset-thumb-empty" onClick={() => openSlotPicker(i)} title="Re-add file">
-                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                    <AddIcon size={12}/>
                   </span>
                 ) : isVideoSource(a.url, a.kind) ? (
                   // play only on hover — a still poster frame otherwise, so N video
@@ -543,7 +524,7 @@ export default function AssetsPanel() {
                     disabled={i === 0}
                     onClick={() => i > 0 && reorderAssets(i, i - 1)}
                   >
-                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 10l4-4 4 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    <ChevronUpIcon size={14}/>
                   </button>
                   <button
                     className="icon-btn"
@@ -552,7 +533,7 @@ export default function AssetsPanel() {
                     disabled={i >= filled - 1}
                     onClick={() => i < filled - 1 && reorderAssets(i, i + 1)}
                   >
-                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    <ChevronDownIcon size={14}/>
                   </button>
                 </span>
                 <button
@@ -560,13 +541,13 @@ export default function AssetsPanel() {
                   title="Crop focus"
                   onClick={() => setCropOpenId(cropOpenId === a.id ? null : a.id)}
                 >
-                  <CropIcon />
+                  <CropIcon size={12}/>
                 </button>
                 <button className={`icon-btn ${a.visible ? '' : 'off'}`} title={a.visible ? 'Hide' : 'Show'} onClick={() => toggleAsset(a.id)}>
-                  <EyeIcon off={!a.visible} />
+                  <AssetEyeIcon off={!a.visible} />
                 </button>
                 <button className="icon-btn" title="Remove" onClick={() => removeAsset(a.id)}>
-                  <XIcon />
+                  <CloseIcon size={12}/>
                 </button>
                 {cropOpenId === a.id && <CropPopover asset={a} onClose={() => setCropOpenId(null)} />}
               </li>
@@ -579,7 +560,7 @@ export default function AssetsPanel() {
               >
                 <span className="asset-idx">{i + 1}</span>
                 <span className="asset-thumb asset-thumb-empty">
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                  <AddIcon size={12}/>
                 </span>
                 <span className="mobile-slot-copy"><strong>Slot {i + 1}</strong><small>Drop or click to add</small></span>
               </li>
