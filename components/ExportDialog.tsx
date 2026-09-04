@@ -85,6 +85,8 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
   const [saving, setSaving] = useState(false);
   const [savedTo, setSavedTo] = useState<string | null>(null);
   const [saveErr, setSaveErr] = useState('');
+  // Distinct from saveErr: not a failure, a nudge. See saveToFolder.
+  const [saveHint, setSaveHint] = useState('');
   const [confirmDemo, setConfirmDemo] = useState(false);
   // Probed after mount: WebCodecs is absent during SSR, and branching the first
   // render on it would desync hydration.
@@ -134,16 +136,43 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
     return resp.blob();
   };
 
+  // Ask once per file instead of once for a folder. This path never touches a
+  // directory handle, so the blocklist below cannot reach it — which is why it
+  // is offered as its own button rather than only as a fallback.
+  const saveEachFile = async () => {
+    for (const file of outputs) {
+      const handle = await window.showSaveFilePicker({ suggestedName: file.name });
+      const writable = await handle.createWritable();
+      await writable.write(await fileBytes(file));
+      await writable.close();
+    }
+    setSavedTo(outputs.map((o) => o.name).join(', '));
+  };
+
   // Copy the freshly-encoded files into a folder the user picks. Folder-level
   // write permission is often denied (the browser's "save changes" prompt, or
   // Windows/OneDrive controlled-folder protection) — when that happens, fall
   // back to a per-file "Save as" dialog, which needs no folder permission.
   const saveToFolder = async () => {
     setSaveErr('');
+    setSaveHint('');
     setSaving(true);
     try {
       try {
-        const dir = await window.showDirectoryPicker({ id: 'motion-exports', mode: 'readwrite' });
+        // startIn matters. The browser keeps a blocklist of directories this API
+        // refuses — drive roots, Windows and Program Files, the macOS Library,
+        // and the user's HOME ROOT, which on Windows is where the picker lands
+        // with no startIn. Picking one of those shows the browser's own
+        // "contains system files" dialog and leaves the picker open; the way out
+        // is Cancel, and the call then rejects with AbortError — the SAME error
+        // a plain cancel gives, so the two cannot be told apart afterwards.
+        // Hence both halves of this fix: open somewhere always-allowed, and make
+        // the AbortError branch say what might have happened.
+        const dir = await window.showDirectoryPicker({
+          id: 'motion-exports',
+          mode: 'readwrite',
+          startIn: 'downloads',
+        });
         for (const file of outputs) {
           const handle = await dir.getFileHandle(file.name, { create: true });
           const writable = await handle.createWritable();
@@ -153,19 +182,35 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
         setSavedTo(dir.name);
         return;
       } catch (e: any) {
-        if (e?.name === 'AbortError') return; // user cancelled the picker
+        if (e?.name === 'AbortError') {
+          // Cancelling and being refused arrive here as the same error, so this
+          // has to cover both without accusing the user of either. Saying it
+          // costs a line and turns a dead end into a next step; the silent
+          // `return` that used to be here is what made this look broken.
+          setSaveHint('Nothing was saved. If the browser said the folder contains system files: drive roots, Windows, Program Files and your user folder itself are off limits to it — pick a folder inside one of those, or save the files one by one.');
+          return;
+        }
         if (e?.name !== 'NotAllowedError' && e?.name !== 'SecurityError') throw e;
         // fall through — write access to the folder was denied
       }
-      for (const file of outputs) {
-        const handle = await window.showSaveFilePicker({ suggestedName: file.name });
-        const writable = await handle.createWritable();
-        await writable.write(await fileBytes(file));
-        await writable.close();
-      }
-      setSavedTo(outputs.map((o) => o.name).join(', '));
+      await saveEachFile();
     } catch (e: any) {
       if (e?.name !== 'AbortError') setSaveErr(String(e?.message ?? e)); // ignore user cancel
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // The same per-file path, reachable directly rather than only after a folder
+  // save has already failed.
+  const saveFilesOnly = async () => {
+    setSaveErr('');
+    setSaveHint('');
+    setSaving(true);
+    try {
+      await saveEachFile();
+    } catch (e: any) {
+      if (e?.name !== 'AbortError') setSaveErr(String(e?.message ?? e));
     } finally {
       setSaving(false);
     }
@@ -490,7 +535,14 @@ npm run dev`}</code></pre>
                     <button className="btn primary full" onClick={saveToFolder} disabled={saving}>
                       {saving ? 'Saving…' : savedTo ? 'Save to another folder…' : 'Choose folder & save'}
                     </button>
+                    {/* Second, not hidden: this one asks per file and never
+                        takes a directory handle, so it works in the places the
+                        folder picker refuses. */}
+                    <button className="btn full" onClick={saveFilesOnly} disabled={saving}>
+                      {outputs.length > 1 ? 'Save files one by one…' : 'Save file…'}
+                    </button>
                     {savedTo && <p className="ctl-hint">Saved to <code>{savedTo}</code>.</p>}
+                    {saveHint && <p className="ctl-hint">{saveHint}</p>}
                     {saveErr && <div className="export-error">Save failed: {saveErr}</div>}
                   </>
                 )}
