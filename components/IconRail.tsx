@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { modeForSection, NAV_SECTIONS, sectionFromPathname, type NavSectionId } from '@/lib/navSections';
+import { AVAILABLE_NAV_SECTIONS, modeForSection, sectionFromPathname, type NavSectionId } from '@/lib/navSections';
 import LogoMark from '@/components/LogoMark';
 import { useUIStore } from '@/store/useUIStore';
 import { useProjectStore } from '@/store/useProjectStore';
@@ -23,8 +23,11 @@ const ICONS: Record<NavSectionId, React.ReactNode> = {
   board: <BoardIcon />,
 };
 
-const NAV = NAV_SECTIONS.filter((section) => !section.experimental);
-const EXPERIMENTAL_NAV = NAV_SECTIONS.filter((section) => section.experimental);
+// Only what a person can actually open: a gated section is closed at the route
+// too, so offering it here would be a button that lands on the Library.
+const NAV = AVAILABLE_NAV_SECTIONS.filter((section) => !section.experimental);
+const EXPERIMENTAL_NAV = AVAILABLE_NAV_SECTIONS.filter((section) => section.experimental);
+const HAS_EXPERIMENTS = EXPERIMENTAL_NAV.length > 0;
 
 export default function IconRail() {
   // The URL owns the active section (EditorShell mirrors it into the store for
@@ -106,6 +109,7 @@ export default function IconRail() {
             <span className="rail-label">{n.label}</span>
           </Link>
         ))}
+        {HAS_EXPERIMENTS && (<>
         <button
           className={`rail-item rail-experimentals ${experimentalActive ? 'active' : ''}`}
           onClick={() => setExperimentalsOpen((open) => !open)}
@@ -137,6 +141,7 @@ export default function IconRail() {
             ))}
           </div>
         </div>
+        </>)}
       </div>
       <div className="rail-bottom">
         {IS_HOSTED_DEPLOYMENT ? <NewsNotifier /> : <UpdateNotifier />}
