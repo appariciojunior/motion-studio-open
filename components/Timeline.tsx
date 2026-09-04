@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useSceneStore } from '@/store/useSceneStore';
 import ExportDialog from './ExportDialog';
 import TrackLane from './TrackLane';
-import { ExportIcon, PauseIcon, PlayIcon } from './EditorIcons';
+import { AddIcon, ExportIcon, LayersIcon, PauseIcon, PlayIcon } from './EditorIcons';
 
 function fmt(sec: number) {
   const s = Math.max(0, sec);
@@ -205,7 +205,7 @@ export default function Timeline({
           aria-expanded={lanesOpen}
           title="Motion layers"
         >
-          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 1.8l6 3-6 3-6-3 6-3z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M2 8.2l6 3 6-3" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+          <LayersIcon size={13}/>
           Layers
           <span className="tl-lanes-count">{tracks.length}</span>
         </button>
@@ -242,7 +242,7 @@ export default function Timeline({
 
         <div className="tl-lanes-foot">
           <button className="tl-add-track" onClick={() => addTrack()}>
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 3.5v9M3.5 8h9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            <AddIcon size={12}/>
             Add layer
           </button>
           <span className="tl-lanes-hint">

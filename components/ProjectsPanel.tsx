@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { ago } from '@/lib/relativeTime';
 import { useProjectStore } from '@/store/useProjectStore';
+import { DuplicateIcon, PencilIcon, TrashIcon } from './EditorIcons';
 
 // The mobile projects sheet. On desktop the section is the full-width Projects
 // tab instead (components/ProjectsBrowser).
@@ -87,10 +88,10 @@ export default function ProjectsPanel({ onProjectOpen }: { onProjectOpen?: () =>
                     title="Rename"
                     onClick={() => { setEditingId(p.id); setEditName(p.name); setConfirmId(null); }}
                   >
-                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M10.5 2.5l3 3-8 8H2.5v-3l8-8z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+                    <PencilIcon size={12}/>
                   </button>
                   <button className="icon-btn" title="Duplicate" onClick={() => duplicate(p.id)}>
-                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="2.5" y="2.5" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M5.5 13.5h6a2 2 0 002-2v-6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                    <DuplicateIcon size={12}/>
                   </button>
                   <button
                     className={`icon-btn ${isConfirming ? 'danger' : ''}`}
@@ -98,7 +99,7 @@ export default function ProjectsPanel({ onProjectOpen }: { onProjectOpen?: () =>
                     onClick={() => (isConfirming ? (remove(p.id), setConfirmId(null)) : setConfirmId(p.id))}
                     onBlur={() => setConfirmId((c) => (c === p.id ? null : c))}
                   >
-                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 5h10M6.5 5V3.5h3V5M5 5l.6 8h4.8L11 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    <TrashIcon size={12}/>
                   </button>
                 </div>
               )}

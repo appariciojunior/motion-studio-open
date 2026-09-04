@@ -29,6 +29,7 @@ import WebSourceBar from '@/components/WebSourceBar';
 import { use3DStore } from '@/store/use3DStore';
 import { useUIStore } from '@/store/useUIStore';
 import { useWebStore } from '@/store/useWebStore';
+import { ChevronRightIcon, FullscreenIcon } from '@/components/EditorIcons';
 
 const PreviewStage = dynamic(() => import('@/components/PreviewStage'), { ssr: false });
 const ThreeStage3D = dynamic(() => import('@/components/ThreeStage3D'), { ssr: false });
@@ -99,7 +100,7 @@ export default function DesktopEditor() {
           <>
             <PreviewStage />
             <button className="stage-fs" title="Fullscreen">
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              <FullscreenIcon size={15}/>
             </button>
           </>
         )}
@@ -108,10 +109,10 @@ export default function DesktopEditor() {
         {!isProjects && <ProjectDock />}
         <HistoryControls />
         <button className="panel-toggle panel-toggle-left" onClick={toggleLeftPanel} aria-expanded={!leftCollapsed} aria-label={leftCollapsed ? 'Expand left sidebar' : 'Collapse left sidebar'} title={leftCollapsed ? 'Expand left sidebar' : 'Collapse left sidebar'}>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 3.5L10.5 8 6 12.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          <ChevronRightIcon size={16}/>
         </button>
         <button className="panel-toggle panel-toggle-right" onClick={toggleRightPanel} aria-expanded={!rightCollapsed} aria-label={rightCollapsed ? 'Expand right sidebar' : 'Collapse right sidebar'} title={rightCollapsed ? 'Expand right sidebar' : 'Collapse right sidebar'}>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 3.5L10.5 8 6 12.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          <ChevronRightIcon size={16}/>
         </button>
       </main>
 

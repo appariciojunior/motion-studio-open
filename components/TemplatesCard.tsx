@@ -7,20 +7,14 @@ import type { Template } from '@/lib/types';
 import TemplateThumb from './TemplateThumb';
 import { ControlRow } from './Controls';
 import { useMobileInteractions } from './MobileInteractions';
+import { ChevronRightIcon, CloseIcon, HeartIcon, SearchIcon } from './EditorIcons';
 
 const Chevron = ({ dir = 'right' }: { dir?: 'right' | 'left' }) => (
-  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={dir === 'left' ? { transform: 'rotate(180deg)' } : undefined}>
-    <path d="M4.5 2.5L8 6l-3.5 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-  </svg>
+  <ChevronRightIcon size={12} style={dir === 'left' ? { transform: 'rotate(180deg)' } : undefined}/>
 );
 
 const Heart = ({ filled, size = 12 }: { filled: boolean; size?: number }) => (
-  <svg width={size} height={size} viewBox="-1 -1 18 18" fill={filled ? 'currentColor' : 'none'} aria-hidden="true">
-    <path
-      d="M8 1.314C12.438-3.248 23.534 4.735 8 15-7.534 4.736 3.562-3.248 8 1.314z"
-      stroke="currentColor" strokeWidth={filled ? 0 : 1.6} strokeLinejoin="round"
-    />
-  </svg>
+  <HeartIcon size={size} fill={filled ? 'currentColor' : undefined} stroke={filled ? 'none' : undefined}/>
 );
 
 // Favourites resolve through the CATALOGUE, not the full registry: a template
@@ -178,7 +172,7 @@ export default function TemplatesCard({
 
         <div className="searchbox">
           <span className="ico">
-            <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.4"/><path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+            <SearchIcon size={13}/>
           </span>
           <input placeholder={`Search ${catalogTemplateList.length} templates`} value={query} onChange={(e) => setQuery(e.target.value)} />
         </div>
@@ -213,7 +207,7 @@ export default function TemplatesCard({
                       title="Delete preset"
                       onClick={(e) => { e.stopPropagation(); deleteCustomPreset(p.id); }}
                     >
-                      <svg width="10" height="10" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                      <CloseIcon size={10}/>
                     </button>
                   </div>
                 );

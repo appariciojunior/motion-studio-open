@@ -6,6 +6,7 @@ import { useSceneStore } from '@/store/useSceneStore';
 import { getTemplate } from '@/templates';
 import { resolveEasing } from '@/lib/easing';
 import { buildZip } from '@/lib/webExport';
+import { AlertIcon, ExportIcon, WebIcon } from './EditorIcons';
 
 // Web mode (SPIKE) — the source controls and the zip, laid out for the
 // timeline bar. Opening the editor is one button and a compile status; as a
@@ -68,18 +69,13 @@ export default function WebSourceBar() {
     <div className="web-source-bar">
       {problem && (
         <span className="web-source-err" title={problem}>
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-            <circle cx="8" cy="8" r="6.25" stroke="currentColor" strokeWidth="1.4"/>
-            <path d="M8 5v3.5M8 10.8v.2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
-          </svg>
+          <AlertIcon size={12}/>
           {problem}
         </span>
       )}
 
       <button className="tl-ghost-btn" onClick={() => setCodeOpen(true)}>
-        <svg width="14" height="14" viewBox="0 0 20 20" fill="none">
-          <path d="M7.5 6.5L4 10l3.5 3.5M12.5 6.5L16 10l-3.5 3.5M11 4.5l-2 11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
+        <WebIcon size={14}/>
         Edit code
       </button>
 
@@ -89,7 +85,7 @@ export default function WebSourceBar() {
         disabled={!canExport || busy}
         title={canExport ? 'Download the component + motion as a zip' : 'Mark at least one element first'}
       >
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0 0L5 7m3 3l3-3M3 13h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        <ExportIcon size={14}/>
         {busy ? 'Packing…' : 'Export zip'}
       </button>
     </div>
