@@ -407,6 +407,19 @@ input[type=range] {
   margin-bottom: 2px;
 }
 
+/* A section that exists but this build does not open. It stays visible on
+   purpose — hiding it would make the work invisible — so it reads as "not yet"
+   rather than as a button that does nothing: dimmer than the resting item,
+   no hover response, no text cursor to invite a click. The opacity is a literal
+   rather than a token because there is no "disabled" step in the palette. */
+.rail-item.rail-locked,
+.rail-item.rail-locked:hover {
+  opacity: 0.38;
+  color: var(--fg-faint);
+  cursor: default;
+  background: none;
+}
+
 /* No rule above Updates. The rail's own border-right already says where the
    column ends, and a second line cutting across a 64px strip reads as a
    division between two groups of navigation when there is only one — the
