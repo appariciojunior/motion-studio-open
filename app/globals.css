@@ -444,6 +444,73 @@ input[type=range] {
 }
 
 /* ============================================================
+   THEME GLYPH — the sun/moon toggle, one shape that morphs
+   (components/EditorIcons.tsx → ThemeGlyph)
+
+   The MOON is the base state, because the button offers the theme
+   you are going TO: on light it shows the moon, on dark the sun.
+
+   Everything moves on `transform`, so it composites. Two details
+   that are load-bearing rather than decorative:
+
+   · `stroke-width` animates alongside the disc's scale. Without it
+     scale(1.55) would drag the 1.5 stroke up to 2.33 and the glyph
+     would fatten away from the rest of the icon set.
+   · The rays retract to the centre, which means they cross the disc's
+     ring on the way in (they live between radius 6.2 and 8.5; the
+     disc grows to 6.2). That is deliberate here — it is the original
+     gesture — and it is why they also fade over the full duration
+     rather than lingering.
+   ============================================================ */
+.theme-glyph {
+  --dur: 420ms;
+  --grow: 1.55;
+  --sw: 0.968;    /* 1.5 / --grow, so the stroke reads 1.5 at both ends */
+  --park: 3.61px; /* clears the disc's stroke by 1.35 in the sun state */
+}
+
+.theme-glyph .disc {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform    var(--dur) cubic-bezier(.4, 0, .2, 1),
+              stroke-width var(--dur) cubic-bezier(.4, 0, .2, 1);
+}
+
+.theme-glyph .bite {
+  transition: transform var(--dur) cubic-bezier(.4, 0, .2, 1);
+}
+
+.theme-glyph .rays {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform var(--dur) cubic-bezier(.4, 0, .2, 1),
+              opacity   var(--dur) linear;
+}
+
+/* light theme → the MOON: disc grown, bite carved in, rays gone */
+.theme-glyph .disc { transform: scale(var(--grow)); stroke-width: var(--sw); }
+.theme-glyph .bite { transform: translate(0, 0); }
+.theme-glyph .rays { transform: scale(0); opacity: 0; transition-delay: 0ms; }
+
+/* dark theme → the SUN: bite parked off the disc, rays out */
+:root[data-theme="dark"] .theme-glyph .disc { transform: none; stroke-width: 1.5; }
+:root[data-theme="dark"] .theme-glyph .bite {
+  transform: translate(var(--park), calc(-1 * var(--park)));
+}
+:root[data-theme="dark"] .theme-glyph .rays {
+  transform: none;
+  opacity: .5;
+  transition-delay: calc(var(--dur) * .2);
+}
+
+/* 1ms rather than 0s: the end state still has to be applied */
+@media (prefers-reduced-motion: reduce) {
+  .theme-glyph .disc,
+  .theme-glyph .bite,
+  .theme-glyph .rays { transition-duration: 1ms; transition-delay: 0ms; }
+}
+
+/* ============================================================
    TEMPLATES CARD — header pad 14/12/10, tabs + search h34
    ============================================================ */
 .templates {

@@ -10,6 +10,7 @@ import { readProjectThreeD } from '@/lib/three3dPersist';
 import { templates } from '@/templates';
 import { useProjectStore } from '@/store/useProjectStore';
 import { useUIStore } from '@/store/useUIStore';
+import { AddIcon, DuplicateIcon, PencilIcon, TrashIcon } from './EditorIcons';
 
 // ============================================================
 //  PROJECTS TAB — the section's own full-width view
@@ -124,19 +125,6 @@ function frameStyle(sketch: Sketch, poster: string | null): React.CSSProperties 
   const axis = sketch.ratio < 4 / 3 ? { height: '76%' } : { width: '82%' };
   return { aspectRatio: String(sketch.ratio), ...axis, ...(poster ? null : { background: sketch.bg }) };
 }
-
-const RenameIcon = () => (
-  <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M10.5 2.5l3 3-8 8H2.5v-3l8-8z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
-);
-const DuplicateIcon = () => (
-  <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="2.5" y="2.5" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M5.5 13.5h6a2 2 0 002-2v-6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
-);
-const BinIcon = () => (
-  <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 5h10M6.5 5V3.5h3V5M5 5l.6 8h4.8L11 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-);
-const PlusIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M10 4.5v11M4.5 10h11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-);
 
 export default function ProjectsBrowser() {
   const projects = useProjectStore((s) => s.projects);
@@ -268,7 +256,7 @@ export default function ProjectsBrowser() {
               read as a result. */}
           {!query.trim() && (
             <button className="pj-new" onClick={newProject}>
-              <span className="pj-new-mark"><PlusIcon /></span>
+              <span className="pj-new-mark"><AddIcon size={18}/></span>
               <span className="pj-new-label">New project</span>
               <span className="pj-new-hint">Starts empty · pick a template</span>
             </button>
@@ -344,9 +332,9 @@ function ProjectCard({
       {/* Over the thumbnail, revealed on hover/focus — see the layout note at
           the top of the file. */}
       <div className="pj-actions">
-        <button className="pj-act" title="Rename" onClick={onStartRename}><RenameIcon /></button>
-        <button className="pj-act" title="Duplicate" onClick={onDuplicate}><DuplicateIcon /></button>
-        <button className={`pj-act ${isConfirming ? 'danger' : ''}`} title={isConfirming ? 'Click again to delete' : 'Delete'} onClick={onDelete}><BinIcon /></button>
+        <button className="pj-act" title="Rename" onClick={onStartRename}><PencilIcon size={13}/></button>
+        <button className="pj-act" title="Duplicate" onClick={onDuplicate}><DuplicateIcon size={13}/></button>
+        <button className={`pj-act ${isConfirming ? 'danger' : ''}`} title={isConfirming ? 'Click again to delete' : 'Delete'} onClick={onDelete}><TrashIcon size={13}/></button>
       </div>
 
       <div className="pj-foot">

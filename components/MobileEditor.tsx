@@ -14,7 +14,7 @@ import ExportDialog from './ExportDialog';
 import { useUIStore } from '@/store/useUIStore';
 import { useProjectStore } from '@/store/useProjectStore';
 import { useSceneStore } from '@/store/useSceneStore';
-import { AdjustIcon, BackIcon, CanvasIcon, ChevronDownIcon, ExportIcon, InfoIcon, LibraryIcon, MediaIcon, MoonIcon, ProjectsIcon, SunIcon } from './EditorIcons';
+import { AdjustIcon, BackIcon, CanvasIcon, ChevronDownIcon, ExportIcon, InfoIcon, LibraryIcon, MediaIcon, ProjectsIcon, ThemeGlyph } from './EditorIcons';
 import { MobileInteractionProvider } from './MobileInteractions';
 
 const PreviewStage = dynamic(() => import('./PreviewStage'), { ssr: false });
@@ -74,7 +74,7 @@ export default function MobileEditor() {
             aria-label={theme === 'dark' ? 'Use light theme' : 'Use dark theme'}
             title={theme === 'dark' ? 'Light theme' : 'Dark theme'}
           >
-            {theme === 'dark' ? <SunIcon size={18} /> : <MoonIcon size={18} />}
+            <ThemeGlyph size={18} />
           </button>
           <button className="mobile-icon-button" onClick={() => setDesktopNotice(true)} aria-label="Desktop tools information">
             <InfoIcon size={18} />

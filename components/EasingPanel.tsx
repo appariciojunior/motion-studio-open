@@ -10,6 +10,7 @@ import {
   sampleEasing,
   type EasingSpec,
 } from '@/lib/easing';
+import { ResetIcon } from './EditorIcons';
 
 // A small preset preview curve (own tiny viewBox with padding).
 function MiniCurve({ spec }: { spec: EasingSpec }) {
@@ -76,9 +77,7 @@ export default function EasingPanel() {
 
         {/* ---- reset ---- */}
         <button className="ez-reset" onClick={resetValues}>
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-            <path d="M3 8a5 5 0 1 1 1.5 3.5M3 8V4.5M3 8h3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+          <ResetIcon size={12}/>
           Reset all values
         </button>
       </div>
