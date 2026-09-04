@@ -10,3 +10,15 @@ export const IS_HOSTED_DEPLOYMENT = DEPLOYMENT_MODE === 'hosted';
 
 export const RELEASE_NOTES_URL =
   'https://github.com/appariciojunior/motion-studio-open/commits/main/';
+
+// Two sections live in the repository without being finished: the 3D stage and
+// the Web stage. A built app closes them, because an unfinished section is not
+// a preview of anything a person can use — and Web in particular evaluates
+// pasted source with the app's own privileges (see the SECURITY note in
+// components/WebStage.tsx). Development leaves them open so the work can carry
+// on; an explicit NEXT_PUBLIC_EXPERIMENTS wins over both defaults, so a build
+// with them switched on needs an env value, not a code edit.
+export const EXPERIMENTS_ENABLED =
+  process.env.NEXT_PUBLIC_EXPERIMENTS === '1' ? true
+    : process.env.NEXT_PUBLIC_EXPERIMENTS === '0' ? false
+      : process.env.NODE_ENV !== 'production';
