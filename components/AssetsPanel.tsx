@@ -6,9 +6,8 @@ import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-
 import { CSS } from '@dnd-kit/utilities';
 import { useSceneStore, type AssetItem } from '@/store/useSceneStore';
 import { getTemplate, layerCountFor } from '@/templates';
-import { CARD_SHAPES, DEFAULT_FOCUS, cardAspectFor, parseCardShape, type CropFocus } from '@/lib/crop';
+import { CARD_SHAPES, cardAspectFor, parseCardShape } from '@/lib/crop';
 import { isVideoSource } from '@/lib/videoTexture';
-import MobileSheet from './MobileSheet';
 import { useMobileInteractions } from './MobileInteractions';
 import { DimInput } from './CanvasPanel';
 import { AddIcon, ChevronDownIcon, ChevronUpIcon, CloseIcon, CropIcon, EyeIcon as Eye, EyeOffIcon, GripIcon } from './EditorIcons';
@@ -27,58 +26,6 @@ const pixelPairFor = (ratio: number): [number, number] => (ratio >= 1
   : [Math.round(PIXEL_SEED_LONG_EDGE * ratio), PIXEL_SEED_LONG_EDGE]);
 
 const AssetEyeIcon = ({ off }: { off?: boolean }) => (off ? <EyeOffIcon size={12}/> : <Eye size={12}/>);
-
-// 3×3 focal-point picker: images cover-fill their card without stretching;
-// the focus chooses which part survives the crop.
-const FOCUS_CELLS: CropFocus[] = [0, 0.5, 1].flatMap((y) => [0, 0.5, 1].map((x) => ({ x, y })));
-
-function CropPopover({ asset, onClose }: { asset: AssetItem; onClose: () => void }) {
-  const setAssetCrop = useSceneStore((s) => s.setAssetCrop);
-  const setAllAssetCrops = useSceneStore((s) => s.setAllAssetCrops);
-  const focus = asset.crop ?? DEFAULT_FOCUS;
-  return (
-    <>
-      <div className="crop-scrim" onClick={onClose} />
-      <div className="crop-pop" onPointerDown={(e) => e.stopPropagation()}>
-        <span className="crop-pop-title">Crop focus</span>
-        <div className="crop-grid">
-          {FOCUS_CELLS.map((c) => (
-            <button
-              key={`${c.x}-${c.y}`}
-              className={`crop-cell ${focus.x === c.x && focus.y === c.y ? 'active' : ''}`}
-              title={`${['Left','Centre','Right'][c.x * 2]} / ${['Top','Middle','Bottom'][c.y * 2]}`}
-              onClick={() => setAssetCrop(asset.id, c)}
-            />
-          ))}
-        </div>
-        <button className="link-btn" onClick={() => { setAllAssetCrops(focus); onClose(); }}>
-          Apply to all images
-        </button>
-      </div>
-    </>
-  );
-}
-
-function MobileCropSheet({ asset, onClose }: { asset: AssetItem; onClose: () => void }) {
-  const setAssetCrop = useSceneStore((s) => s.setAssetCrop);
-  const setAllAssetCrops = useSceneStore((s) => s.setAllAssetCrops);
-  const focus = asset.crop ?? DEFAULT_FOCUS;
-  return (
-    <MobileSheet title="Crop focus" onClose={onClose}>
-      <div className="mobile-crop-grid">
-        {FOCUS_CELLS.map((cell) => (
-          <button
-            key={`${cell.x}-${cell.y}`}
-            className={focus.x === cell.x && focus.y === cell.y ? 'active' : ''}
-            onClick={() => setAssetCrop(asset.id, cell)}
-            aria-label={`${['Left', 'Centre', 'Right'][cell.x * 2]} / ${['Top', 'Middle', 'Bottom'][cell.y * 2]}`}
-          />
-        ))}
-      </div>
-      <button className="btn full" onClick={() => { setAllAssetCrops(focus); onClose(); }}>Apply to all images</button>
-    </MobileSheet>
-  );
-}
 
 function MobileAssetRow({
   asset,
@@ -156,6 +103,7 @@ function MobileAssetRow({
           <img className="asset-thumb" src={asset.url} alt={asset.name} onClick={onReplace} />
         )}
         <span className="asset-name" title={asset.name}>{asset.name}</span>
+        <button className="icon-btn mobile-crop-open" data-crop-asset={asset.id} aria-label={`Adjust ${asset.name}`} disabled={!asset.url} onClick={onCrop}><CropIcon size={16}/></button>
         <button
           className="mobile-drag-handle"
           data-drag-handle
@@ -170,7 +118,7 @@ function MobileAssetRow({
   );
 }
 
-export default function AssetsPanel() {
+export default function AssetsPanel({ onEditAsset }: { onEditAsset: (id: string) => void }) {
   const mobile = useMobileInteractions();
   const assets = useSceneStore((s) => s.assets);
   // How many card slots the active template will actually fill — asked of the
@@ -221,7 +169,6 @@ export default function AssetsPanel() {
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [overIdx, setOverIdx] = useState<number | null>(null);
   const [dropActive, setDropActive] = useState(false);
-  const [cropOpenId, setCropOpenId] = useState<string | null>(null);
   const [swipeOpenId, setSwipeOpenId] = useState<string | null>(null);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
@@ -451,7 +398,7 @@ export default function AssetsPanel() {
                     open={swipeOpenId === asset.id}
                     onOpen={(open) => setSwipeOpenId(open ? asset.id : null)}
                     onReplace={() => openSlotPicker(index)}
-                    onCrop={() => setCropOpenId(asset.id)}
+                    onCrop={() => onEditAsset(asset.id)}
                     onToggle={() => toggleAsset(asset.id)}
                     onRemove={() => removeAsset(asset.id)}
                   />
@@ -470,10 +417,7 @@ export default function AssetsPanel() {
                 return asset ? <div className="mobile-asset-overlay"><span className="asset-thumb asset-thumb-empty" /><span>{asset.name}</span><GripIcon size={18}/></div> : null;
               })()}
             </DragOverlay>
-            {cropOpenId && (() => {
-              const asset = assets.find((item) => item.id === cropOpenId);
-              return asset ? <MobileCropSheet asset={asset} onClose={() => setCropOpenId(null)} /> : null;
-            })()}
+
           </DndContext>
         ) : (
         <ul className="asset-list">
@@ -537,9 +481,9 @@ export default function AssetsPanel() {
                   </button>
                 </span>
                 <button
-                  className={`icon-btn ${a.crop && (a.crop.x !== 0.5 || a.crop.y !== 0.5) ? 'crop-set' : ''}`}
-                  title="Crop focus"
-                  onClick={() => setCropOpenId(cropOpenId === a.id ? null : a.id)}
+                  className={`icon-btn ${a.crop && (a.crop.x !== 0.5 || a.crop.y !== 0.5 || (a.crop.zoom ?? 1) !== 1) ? 'crop-set' : ''}`}
+                  data-crop-asset={a.id} title="Adjust media" aria-label={`Adjust ${a.name}`} disabled={!a.url}
+                  onClick={() => onEditAsset(a.id)}
                 >
                   <CropIcon size={12}/>
                 </button>
@@ -549,7 +493,6 @@ export default function AssetsPanel() {
                 <button className="icon-btn" title="Remove" onClick={() => removeAsset(a.id)}>
                   <CloseIcon size={12}/>
                 </button>
-                {cropOpenId === a.id && <CropPopover asset={a} onClose={() => setCropOpenId(null)} />}
               </li>
             ) : (
               <li

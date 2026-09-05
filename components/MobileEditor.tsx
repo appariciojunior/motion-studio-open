@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import TemplatesCard from './TemplatesCard';
-import AssetsPanel from './AssetsPanel';
+import MediaSidebar from './MediaSidebar';
 import ScenePanel from './ScenePanel';
 import EffectsPanel from './EffectsPanel';
 import CanvasPanel from './CanvasPanel';
@@ -97,7 +97,7 @@ export default function MobileEditor() {
               onSelect={() => setPanelOpen(false)}
             />
           )}
-          {tab === 'media' && <AssetsPanel />}
+          {tab === 'media' && <MediaSidebar />}
           {tab === 'adjust' && (
             <div className="mobile-composed-panel">
               {trackCount > 1 && <div className="mobile-desktop-hint">This project has {trackCount} layers. Manage layers and their timeline on desktop.</div>}
