@@ -7,7 +7,7 @@ import { useSceneStore, type SceneState } from '@/store/useSceneStore';
 import { resolveEasing } from '@/lib/easing';
 import { assetIndexForSlot, clamp } from '@/lib/motion';
 import { resolveTrackTime, trackAssetIndices, type MotionTrack } from '@/lib/tracks';
-import { cardAspectFor, coverCrop, cropKey } from '@/lib/crop';
+import { cardAspectFor, coverCrop, cropKey, type CropFocus } from '@/lib/crop';
 import { advanceVideoForExport, createCardVideo, isVideoSource, prepareVideoForSequentialExport, useVideoProxies, whenVideoReady } from '@/lib/videoTexture';
 import { BASE_PATH, IS_STATIC_EXPORT } from '@/lib/paths';
 import { advancedRasterSize, gradientRasterMaxEdge, gradientSignature, normalizeGradientSpec, paintGradientCanvas } from '@/lib/gradient';
@@ -233,7 +233,7 @@ export class SceneRenderer {
 
   // Cover-fit a loaded texture into the template's card shape: a cropped view
   // (no stretch) anchored at the asset's focal point. Cached per url/aspect/focus.
-  private croppedView(url: string, base: PIXI.Texture, aspect: number, crop?: { x: number; y: number }): PIXI.Texture {
+  private croppedView(url: string, base: PIXI.Texture, aspect: number, crop?: CropFocus): PIXI.Texture {
     const key = cropKey(url, aspect, crop);
     const hit = this.croppedCache.get(key);
     if (hit) return hit;
@@ -292,7 +292,7 @@ export class SceneRenderer {
     const pool = indices.map((i) => s.assets[i]).filter(Boolean);
 
     const assetSig = (repeat ? 'R|' : '') + 'A' + aspect.toFixed(4) + '|' +
-      pool.map((a) => a.id + ':' + a.url + ':' + a.visible + ':' + (a.crop ? a.crop.x + ',' + a.crop.y : 'c')).join('|');
+      pool.map((a) => a.id + ':' + a.url + ':' + a.visible + ':' + cropKey(a.url, aspect, a.crop)).join('|');
 
     if (count === rt.countSig && assetSig === rt.assetSig) return;
     rt.countSig = count;
@@ -328,7 +328,7 @@ export class SceneRenderer {
       let asset = pool[assetIndexForSlot(i, pool.length, repeat)];
       if (!asset && pool.length > 0) asset = pool[i % pool.length];
       const binding = asset
-        ? `${asset.id}|${asset.url}|${aspect.toFixed(4)}|${asset.crop?.x ?? 0.5},${asset.crop?.y ?? 0.5}`
+        ? `${asset.id}|${cropKey(asset.url, aspect, asset.crop)}`
         : `placeholder|${i}`;
       const bindingChanged = slot.bindKey !== binding;
       slot.bindKey = binding;

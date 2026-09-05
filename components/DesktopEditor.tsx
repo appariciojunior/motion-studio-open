@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import AssetsPanel from '@/components/AssetsPanel';
+import MediaSidebar from '@/components/MediaSidebar';
 import BackgroundFill from '@/components/BackgroundFill';
 import BoardExportBar from '@/components/BoardExportBar';
 import BoardPanel from '@/components/BoardPanel';
@@ -124,7 +124,7 @@ export default function DesktopEditor() {
         ) : isMockup ? (
           <><CanvasPanel is3DMode /><div className="hairline" /><BackgroundFill hideTexture /></>
         ) : (
-          <><CanvasPanel /><div className="hairline" /><AssetsPanel /></>
+          <MediaSidebar showCanvas />
         )}
       </section>
 

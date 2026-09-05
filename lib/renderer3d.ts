@@ -7,7 +7,7 @@ import { applyThreeUniforms, disposeThreeMaterials, threeMaterialFor } from '@/e
 import { resolveEasing } from '@/lib/easing';
 import { assetIndexForSlot, clamp, lerp } from '@/lib/motion';
 import { loadImage } from '@/lib/textureLoad';
-import { cardAspectFor, coverCrop, cropKey } from '@/lib/crop';
+import { cardAspectFor, coverCrop, cropKey, type CropFocus } from '@/lib/crop';
 import { advanceVideoForExport, createCardVideo, isVideoSource, prepareVideoForSequentialExport, useVideoProxies } from '@/lib/videoTexture';
 import { BASE_PATH, IS_STATIC_EXPORT } from '@/lib/paths';
 import type { IRenderer } from '@/lib/rendererTypes';
@@ -283,7 +283,7 @@ export class SceneRenderer3D implements IRenderer {
 
   // Cover-fit via UV window (repeat/offset) on a clone sharing the decoded
   // image — mirrors the Pixi renderer's frame-cropped texture views.
-  private croppedView(url: string, base: THREE.Texture, aspect: number, crop?: { x: number; y: number }): { tex: THREE.Texture; fw: number; fh: number } {
+  private croppedView(url: string, base: THREE.Texture, aspect: number, crop?: CropFocus): { tex: THREE.Texture; fw: number; fh: number } {
     const img = base.image as HTMLImageElement;
     const { fx, fy, fw, fh } = coverCrop(img.width, img.height, aspect, crop);
     const key = cropKey(url, aspect, crop);
@@ -387,7 +387,7 @@ export class SceneRenderer3D implements IRenderer {
       { width: s.width, height: s.height, cardAspect: aspect });
     const pool = trackAssetIndices(track, s.assets).map((i) => s.assets[i]).filter(Boolean);
     const assetSig = (repeat ? 'R|' : '') + 'A' + aspect.toFixed(4) + '|' +
-      pool.map((a) => a.id + ':' + a.url + ':' + a.visible + ':' + (a.crop ? a.crop.x + ',' + a.crop.y : 'c')).join('|');
+      pool.map((a) => a.id + ':' + a.url + ':' + a.visible + ':' + cropKey(a.url, aspect, a.crop)).join('|');
     if (!rt.r3fManaged && r3fManaged) {
       // Entering the R3F-managed Box from another WebGL template keeps the
       // same renderer and track runtime. Remove the previous native meshes
@@ -492,7 +492,7 @@ export class SceneRenderer3D implements IRenderer {
       let asset = pool[assetIndexForSlot(i, pool.length, repeat)];
       if (!asset && pool.length > 0) asset = pool[i % pool.length];
       const binding = asset
-        ? `${asset.id}|${asset.url}|${aspect.toFixed(4)}|${asset.crop?.x ?? 0.5},${asset.crop?.y ?? 0.5}`
+        ? `${asset.id}|${cropKey(asset.url, aspect, asset.crop)}`
         : `placeholder|${i}`;
       const bindingChanged = slot.bindKey !== binding;
       slot.bindKey = binding;

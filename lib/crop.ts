@@ -1,11 +1,20 @@
 import type { Template } from '@/lib/types';
 
 // Focal point for cover-fit cropping, both axes 0..1 (0.5/0.5 = centre).
-export interface CropFocus { x: number; y: number }
+export interface CropFocus { x: number; y: number; zoom?: number }
 
 export const DEFAULT_FOCUS: CropFocus = { x: 0.5, y: 0.5 };
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+
+export const MAX_CROP_ZOOM = 5;
+export function normalizeCrop(focus?: CropFocus | null): Required<CropFocus> {
+  return {
+    x: Number.isFinite(focus?.x) ? clamp01(focus!.x) : 0.5,
+    y: Number.isFinite(focus?.y) ? clamp01(focus!.y) : 0.5,
+    zoom: Number.isFinite(focus?.zoom) ? Math.max(1, Math.min(MAX_CROP_ZOOM, focus!.zoom!)) : 1,
+  };
+}
 
 // User-selectable card shapes (the scene-level crop aspect). 'auto' defers to
 // the template's declared cardAspect (or the 4:5 default).
@@ -69,10 +78,12 @@ export function cardAspectFor(
 // anchored by the focal point — like CSS object-fit: cover + object-position.
 // Images never stretch; the excess on the longer axis is cropped away.
 export function coverCrop(tw: number, th: number, aspect: number, focus?: CropFocus | null) {
-  const f = focus ?? DEFAULT_FOCUS;
+  const f = normalizeCrop(focus);
   let fw = tw;
   let fh = tw / aspect;
   if (fh > th) { fh = th; fw = th * aspect; }
+  fw /= f.zoom;
+  fh /= f.zoom;
   return {
     fx: (tw - fw) * clamp01(f.x),
     fy: (th - fh) * clamp01(f.y),
@@ -83,6 +94,14 @@ export function coverCrop(tw: number, th: number, aspect: number, focus?: CropFo
 
 // Cache key for a cropped texture (shared by both renderers).
 export function cropKey(url: string, aspect: number, focus?: CropFocus | null) {
-  const f = focus ?? DEFAULT_FOCUS;
-  return `${url}|${aspect.toFixed(4)}|${f.x}|${f.y}`;
+  const f = normalizeCrop(focus);
+  return `${url}|${aspect.toFixed(4)}|${f.x}|${f.y}|${f.zoom}`;
+}
+
+// Source-pixel selection shared by direct manipulation and the renderers.
+export function cropFromRect(tw: number, th: number, aspect: number, fx: number, fy: number, width: number): Required<CropFocus> {
+  const base = coverCrop(tw, th, aspect);
+  const zoom = Math.max(1, Math.min(MAX_CROP_ZOOM, base.fw / Math.max(Number.EPSILON, width)));
+  const fw = base.fw / zoom, fh = base.fh / zoom;
+  return normalizeCrop({ x: tw > fw ? fx / (tw - fw) : 0.5, y: th > fh ? fy / (th - fh) : 0.5, zoom });
 }

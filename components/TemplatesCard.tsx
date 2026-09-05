@@ -14,7 +14,7 @@ const Chevron = ({ dir = 'right' }: { dir?: 'right' | 'left' }) => (
 );
 
 const Heart = ({ filled, size = 12 }: { filled: boolean; size?: number }) => (
-  <HeartIcon size={size} fill={filled ? 'currentColor' : undefined} stroke={filled ? 'none' : undefined}/>
+  <HeartIcon size={size} fill={filled ? 'currentColor' : 'none'} stroke={filled ? 'none' : 'currentColor'}/>
 );
 
 // Favourites resolve through the CATALOGUE, not the full registry: a template
