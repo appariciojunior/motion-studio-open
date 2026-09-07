@@ -93,6 +93,14 @@ for (const [id, fx] of Object.entries(effects)) {
   const d = effectDefaults('posterize');
   payload.posterize.uMix0 = effects.posterize.shader.uniforms({ ...d, mix: 0 }, CTX);
   payload.posterize.uMix50 = effects.posterize.shader.uniforms({ ...d, mix: 50 }, CTX);
+
+  // Liquid Glass em duas posicoes. O deslocamento do pad resolve o SINAL de y
+  // de uma vez: se o pad e o quadro discordarem, a lente anda para o lado
+  // errado e nenhuma outra medida acusa isso.
+  const lg = effectDefaults('liquid-glass');
+  const lgu = (extra) => effects['liquid-glass'].shader.uniforms({ ...lg, size: 30, ...extra }, CTX);
+  payload['liquid-glass'].uCentro = lgu({ position: { x: 0, y: 0 } });
+  payload['liquid-glass'].uDireitaBaixo = lgu({ position: { x: 40, y: 24 } });
 }
 
 (async () => {
@@ -456,6 +464,45 @@ void main(){ vTextureCoord = aPosition; gl_Position = vec4(aPosition*2.0-1.0, 0.
       if (com <= base) r.falhas.push('bloom: o brilho nao transbordou para o lado da faixa (' + base + ' -> ' + com + ')');
       if (linha(b, W >> 1) < 250) r.falhas.push('bloom: o centro da faixa branca escureceu (' + linha(b, W >> 1) + ') — bloom SOMA, nao mistura');
     } catch (e) { r.falhas.push('bloom: ' + String(e.message).slice(0, 160)); }
+
+    // ---- LIQUID GLASS: a lente e LOCAL, e anda com o pad ----
+    //
+    // Duas perguntas que compilar nao responde. Primeira: o efeito e local — o
+    // quadro fora da lente tem de sair identico a fonte, ou nao e uma lente, e
+    // um filtro de tela cheia. Segunda: o pad move a lente para o lado certo;
+    // com pad e quadro discordando no sinal de y, a lente anda para cima quando
+    // se pede para baixo e nenhuma outra medida acusa.
+    //
+    // Mede o CENTROIDE da diferenca contra a fonte, que e onde a lente esta.
+    try {
+      const fonte = run(fx['liquid-glass'].fragment, { ...fx['liquid-glass'].uCentro, uZoom: 0, uDispersion: 0, uRipple: 0, uGlow: 0, uRing: 0, uBlur: 0, uHalf: [0.001, 0.001] }, TEX.degrade);
+      const centroide = (px) => {
+        let sx = 0, sy = 0, peso = 0, mudados = 0;
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+          const i = (y * W + x) * 4;
+          const dif = Math.abs(px[i] - fonte[i]) + Math.abs(px[i + 1] - fonte[i + 1]) + Math.abs(px[i + 2] - fonte[i + 2]);
+          if (dif < 6) continue;
+          mudados++;
+          sx += x * dif; sy += y * dif; peso += dif;
+        }
+        return { x: peso ? sx / peso : -1, y: peso ? sy / peso : -1, mudados };
+      };
+      const c0 = centroide(run(fx['liquid-glass'].fragment, fx['liquid-glass'].uCentro, TEX.degrade));
+      const c1 = centroide(run(fx['liquid-glass'].fragment, fx['liquid-glass'].uDireitaBaixo, TEX.degrade));
+      r.medidas['liquid-glass'] = {
+        centro: [Math.round(c0.x), Math.round(c0.y)], pixelsMudados: c0.mudados,
+        deslocada: [Math.round(c1.x), Math.round(c1.y)],
+        andou: [Math.round(c1.x - c0.x), Math.round(c1.y - c0.y)], pedido: [40, 24],
+      };
+      // A lente ocupa uma fracao do quadro: mudar tudo significa que ela nao
+      // recortou nada, e mudar quase nada significa que ela nao pintou.
+      const fracao = c0.mudados / (W * H);
+      if (fracao < 0.02) r.falhas.push('liquid-glass: a lente quase nao mudou pixel (' + (fracao * 100).toFixed(1) + '% do quadro)');
+      if (fracao > 0.35) r.falhas.push('liquid-glass: a lente vazou para fora do disco (' + (fracao * 100).toFixed(1) + '% do quadro mudou)');
+      // O centroide tem de ANDAR junto com o pad, com o sinal certo nos dois eixos.
+      if (Math.abs((c1.x - c0.x) - 40) > 10) r.falhas.push('liquid-glass: o pad pediu +40 em x e a lente andou ' + (c1.x - c0.x).toFixed(1));
+      if (Math.abs((c1.y - c0.y) - 24) > 10) r.falhas.push('liquid-glass: o pad pediu +24 em y e a lente andou ' + (c1.y - c0.y).toFixed(1) + ' — sinal de y invertido entre o pad e o quadro');
+    } catch (e) { r.falhas.push('liquid-glass: ' + String(e.message).slice(0, 160)); }
 
     // ---- PARIDADE ENTRE ENGINES ----
     //

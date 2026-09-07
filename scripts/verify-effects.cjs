@@ -140,10 +140,22 @@ for (const effect of effectList) {
     const before = JSON.stringify(pass.uniforms(probe, SIZES[0]));
     const bumped = { ...probe };
     const v = probe[control.key];
+    // Cada TIPO de controle precisa da sua perturbacao. As tres primeiras
+    // linhas cobrem slider, toggle e pills, que era tudo o que existia num
+    // efeito. Objeto e cor entraram depois e caiam no `: v` do fim — o valor
+    // saia identico, os uniforms tambem, e o provador acusava um controle
+    // perfeitamente ligado como botao morto. Falso positivo, e o pior tipo:
+    // pressiona a pessoa a mexer no efeito para calar o teste.
     bumped[control.key] = typeof v === 'number'
       ? (control.max !== undefined && v >= control.max ? (control.min ?? 0) : v + (control.step ?? 1))
       : typeof v === 'boolean' ? !v
       : Array.isArray(control.options) ? control.options.find((o) => o !== v) ?? v
+      // xypad: {x,y}. Mexe nos DOIS eixos, senao um pad que so le `x` passaria.
+      : (v && typeof v === 'object' && 'x' in v && 'y' in v)
+        ? { x: Number(v.x) + 37, y: Number(v.y) - 23 }
+      // cor: troca por outra bem distante, para nao cair num arredondamento
+      : (typeof v === 'string' && /^#?[0-9a-f]{3,8}$/i.test(v))
+        ? (v.startsWith('#') ? '#0f8a3c' : '0f8a3c')
       : v;
     const after = JSON.stringify(pass.uniforms(bumped, SIZES[0]));
     if (before !== after) reached.add(control.key);
