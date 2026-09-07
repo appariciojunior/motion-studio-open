@@ -249,6 +249,22 @@ export class SceneRenderer3D implements IRenderer {
         // DIRETO (1, o acumulador de arte, que ja saiu deste mesmo shader).
         // Dividir por alpha o que ja e direto estoura a cor nas bordas do card.
         layerIsStraight: { value: 0 },
+        // 1 = ignore `baseMap` e comece do VAZIO.
+        //
+        // Existe por causa de uma pegadinha do three com alvos MULTISAMPLED — e
+        // todos aqui sao, ver makeTarget. A textura de um alvo MSAA so e
+        // resolvida quando algo e DESENHADO nele; no caminho de arte separada o
+        // acumulador e apenas LIMPO e nunca desenhado, entao a sua textura
+        // seguia entregando o conteudo resolvido antes: o fundo OPACO dos
+        // frames em que a arte nao era separada. Com isso `base.a` valia 1 onde
+        // devia valer 0, o alpha da arte saia opaco no quadro inteiro, e a luz
+        // do Liquid Glass vazava para o fundo. Medido: 14% dos pixels de fundo
+        // mudavam no caminho webgl contra 1,2% no Pixi, com o MESMO shader — e
+        // foi essa assimetria entre os dois engines que denunciou.
+        //
+        // Nao ler a textura resolve na raiz, em vez de depender de um clear que
+        // o driver nao e obrigado a propagar para a textura.
+        baseEmpty: { value: 0 },
       },
       vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0); }`,
       fragmentShader: `
@@ -257,9 +273,10 @@ export class SceneRenderer3D implements IRenderer {
         uniform float opacity;
         uniform int blendMode;
         uniform int layerIsStraight;
+        uniform int baseEmpty;
         varying vec2 vUv;
         void main(){
-          vec4 base = texture2D(baseMap, vUv);
+          vec4 base = baseEmpty == 1 ? vec4(0.0) : texture2D(baseMap, vUv);
           vec4 layer = texture2D(layerMap, vUv);
           float a = clamp(layer.a * opacity, 0.0, 1.0);
           vec3 straight = layerIsStraight == 1
@@ -1217,6 +1234,11 @@ export class SceneRenderer3D implements IRenderer {
       };
 
       const composeMaterial = this.composeQuad.material;
+      // A primeira camada a compor no caminho separado nao tem base: o
+      // acumulador esta vazio, e a textura dele nao pode ser lida (ver
+      // `baseEmpty`). Depois da primeira, o acumulador ja recebeu um desenho e
+      // a textura vale.
+      let primeiraCamada = separarFundo;
       s.tracks.forEach((track) => {
         const rt = this.trackRTs.get(track.id);
         if (!rt?.active) return;
@@ -1237,6 +1259,8 @@ export class SceneRenderer3D implements IRenderer {
         composeMaterial.uniforms.layerMap.value = camada.texture;
         composeMaterial.uniforms.opacity.value = rt.opacity;
         composeMaterial.uniforms.layerIsStraight.value = 0;
+        composeMaterial.uniforms.baseEmpty.value = primeiraCamada ? 1 : 0;
+        primeiraCamada = false;
         composeMaterial.uniforms.blendMode.value = rt.blend === 'add' ? 1
           : rt.blend === 'screen' ? 2
           : rt.blend === 'multiply' ? 3 : 0;
@@ -1258,6 +1282,8 @@ export class SceneRenderer3D implements IRenderer {
         composeMaterial.uniforms.opacity.value = 1;
         composeMaterial.uniforms.blendMode.value = 0;
         composeMaterial.uniforms.layerIsStraight.value = 1;
+        // Aqui a base e o FUNDO, que foi desenhado de verdade — pode ser lida.
+        composeMaterial.uniforms.baseEmpty.value = 0;
         this.renderer.setRenderTarget(write);
         this.renderer.clear(true, false, false);
         this.renderer.render(this.composeScene, this.composeCam);

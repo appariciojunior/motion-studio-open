@@ -79,7 +79,10 @@ function passe(direcao: [number, number]): EffectShader {
 }
 
 export const tiltShift: Effect = {
-  meta: { id: 'tilt-shift', name: 'Tilt-shift', defaultScope: 'scene' },
+  // Nasce em 'artwork': age sobre os CARDS, e o fundo da cena passa intacto.
+  // Aplicado ao fundo tambem, um efeito de lente amassa a cena inteira e o
+  // assunto se perde junto. Quem quiser o fundo troca no seletor de escopo.
+  meta: { id: 'tilt-shift', name: 'Tilt-shift', defaultScope: 'artwork' },
   controls: [
     { key: 'radius', label: 'Radius', type: 'slider', min: 0, max: 40, step: 1, default: 14, unit: 'px' },
     // A faixa horizontal virou UMA das areas em vez de a unica. Ela deixa o

@@ -57,7 +57,10 @@ function passe(direcao: [number, number]): EffectShader {
 }
 
 export const blur: Effect = {
-  meta: { id: 'blur', name: 'Blur', defaultScope: 'scene' },
+  // Nasce em 'artwork': age sobre os CARDS, e o fundo da cena passa intacto.
+  // Aplicado ao fundo tambem, um efeito de lente amassa a cena inteira e o
+  // assunto se perde junto. Quem quiser o fundo troca no seletor de escopo.
+  meta: { id: 'blur', name: 'Blur', defaultScope: 'artwork' },
   controls: [
     { key: 'radius', label: 'Radius', type: 'slider', min: 0, max: 40, step: 1, default: 8, unit: 'px' },
     // Nasce em 'Edges', nao em 'Full frame'. O default certo e o que serve na

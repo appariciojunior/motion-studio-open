@@ -59,8 +59,11 @@ import { AREA_CODE, AREA_UNIFORM_TYPES } from './area';
 const MAX_SAMPLES = 16;
 
 export const liquidGlass: Effect = {
-  // Lente: e o que a camera faz com a cena, entao nasce no quadro todo.
-  meta: { id: 'liquid-glass', name: 'Liquid Glass', defaultScope: 'scene' },
+  // Nasce em 'artwork': o vidro age sobre os CARDS, e o fundo da cena passa
+  // intacto. Em 'scene' ele refrata o fundo tambem, e como o fundo costuma ser
+  // chapado, o unico resultado visivel ali e a moldura sobreposta a uma cor
+  // uniforme — custo sem ganho. Quem tiver fundo com imagem troca no seletor.
+  meta: { id: 'liquid-glass', name: 'Liquid Glass', defaultScope: 'artwork' },
   controls: [
     // O PRIMEIRO controle, porque e o que decide quais outros importam. Em
     // bordas ou cantos nao ha pad, tamanho nem forma para acertar: o alcance e
@@ -268,6 +271,20 @@ vec4 fxMain(vec2 p) {
     col = mix(bcol / btw, col, rimMask);
   }
 
+  // A LUZ do vidro sai proporcional ao que existe embaixo.
+  //
+  // Sem isto, num escopo de arte (onde o fundo nao entra e os pixels vazios tem
+  // alpha 0) o anel, a nova e a linha de reflexo saem com rgb > 0 e alpha 0 —
+  // e nessa convencao pre-multiplicada isso NAO e invisivel, e luz aditiva:
+  // compoe sobre o fundo da cena e desenha a moldura colorida exatamente onde
+  // se pediu que ela nao fosse. Medido: 14% dos pixels de fundo mudavam, contra
+  // 0,8% do Bloom, que sangra so o halo na beirada do card.
+  //
+  // Fisicamente tambem e o certo: vidro reflete e refrata a luz que existe.
+  // Sem card, sem luz. E em escopo de cena o fundo e opaco, entao base.a vale
+  // 1 e isto nao muda nada — uma linha serve os dois casos.
+  float luz = base.a;
+
   // Vidro escurece um pouco para o centro.
   col *= mix(0.91, 1.0, smoothstep(0.0, 0.38, shapeND));
 
@@ -284,7 +301,7 @@ vec4 fxMain(vec2 p) {
     float r2 = shapeND * shapeND * 0.25;
     float gs = max(uGlow * 0.43, 0.004);
     float nova = (exp(-r2 / gs) + exp(-r2 / (gs * 7.0)) * 0.18) * uGlow * 0.23;
-    col += vec3(nova);
+    col += vec3(nova) * luz;
   }
 
   // Anel colorido mais a aura em volta dele. O anel fica quase na borda
@@ -304,13 +321,13 @@ vec4 fxMain(vec2 p) {
   // no default antigo, o pico somava 1,62 em ciano — acima de 1,0, ou seja
   // estourado. O fator devolve o anel para a faixa visivel.
   float ganhoAnel = lente ? 1.0 : 0.3;
-  col += uRingColor * (ring + aura) * ganhoAnel;
+  col += uRingColor * (ring + aura) * ganhoAnel * luz;
 
   // Linha clara na borda, o reflexo do canto do vidro. No disco ela e um fio
   // curto num circulo; numa moldura ela corre pelo quadro inteiro e soma com a
   // aura do anel ao longo de tudo — no default aquilo virava letreiro de neon.
   // Um terco da intensidade no modo de borda devolve o reflexo sem o anuncio.
-  col += vec3(exp(-pow((dC - 0.488) / 0.003, 2.0)) * uRing * (lente ? 3.5 : 1.2));
+  col += vec3(exp(-pow((dC - 0.488) / 0.003, 2.0)) * uRing * (lente ? 3.5 : 1.2) * luz);
 
   // Quanto do vidro entra. No disco e 1 dentro com uma queda de 7% no aro, para
   // nao serrilhar; na faixa a propria mascara ja e a rampa, entao ela e a

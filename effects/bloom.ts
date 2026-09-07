@@ -30,7 +30,10 @@ const ANEIS = 4;
 const DIRECOES = 8;
 
 export const bloom: Effect = {
-  meta: { id: 'bloom', name: 'Bloom', defaultScope: 'scene' },
+  // Nasce em 'artwork': age sobre os CARDS, e o fundo da cena passa intacto.
+  // Aplicado ao fundo tambem, um efeito de lente amassa a cena inteira e o
+  // assunto se perde junto. Quem quiser o fundo troca no seletor de escopo.
+  meta: { id: 'bloom', name: 'Bloom', defaultScope: 'artwork' },
   controls: [
     { key: 'threshold', label: 'Threshold', type: 'slider', min: 0, max: 100, step: 1, default: 65, unit: '%' },
     { key: 'radius', label: 'Radius', type: 'slider', min: 1, max: 60, step: 1, default: 22, unit: 'px' },
