@@ -318,7 +318,15 @@ export class SceneRenderer3D implements IRenderer {
 
     // The quad every effect pass renders through. Its material is swapped per
     // effect; the geometry and the scene are built once.
-    this.fxQuad = new THREE.Mesh(geometry.clone(), outputMaterial);
+    //
+    // Material PROPRIO, nao o do output. Nascia compartilhando a mesma
+    // instancia, e passava porque `renderFrame` troca a material antes de todo
+    // passe e `fxScene` nunca e desenhada sem efeito ativo. Mas as duas coisas
+    // que faziam isso funcionar sao invisiveis daqui, e uma delas e o
+    // `outputQuad.material.dispose()` do destroy, que soltaria a material que
+    // este quad ainda referencia. Uma copia custa nada e tira as duas
+    // dependencias implicitas.
+    this.fxQuad = new THREE.Mesh(geometry.clone(), outputMaterial.clone());
     this.fxScene.add(this.fxQuad);
   }
 
