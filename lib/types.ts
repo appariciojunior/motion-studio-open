@@ -224,6 +224,18 @@ export interface EffectShader {
   uniformTypes?: Record<string, 'float' | 'vec2' | 'vec3' | 'vec4'>;
   // Control values -> uniform values, once per frame.
   uniforms: (values: Record<string, any>, ctx: EffectContext) => Record<string, number | number[]>;
+  // Uniforms CONSTANTES por desenho, que nenhum controle move.
+  //
+  // A suite exige que todo uniform seja movido por algum controle, porque um
+  // uniform preso no default e um valor chumbado se passando por parametro — e
+  // isso aconteceu de verdade: o Bloom recebeu `uArea` sem os controles
+  // correspondentes e nascia restrito as bordas, sem como tirar.
+  //
+  // Alguns sao constantes de proposito. `uDir` e a DIRECAO do passe, e e o que
+  // distingue o horizontal do vertical num blur separavel. Declarar aqui e a
+  // forma de dizer isso: a excecao fica explicita e revisavel, em vez de o
+  // portao ser afrouxado para todo mundo.
+  fixedUniforms?: string[];
 }
 
 // Onde um efeito age. Guardado como string na cena para sobreviver a

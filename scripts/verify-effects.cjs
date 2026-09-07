@@ -164,6 +164,45 @@ for (const effect of effectList) {
     check(reached.has(control.key), id,
       `o controle \`${control.key}\` nao muda uniform nenhum — botao morto no painel`);
   }
+
+  // O ESPELHO do botao morto: um uniform que NENHUM controle move. Ele nao
+  // quebra nada, so fica preso no default para sempre — na pratica um valor
+  // chumbado se passando por parametro, e ninguem descobre porque a tela
+  // continua desenhando.
+  //
+  // Isto aconteceu de verdade: o Bloom recebeu `uArea`/`uBand` e ficou sem os
+  // controles correspondentes, entao o efeito nascia restrito as bordas e nao
+  // havia como tirar. As duas checagens juntas fecham o circulo — uma cobre
+  // controle sem uniform, a outra uniform sem controle.
+  const movidos = new Set();
+  for (const control of effect.controls) {
+    const antes = pass.uniforms(probe, SIZES[0]);
+    const alt = { ...probe };
+    const val = probe[control.key];
+    alt[control.key] = typeof val === 'number'
+      ? (control.max !== undefined && val >= control.max ? (control.min ?? 0) : val + (control.step ?? 1))
+      : typeof val === 'boolean' ? !val
+      : Array.isArray(control.options) ? control.options.find((o) => o !== val) ?? val
+      : (val && typeof val === 'object' && 'x' in val && 'y' in val)
+        ? { x: Number(val.x) + 37, y: Number(val.y) - 23 }
+      : (typeof val === 'string' && /^#?[0-9a-f]{3,8}$/i.test(val))
+        ? (val.startsWith('#') ? '#0f8a3c' : '0f8a3c')
+      : val;
+    const depois = pass.uniforms(alt, SIZES[0]);
+    for (const nome of Object.keys(declaredTypes)) {
+      if (JSON.stringify(antes[nome]) !== JSON.stringify(depois[nome])) movidos.add(nome);
+    }
+  }
+  // `fixedUniforms` e a excecao DECLARADA: constante por desenho, como a
+  // direcao do passe num blur separavel. Ter de declarar mantem o portao
+  // estrito — a alternativa era afrouxa-lo para todos.
+  const fixos = new Set(pass.fixedUniforms ?? []);
+  for (const nome of Object.keys(declaredTypes)) {
+    if (fixos.has(nome)) continue;
+    check(movidos.has(nome), id,
+      `o uniform \`${nome}\` nao e movido por controle nenhum — esta preso no default`
+      + ' (se e constante por desenho, declare em fixedUniforms)');
+  }
   } // fim do passe
 }
 
