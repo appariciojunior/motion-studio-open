@@ -4,7 +4,7 @@
   "description": "Motion Studio — an open-source factory for quick videos and GIFs.",
   "main": "index.js",
   "scripts": {
-    "test": "node scripts/verify-tilt.cjs && node scripts/verify-catalogue.cjs && node scripts/verify-contexts.cjs && node scripts/verify-reference.cjs && node scripts/verify-effects.cjs && node scripts/verify-gradients.cjs && node scripts/verify-gated-sections.cjs && node scripts/verify-docs-routes.cjs && node scripts/verify-crop.cjs",
+    "test": "node scripts/verify-tilt.cjs && node scripts/verify-catalogue.cjs && node scripts/verify-contexts.cjs && node scripts/verify-reference.cjs && node scripts/verify-effects.cjs && node scripts/verify-gradients.cjs && node scripts/verify-gated-sections.cjs && node scripts/verify-docs-routes.cjs && node scripts/verify-crop.cjs && node scripts/verify-infinite.cjs && node scripts/verify-infinite-fields.cjs && node scripts/verify-catalogue-loops.cjs",
     "dev": "next dev",
     "dev:network": "next dev -H 0.0.0.0",
     "build": "next build",

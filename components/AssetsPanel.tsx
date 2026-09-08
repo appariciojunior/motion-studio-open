@@ -5,7 +5,7 @@ import { DndContext, DragOverlay, PointerSensor, closestCenter, useSensor, useSe
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useSceneStore, type AssetItem } from '@/store/useSceneStore';
-import { getTemplate, layerCountFor } from '@/templates';
+import { getTemplate, mediaCountFor } from '@/templates';
 import { CARD_SHAPES, cardAspectFor, parseCardShape } from '@/lib/crop';
 import { isVideoSource } from '@/lib/videoTexture';
 import { useMobileInteractions } from './MobileInteractions';
@@ -122,9 +122,9 @@ export default function AssetsPanel({ onEditAsset }: { onEditAsset: (id: string)
   const mobile = useMobileInteractions();
   const assets = useSceneStore((s) => s.assets);
   // How many card slots the active template will actually fill — asked of the
-  // template, since a lattice family derives that from the canvas rather than
+  // template, excluding renderer-only copies of a repeating motif rather than
   // from a control.
-  const count = useSceneStore((s) => layerCountFor(s.activeTemplateId, s.values, {
+  const count = useSceneStore((s) => mediaCountFor(s.activeTemplateId, s.values, {
     width: s.width,
     height: s.height,
     cardAspect: cardAspectFor(getTemplate(s.activeTemplateId).meta, s.width, s.height, s.cardShape),
@@ -288,7 +288,7 @@ export default function AssetsPanel({ onEditAsset }: { onEditAsset: (id: string)
               // "linked to Count" is only true while a Count control exists. The
               // lattice families derive their layer total from Plane Size, Gap
               // and the canvas instead, so the copy has to follow.
-              : `${count} ${count === 1 ? 'slot' : 'slots'} · ${derivesCount ? 'set by the canvas' : 'linked to Count'}`}
+              : `${count} ${count === 1 ? 'slot' : 'slots'} · ${derivesCount ? 'set by the layout' : 'linked to Count'}`}
           </span>
           <span className="spacer" />
           {realAssetCount > 0 && <button className="link-btn" onClick={clearAssets}>Clear all</button>}

@@ -1,6 +1,8 @@
 import type { Template } from '@/lib/types';
 import type { EasingSpec } from '@/lib/easing';
 import { TAU, clamp, hash2, lerp } from '@/lib/motion';
+import { canvasScale } from './lattice';
+import { repeatCopies, repeatCoordinate } from './infiniteField';
 import { variant } from './variant';
 
 const BASE = 340;
@@ -126,6 +128,17 @@ function cameraPathAt(
   };
 }
 
+function fieldGeometry(v: Record<string, any>, ctx: {width:number; height:number}) {
+  const n = Math.max(1, Math.round(v.count));
+  const k = canvasScale(ctx);
+  const density = Math.sqrt(n / CARDS_PER_FRAME) * clamp(v.spread ?? 100, 20, 400) / 100;
+  const width = ctx.width * density, height = ctx.height * density;
+  const card = Math.max(v.minSize, v.maxSize) * k * 1.06;
+  return {n,k,width,height,
+    copiesX:repeatCopies(ctx.width,width,card,(v.offset?.x ?? 0)*k),
+    copiesY:repeatCopies(ctx.height,height,card,(v.offset?.y ?? 0)*k)};
+}
+
 const parallax: Template = {
   meta: { id: 'parallax-01', name: 'Drift 01', group: 'Drift', repeatAssets: true, defaultEasing: { id: 'smooth' } },
 
@@ -144,14 +157,21 @@ const parallax: Template = {
     { key: 'offset',       label: 'Offset',        type: 'xypad',                              default: { x: 0, y: 0 } },
   ],
 
+  layerCount: (v, ctx) => {const g=fieldGeometry(v,ctx);return g.n*g.copiesX*g.copiesY;},
+  mediaCount: (v) => Math.max(1,Math.round(v.count)),
+  mediaIndex: (index,_count,v) => index % Math.max(1,Math.round(v.count)),
   transform: (frame, index, count, v, ctx) => {
+    const geo=fieldGeometry(v,ctx);
+    const repeated=count===geo.n*geo.copiesX*geo.copiesY;
+    const copy=Math.floor(index/geo.n);
+    if(repeated){index%=geo.n;count=geo.n;}
     const seed = v.seed ?? 1;
     // How much per-card variety `depth` buys: at 0 every card collapses to one
     // middling depth (uniform size), at 100 the full seeded spread applies.
     const strength = clamp(v.depth, 0, 100) / 100;
     const d = lerp(0.5, hash2(index, seed * 91.7), strength);
 
-    const sizeFactor = lerp(v.minSize, v.maxSize, d) / BASE;
+    const sizeFactor = lerp(v.minSize, v.maxSize, d) * geo.k / BASE;
 
     // The field is FIXED — measured: one (dx, dy) aligns consecutive frames at
     // correlation 0.95-0.99, so nothing moves relative to anything else and
@@ -174,15 +194,10 @@ const parallax: Template = {
     const col = index % gCols, row = Math.floor(index / gCols) % gRows;
     const jx = (hash2(index, seed * 17.3) - 0.5) * JITTER;
     const jy = (hash2(index, seed * 53.1) - 0.5) * JITTER;
-    const x = (col + 0.5 + jx) * cellW - fieldW / 2 + v.offset.x;
-    const y = (row + 0.5 + jy) * cellH - fieldH / 2 + v.offset.y;
-    // The camera may roam anywhere the wall still fills the frame, and no
-    // further — past that it would pan onto a bare edge.
-    const reach = Math.max(0, Math.min(fieldW - ctx.width, fieldH - ctx.height) / 2);
-    const panPerCell = Math.min(
-      (clamp(v.travel, 0, 1000) / 100) * PAN_PER_CELL * long,
-      reach / GRID_REACH,
-    );
+    const x = (col + 0.5 + jx) * cellW - fieldW / 2 + v.offset.x * geo.k;
+    const y = (row + 0.5 + jy) * cellH - fieldH / 2 + v.offset.y * geo.k;
+    // Repeated field copies cover the camera path without clipping Travel.
+    const panPerCell = (clamp(v.travel, 0, 1000) / 100) * PAN_PER_CELL * long;
 
     // Fade DARKENS the far cards; it does not make them see-through. At Fade 80
     // an alpha-based version left the farthest cards at 0.2 opacity, so every
@@ -213,8 +228,8 @@ const parallax: Template = {
     }
 
     return {
-      x: x * camZoom + camX,
-      y: y * camZoom + camY,
+      x: repeated ? repeatCoordinate(x * camZoom + camX, fieldW * camZoom, copy % geo.copiesX, geo.copiesX) : x * camZoom + camX,
+      y: repeated ? repeatCoordinate(y * camZoom + camY, fieldH * camZoom, Math.floor(copy / geo.copiesX), geo.copiesY) : y * camZoom + camY,
       scale: sizeFactor * camZoom,
       rotation: 0,
       alpha: 1,

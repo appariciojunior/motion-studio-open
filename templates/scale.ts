@@ -1,6 +1,7 @@
 import type { Template } from '@/lib/types';
-import { loopCycles } from '@/lib/motion';
+import { loopCycles, clamp } from '@/lib/motion';
 import { variant } from './variant';
+import { canvasScale } from './lattice';
 
 // Scale — a Ken-Burns zoom slideshow. One image at a time pushes IN (or
 // pulls OUT) from a chosen anchor, cross-fading to the next with a stagger,
@@ -38,7 +39,8 @@ const scale: Template = {
     vis = Math.min(1, vis);
 
     // eased zoom progress across the active card's visible cycle
-    const age = w / count; // 0 → 1 while this is the current image
+    // Unwrap the visible window through peak opacity at w=0.
+    const age = clamp((w <= 1 ? w + 1 : w - count + 1) / 2, 0, 1);
     const z = ctx.ease(age);
 
     const zoomAmt = v.zoom / 100;
@@ -56,8 +58,8 @@ const scale: Template = {
     // anchor pan: shift toward the chosen corner as it zooms
     const ax = v.anchor.includes('l') ? -1 : v.anchor.includes('r') ? 1 : 0;
     const ay = v.anchor.startsWith('t') ? -1 : v.anchor.startsWith('b') ? 1 : 0;
-    const x = -ax * (s - 1) * v.cardSize * 0.6 + v.offset.x;
-    const y = -ay * (s - 1) * v.cardSize * 0.6 + v.offset.y;
+    const x = (-ax * (s - 1) * v.cardSize * 0.6 + v.offset.x) * canvasScale(ctx);
+    const y = (-ay * (s - 1) * v.cardSize * 0.6 + v.offset.y) * canvasScale(ctx);
 
     const rotation = v.spin === 'on' ? (z - 0.5) * (v.spinAmt * Math.PI / 180) : 0;
 
@@ -67,7 +69,7 @@ const scale: Template = {
       scale: scl,
       rotation,
       alpha: vis,
-      depth: vis,
+      depth: index / Math.max(1, count), // fixed order avoids a pop at equal-opacity crossfades
     };
   },
 };

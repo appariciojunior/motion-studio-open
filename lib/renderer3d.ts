@@ -410,7 +410,7 @@ export class SceneRenderer3D implements IRenderer {
     const count = layerCountFor(track.templateId, track.values,
       { width: s.width, height: s.height, cardAspect: aspect });
     const pool = trackAssetIndices(track, s.assets).map((i) => s.assets[i]).filter(Boolean);
-    const assetSig = (repeat ? 'R|' : '') + 'A' + aspect.toFixed(4) + '|' +
+    const assetSig = (getTemplate(track.templateId).mediaIndex ? JSON.stringify([s.width, s.height, track.values]) : '') + (repeat ? 'R|' : '') + 'A' + aspect.toFixed(4) + '|' +
       pool.map((a) => a.id + ':' + a.url + ':' + a.visible + ':' + cropKey(a.url, aspect, a.crop)).join('|');
     if (!rt.r3fManaged && r3fManaged) {
       // Entering the R3F-managed Box from another WebGL template keeps the
@@ -513,19 +513,21 @@ export class SceneRenderer3D implements IRenderer {
     const placeholderH = placeholderLongEdge * Math.min(1, 1 / aspect);
 
     rt.slots.forEach((slot, i) => {
-      let asset = pool[assetIndexForSlot(i, pool.length, repeat)];
-      if (!asset && pool.length > 0) asset = pool[i % pool.length];
+      const mediaIndex = getTemplate(track.templateId).mediaIndex?.(i, count, track.values,
+        { width: s.width, height: s.height, cardAspect: aspect }) ?? i;
+      let asset = pool[assetIndexForSlot(mediaIndex, pool.length, repeat)];
+      if (!asset && pool.length > 0) asset = pool[mediaIndex % pool.length];
       const binding = asset
         ? `${asset.id}|${cropKey(asset.url, aspect, asset.crop)}`
-        : `placeholder|${i}`;
+        : `placeholder|${mediaIndex}`;
       const bindingChanged = slot.bindKey !== binding;
       slot.bindKey = binding;
       if (bindingChanged) {
         // Never keep the previous slot's image visible while a new async
         // image/video is loading. A numbered placeholder is deterministic and
         // is replaced immediately when a cached source is available.
-        let ph = this.placeholders.get(i);
-        if (!ph) { ph = makePlaceholderTexture(String(i + 1)); this.placeholders.set(i, ph); }
+        let ph = this.placeholders.get(mediaIndex);
+        if (!ph) { ph = makePlaceholderTexture(String(mediaIndex + 1)); this.placeholders.set(mediaIndex, ph); }
         slot.front.material.map = ph;
         slot.front.material.emissiveMap = ph;
         slot.front.material.needsUpdate = true;
@@ -537,8 +539,8 @@ export class SceneRenderer3D implements IRenderer {
         slot.cornerR = -1;
       }
       if (!asset || !asset.visible) {
-        let ph = this.placeholders.get(i);
-        if (!ph) { ph = makePlaceholderTexture(String(i + 1)); this.placeholders.set(i, ph); }
+        let ph = this.placeholders.get(mediaIndex);
+        if (!ph) { ph = makePlaceholderTexture(String(mediaIndex + 1)); this.placeholders.set(mediaIndex, ph); }
         slot.front.material.map = ph;
         slot.front.material.emissiveMap = ph;
         slot.front.material.needsUpdate = true;
@@ -952,6 +954,12 @@ export class SceneRenderer3D implements IRenderer {
     slot.front.material.side = customBackface ? THREE.FrontSide : THREE.DoubleSide;
     slot.front.material.opacity = alpha;
     slot.front.material.depthWrite = alpha > 0.995;
+    // Coplanar repeated images need a stable ordering independent of mesh IDs
+    // and floating-point depth ties when a copy recycles outside the viewport.
+    const depthBias = t.depthBias ?? 0;
+    slot.front.material.polygonOffset = depthBias !== 0;
+    slot.front.material.polygonOffsetFactor = 0;
+    slot.front.material.polygonOffsetUnits = -depthBias;
     // `dim` darkens a card that is merely FAR, without touching its opacity —
     // fading such a card on alpha lets whatever is behind it show through, and
     // a ring then reads as glass rather than as depth. It is deliberately

@@ -1,6 +1,7 @@
 import type { Template } from '@/lib/types';
 import { smooth, clamp, loopCycles } from '@/lib/motion';
 import { variant } from './variant';
+import { canvasScale } from './lattice';
 
 const BASE = 340;
 
@@ -40,7 +41,10 @@ const zoom: Template = {
 
     // alpha: fade layers approaching either extreme of the stack
     const edge = Math.abs(e) / (count / 2);
-    const alpha = 1 - (v.fade / 100) * smooth(clamp((edge - 0.6) / 0.4, 0, 1));
+    const edgeAlpha = 1 - (v.fade / 100) * smooth(clamp((edge - 0.6) / 0.4, 0, 1));
+    // Edge Fade is stylistic; recycling must still be invisible when it is 0.
+    const handoff = smooth(clamp((count / 2 - Math.abs(e)) / 0.25, 0, 1));
+    const alpha = edgeAlpha * handoff;
 
     // growFrom origin: scaling about an anchor point O — layers emerge at O
     // when tiny and expand past the canvas centre as they grow
@@ -49,13 +53,13 @@ const zoom: Template = {
       v.growFrom === 'bottom' ? [0, ctx.height * 0.4] :
       v.growFrom === 'left'   ? [-ctx.width * 0.4, 0] :
       v.growFrom === 'right'  ? [ctx.width * 0.4, 0] : [0, 0];
-    const x = O[0] * (1 - s) + v.offset.x;
-    const y = O[1] * (1 - s) + v.offset.y;
+    const x = O[0] * (1 - s) + v.offset.x * canvasScale(ctx);
+    const y = O[1] * (1 - s) + v.offset.y * canvasScale(ctx);
 
     return {
       x,
       y,
-      scale: (v.cardSize / BASE) * s,
+      scale: (v.cardSize * canvasScale(ctx) / BASE) * s,
       rotation: 0,
       alpha,
       depth: s, // bigger (nearer) layers draw on top

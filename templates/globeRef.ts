@@ -96,7 +96,7 @@ const globeRef: Template = {
     { key: 'distance',       label: 'Distance',       type: 'slider', min: 0, max: 6000, step: 50,      default: 1000, section: 'Depth' },
     { key: 'perspective',    label: 'Perspective',    type: 'slider', min: 10, max: 300, step: 5,       default: 100, section: 'Depth', description: 'Lens width. Lower is wider; the camera does not move.' },
     { key: 'roll',           label: 'Roll',           type: 'slider', min: -180, max: 180, step: 1,     default: 0, unit: '°', section: 'Layout', description: 'Tip the whole globe about the view axis.' },
-    { key: 'cycles',         label: 'Cycles',         type: 'slider', min: 0.25, max: 12, step: 0.25,   default: 1, section: 'Motion' },
+    { key: 'cycles',         label: 'Cycles',         type: 'slider', min: 0.25, max: 12, step: 0.25,   default: 1, section: 'Motion', description: 'Rounded to complete rotations or complete tours of the stops so the clip loops.' },
     { key: 'cycleDeg',       label: 'Cycle Turn',     type: 'slider', min: 15, max: 360, step: 15,      default: 360, unit: '°', section: 'Motion', visibleWhen: { key: 'motion', equals: 'continuous' }, description: 'Degrees the globe turns per cycle.' },
     { key: 'stops',          label: 'Stops',          type: 'slider', min: 0, max: 24, step: 1,         default: 0, section: 'Motion', visibleWhen: { key: 'motion', equals: 'stepped' }, description: 'Cards visited per cycle. 0 visits them all.' },
     { key: 'cornerRadius',   label: 'Corner Radius',  type: 'slider', min: 0, max: 200, step: 1,        default: 0 },
@@ -141,7 +141,7 @@ function globePose(
     // stops in a clip is `cycles * stops`, and landing back on stop 0 at the
     // end is what closes the loop.
     const stops = v.stops > 0 ? clamp(Math.round(v.stops), 1, n) : n;
-    const total = Math.max(1, Math.round(Math.max(0.01, v.cycles) * stops));
+    const total = v.cycles === 0 ? 0 : Math.max(1, Math.round(v.cycles)) * stops;
     const p = (frame / Math.max(1, ctx.totalFrames)) * total;
     const step = Math.floor(p);
     const eased = ctx.ease(clamp(p - step, 0, 1));

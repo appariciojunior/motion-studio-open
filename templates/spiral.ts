@@ -1,5 +1,6 @@
 import type { Template } from '@/lib/types';
 import { loopCycles } from '@/lib/motion';
+import { canvasScale } from './lattice';
 import { variant } from './variant';
 
 const BASE = 340;
@@ -7,6 +8,15 @@ const BASE = 340;
 // traversal cinematic instead of interpreting Speed as full spans per second.
 const HELIX_RATE = 0.2;
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+
+// Copies extend the authored helix; count and pitch keep their meaning.
+function helixCopies(v: Record<string, any>, ctx: { width: number; height: number }) {
+  const k = canvasScale(ctx);
+  const span = Math.max(1, v.count * v.pitch) * k;
+  const extent = ctx.height + (2 * Math.abs(v.offset?.y ?? 0) + v.cardSize * 1.15) * k;
+  const n = Math.ceil(extent / span + 2);
+  return n % 2 ? n : n + 1;
+}
 
 // Spiral — the camera corkscrews through a helix of cards (DNA / spiral
 // staircase): continuous rotation around the axis plus looping vertical travel.
@@ -26,27 +36,41 @@ const spiral: Template = {
     { key: 'offset',       label: 'Offset',        type: 'xypad',                              default: { x: 0, y: 0 } },
   ],
 
+  layerCount: (v, ctx) => Math.max(1, Math.round(v.count)) * helixCopies(v, ctx),
+  mediaCount: (v) => Math.max(1, Math.round(v.count)),
+  mediaIndex: (index, _count, v) => index % Math.max(1, Math.round(v.count)),
+
   transform: (frame, index, count, v, ctx) => {
+    frame = ((frame % ctx.totalFrames) + ctx.totalFrames) % ctx.totalFrames;
+    const k = canvasScale(ctx);
+    const motifCount = Math.max(1, Math.round(v.count));
+    const copies = count === motifCount * helixCopies(v, ctx) ? count / motifCount : 1;
+    const n = copies === 1 ? count : motifCount;
+    const i = index % n;
     const dir = v.direction === 'reverse' ? -1 : 1;
     // Keep complete cycles so the vertical wrap and rotation return to the same
     // pose at the seam. HELIX_RATE makes the old 0.50 setting resolve to one
     // traversal per default clip instead of four.
     const t = (frame / ctx.totalFrames) * loopCycles(v.speed * HELIX_RATE, ctx.duration) * dir;
-    const sizeFactor = v.cardSize / BASE;
+    const sizeFactor = v.cardSize * k / BASE;
 
     // Angle around the helix axis.
-    const a = index * (Math.PI * 2 * v.turns / count) + t * Math.PI * 2;
-    const x = Math.sin(a) * v.radius + v.offset.x;
+    const a = i * (Math.PI * 2 * v.turns / n) + t * Math.PI * 2;
+    const x = (Math.sin(a) * v.radius + v.offset.x) * k;
     const depthN = (Math.cos(a) + 1) / 2; // 1 = front, 0 = back
 
     // Vertical travel that loops seamlessly through one full helix span.
-    const span = count * v.pitch;
-    const raw = index * v.pitch - t * span;
-    const y = (((raw % span) + span) % span) - span / 2 + v.offset.y;
+    const span = Math.max(1, n * v.pitch) * k;
+    const raw = i * v.pitch * k - t * span;
+    const y = (((raw % span) + span) % span) - span / 2
+      + (Math.floor(index / n) - (copies - 1) / 2) * span + v.offset.y * k;
 
     const scale = sizeFactor * lerp(0.4, 1.15, depthN);
-    // Fade with depth, and taper at the top/bottom ends of the travel.
-    const alpha = lerp(0.2, 1, depthN) * Math.min(1, (1 - Math.abs(y) / (span / 2)) * 2 + 0.2);
+    // The seam is covered by identical copies, so there is no fade band inside
+    // the visible helix. Fixed-element Web/Board callers still fade at the ends.
+    const localY = y - v.offset.y * k;
+    const edge = Math.max(0, Math.min(1, (span / 2 - Math.abs(localY)) / Math.max(1, v.cardSize * k)));
+    const alpha = lerp(0.2, 1, depthN) * (copies > 1 ? 1 : edge * edge * (3 - 2 * edge));
 
     return {
       x,

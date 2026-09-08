@@ -243,7 +243,10 @@ for (const [name, ref] of Object.entries(PARALLAX)) {
   // every card's ABSOLUTE position together — so this checks the ratio
   // between two cards' scales and their separation scaled by that ratio,
   // both of which the shared camera cancels out of, rather than raw x/y/scale.
-  const n = layerCountFor(t.meta.id, v, ctx);
+  // Test the authored motif here: recycled render copies may change tile
+  // coordinates together without changing the relative layout. The separate
+  // infinite-fields suite checks replacement identity at those boundaries.
+  const n = Math.round(v.count);
   const f1 = Math.round(ctx.totalFrames * 0.2), f2 = Math.round(ctx.totalFrames * 0.7);
   // Any single card's own scale ratio between the two frames IS the shared
   // camera's zoom ratio over that span (each card's fixed sizeFactor cancels
@@ -464,7 +467,7 @@ for (const name of ['Wipe 01', 'Wipe 02', 'Wipe 03', 'Wipe 04']) {
   const W = 810, H = 1080;
   for (const [cardSize, cols, rows] of [[700, 3, 3], [400, 3, 3], [200, 5, 5], [100, 7, 7]]) {
     const L = solveLattice({ cardSize, gap: 60 }, { width: W, height: H, cardAspect: 3 / 4 });
-    check(L.cols === cols && L.rows === rows, 'lattice rule',
+    check(L.motifCols === cols && L.motifRows === rows, 'lattice rule',
       `Plane Size ${cardSize} solves to ${L.cols}x${L.rows}, but the reference measured ${cols}x${rows}`);
     check(Math.abs((L.pitchX - L.cardW) - 60) < 1e-6, 'lattice rule',
       `Plane Size ${cardSize} moved the 60px gap to ${(L.pitchX - L.cardW).toFixed(1)}px`);
@@ -544,8 +547,8 @@ for (const t of templateList.filter((x) => x.meta.group === 'Frames')) {
     const keys = [...rowsSeen.keys()].sort((a, b) => a - b);
     // vertical spacing must be rigid: exactly one pitch between adjacent rows
     for (let k = 1; k < keys.length; k++) {
-      const dy = Math.abs(rowsSeen.get(keys[k])[0].y - rowsSeen.get(keys[k - 1])[0].y) % (rows * pitchY);
-      if (Math.min(dy, rows * pitchY - dy) - pitchY > 1e-6) rowGapBreak++;
+      const dy = Math.abs(rowsSeen.get(keys[k])[0].y - rowsSeen.get(keys[k - 1])[0].y) % (solveLattice(v, ctx).motifRows * pitchY);
+      if (Math.min(dy, solveLattice(v, ctx).motifRows * pitchY - dy) - pitchY > 1e-6) rowGapBreak++;
     }
     if (keys.length > 1) {
       const a = Math.min(...rowsSeen.get(keys[0]).map((p) => p.x));
@@ -593,8 +596,9 @@ for (const t of templateList.filter((x) => x.meta.group === 'Grid')) {
       const cur = { x: poses[0].x / s, y: poses[0].y / s };
       if (prev) {
         let dx = cur.x - prev.x, dy = cur.y - prev.y;
-        dx -= pitchX * cols * Math.round(dx / (pitchX * cols));
-        dy -= pitchY * rows * Math.round(dy / (pitchY * rows));
+        const motif = solveLattice(v, ctx);
+        dx -= pitchX * motif.motifCols * Math.round(dx / (pitchX * motif.motifCols));
+        dy -= pitchY * motif.motifRows * Math.round(dy / (pitchY * motif.motifRows));
         travX += Math.abs(dx); travY += Math.abs(dy);
       }
       prev = cur;

@@ -1,5 +1,6 @@
 import type { Template } from '@/lib/types';
 import { loopCycles } from '@/lib/motion';
+import { canvasScale } from './lattice';
 import { variant } from './variant';
 
 const BASE = 340;
@@ -23,7 +24,8 @@ const field: Template = {
   ],
 
   transform: (frame, index, count, v, ctx) => {
-    const sizeFactor = v.cardSize / BASE;
+    const k=canvasScale(ctx);
+    const sizeFactor = v.cardSize * k / BASE;
 
     // Depth position: 0 (far) → 1 (near), wrapping continuously. The drift
     // rate (speed·0.15 laps/sec) is loop-locked to whole depth cycles per clip.
@@ -43,8 +45,8 @@ const field: Template = {
     const alpha = Math.max(0, Math.min(1, zf / 0.15) * Math.min(1, (1 - zf) / 0.1));
 
     return {
-      x,
-      y,
+      x: x*k,
+      y: y*k,
       scale,
       rotation: 0,
       alpha,
