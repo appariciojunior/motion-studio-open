@@ -31,44 +31,92 @@ const BASE = 340;
 //    directions, which is what gives a marquee its woven look.
 // ============================================================
 
-function tickerField(v: Record<string, any>, ctx: {width:number;height:number}) {
+// The card's edge facing an axis, in LONG-EDGE units (the renderer normalizes a
+// sprite's long edge, so a 3:4 card is 1 tall and 0.75 wide).
+const edgeAlong = (aspect: number, horiz: boolean) => (horiz ? Math.min(1, aspect) : Math.min(1, 1 / aspect));
+const edgeAcross = (aspect: number, horiz: boolean) => (horiz ? Math.min(1, 1 / aspect) : Math.min(1, aspect));
+
+// `gap`/`rowGap` are centre distances at base size, and a centre distance only
+// says how much AIR is left once you know which card edge faces that axis. The
+// card's shape is the SCENE's to choose — lib/crop cardAspectFor lets the user
+// override every template's declared aspect — so a fixed centre distance
+// silently changes the gutter with it. Measured across the 7 card shapes, 24 of
+// this family's 25 presets collided at the 1:1 card, by up to 91px, while the
+// narrow 9:16 card looked right everywhere.
+//
+// Shifting the centre distance by the edge difference holds the authored air
+// instead: the number keeps meaning exactly what it measured at the declared
+// shape, and no shape the user picks can make the band overlap itself.
+function tickerPitch(
+  v: Record<string, any>,
+  ctx: { cardAspect?: number },
+  declared: number,
+) {
+  const horiz = v.direction === 'left' || v.direction === 'right';
+  const aspect = Math.max(0.05, ctx.cardAspect ?? declared);
+  const shift = (now: number, then: number) => BASE * (now - then);
+  return {
+    horiz,
+    gap: Math.max(0, Number(v.gap) + shift(edgeAlong(aspect, horiz), edgeAlong(declared, horiz))),
+    rowGap: Math.max(0, Number(v.rowGap) + shift(edgeAcross(aspect, horiz), edgeAcross(declared, horiz))),
+    alongEdge: edgeAlong(aspect, horiz),
+  };
+}
+
+function tickerField(v: Record<string, any>, ctx: {width:number;height:number;cardAspect?:number}, declared: number) {
   const n=Math.max(1,Math.round(v.count)), rows=Math.max(1,Math.round(v.rows));
   const k=canvasScale(ctx), size=v.cardSize*k/BASE;
-  const period=Math.ceil(n/rows)*v.gap*size;
+  const period=Math.ceil(n/rows)*tickerPitch(v,ctx,declared).gap*size;
   // A diagonal bound covers rotation; the tilt preset additionally zooms in.
   const view=Math.hypot(ctx.width,ctx.height);
   const offset=Math.hypot(v.offset?.x??0,v.offset?.y??0)*k;
   return {n,k,period,copies:period>0 ? repeatCopies(view,period,v.cardSize*k,offset) : 1};
 }
 
-const ticker: Template = {
+// One family, two authored card shapes: the presets ported from the reference
+// catalogue declare 3:4, everything else takes the house default. The declared
+// shape is the BASELINE the authored gaps were measured at, and a transform
+// cannot read its own meta — so it is closed over here instead.
+function tickerTemplate(declared: number): Template {
+  return {
   meta: { id: 'ticker-01', name: 'Ticker 01', group: 'Ticker', isNew: true, defaultEasing: { id: 'linear' }, repeatAssets: true },
 
   controls: [
     { key: 'direction',    label: 'Direction',     type: 'pills',  options: ['left','right','up','down'], default: 'left' },
-    { key: 'count',        label: 'Count',         type: 'slider', min: 2, max: 60, step: 1,    default: 12 },
+    { key: 'count',        label: 'Count',         type: 'slider', min: 2, max: 60, step: 1,    default: 6 },
     { key: 'rows',         label: 'Rows',          type: 'slider', min: 1, max: 6, step: 1,     default: 1 },
     { key: 'flow',         label: 'Flow',          type: 'pills', options: ['same','opposed','staggered'], default: 'opposed', section: 'Motion' },
     { key: 'laneOffset',   label: 'Lane Offset',   type: 'slider', min: -100, max: 100, step: 1, default: 0, section: 'Motion', unit: '%', description: 'Phase shift added per row, in cells. Keeps rows from starting aligned.' },
-    { key: 'cardSize',     label: 'Plane Size',    type: 'slider', min: 40, max: 600, step: 1,  default: 220 },
+    { key: 'cardSize',     label: 'Plane Size',    type: 'slider', min: 40, max: 600, step: 1,  default: 460 },
     { key: 'cornerRadius', label: 'Corner Radius', type: 'slider', min: 0, max: 100, step: 1,   default: 8 },
-    { key: 'gap',          label: 'Gap',           type: 'slider', min: 0, max: 600, step: 1,   default: 250 }, // px between card centres (at base size)
-    { key: 'rowGap',       label: 'Row Gap',       type: 'slider', min: 0, max: 600, step: 1,   default: 260 },
-    { key: 'tilt',         label: 'Tilt',          type: 'slider', min: -30, max: 30, step: 1, default: -6, section: 'Depth', unit: '°', description: 'Rotates the complete ticker plane.' },
+    // Gap and Row Gap are centre distances AT BASE SIZE, so a default has to be
+    // written as BASE * (card edge facing that axis + the gutter you want). The
+    // shipped 250/260 were BELOW the card's own edge, which is why the band read
+    // as a collage instead of a row of cards: every pair overlapped by 14px
+    // along the track and 52px across it. GUTTER (8% of the long edge) is the
+    // same air the 22 measured presets come out with.
+    { key: 'gap',          label: 'Gap',           type: 'slider', min: 0, max: 600, step: 1,   default: 300 }, // BASE * (4/5 + 0.08)
+    { key: 'rowGap',       label: 'Row Gap',       type: 'slider', min: 0, max: 600, step: 1,   default: 367 }, // BASE * (1   + 0.08)
+    { key: 'tilt',         label: 'Tilt',          type: 'slider', min: -30, max: 30, step: 1, default: 0, section: 'Depth', unit: '°', description: 'Rotates the complete ticker plane.' },
     { key: 'hold',         label: 'Step Hold',     type: 'slider', min: 0, max: 90, step: 1,    default: 0 },  // % of each step spent stopped
     { key: 'offset',       label: 'Offset',        type: 'xypad',                               default: { x: 0, y: 0 } },
-    { key: 'outerFade',    label: 'Outer Fade',    type: 'slider', min: 0, max: 100, step: 1,   default: 100 }, // fade while leaving the frame %
+    // A wrapped band never pops at the edge — the copies carry it across — so
+    // the family's own presets all clip at the frame. Fading by default only
+    // dissolved the ends of the band and made it read as a floating strip.
+    { key: 'outerFade',    label: 'Outer Fade',    type: 'slider', min: 0, max: 100, step: 1,   default: 0 }, // fade while leaving the frame %
     { key: 'speed',        label: 'Speed',         type: 'slider', min: 0, max: 4, step: 0.1,   default: 0.8 }, // cards/sec
   ],
 
-  layerCount: (v,ctx) => {const g=tickerField(v,ctx);return g.n*g.copies;},
+  layerCount: (v,ctx) => {const g=tickerField(v,ctx,declared);return g.n*g.copies;},
   mediaCount: (v) => Math.max(1,Math.round(v.count)),
   mediaIndex: (index,_count,v) => index % Math.max(1,Math.round(v.count)),
   transform: (frame, index, count, v, ctx) => {
-    const geo=tickerField(v,ctx), repeated=count===geo.n*geo.copies;
+    const geo=tickerField(v,ctx,declared), repeated=count===geo.n*geo.copies;
     const copy=Math.floor(index/geo.n);
     if(repeated){index%=geo.n;count=geo.n;}
-    const horiz = v.direction === 'left' || v.direction === 'right';
+    // Centre distances corrected for the card shape the scene resolved to.
+    const pitch = tickerPitch(v, ctx, declared);
+    const horiz = pitch.horiz;
     const baseDir = (v.direction === 'left' || v.direction === 'up') ? 1 : -1;
 
     // Deal the cards across rows: row = index % rows keeps consecutive images on
@@ -106,8 +154,8 @@ const ticker: Template = {
     const sizeFactor = v.cardSize * geo.k / BASE;
 
     // Along-track position, and the row's cross-track position centred on 0.
-    const along = repeated && geo.period>0 ? repeatCoordinate(offset * v.gap * sizeFactor, geo.period, copy, geo.copies) : offset * v.gap * sizeFactor;
-    const across = (row - (rows - 1) / 2) * v.rowGap * sizeFactor;
+    const along = repeated && geo.period>0 ? repeatCoordinate(offset * pitch.gap * sizeFactor, geo.period, copy, geo.copies) : offset * pitch.gap * sizeFactor;
+    const across = (row - (rows - 1) / 2) * pitch.rowGap * sizeFactor;
 
     const px = horiz ? along : across;
     const py = horiz ? across : along;
@@ -122,7 +170,10 @@ const ticker: Template = {
     // the edge, which is what makes the band read as endless.
     let alpha = 1;
     const half = (horiz ? ctx.width : ctx.height) / 2;
-    const cardHalf = v.cardSize * geo.k / 2;
+    // The edge facing the travel axis, not the long edge: a landscape card
+    // leaving a vertical band would otherwise start fading a third of a card
+    // early, and a portrait one late.
+    const cardHalf = v.cardSize * geo.k * pitch.alongEdge / 2;
     const axisPos = horiz ? x : y;
     const leaving = Math.abs(axisPos) - (half - cardHalf);
     if (leaving > 0) {
@@ -141,7 +192,14 @@ const ticker: Template = {
       depth: row + p.depthNorm * 0.5,
     };
   },
-};
+  };
+}
+
+// The house shape, and the shape the ported catalogue presets declare. Only
+// `ticker` is registered; `tickerRef` exists to hand those presets a transform
+// whose gap baseline matches the card they ship with (see `preset` below).
+const ticker = tickerTemplate(4 / 5);
+const tickerRef = tickerTemplate(3 / 4);
 
 // Ticker Tilt is not a collection of individually rotated cards. It is one
 // rigid, flat sheet. The sheet first tips away around X, then yaws around Y.
@@ -149,6 +207,16 @@ const ticker: Template = {
 // columns lean toward an off-centre vanishing point and distant rows compress.
 // A single Y rotation only makes a side-facing trapezoid, which is the wrong
 // visual language for this effect.
+// One place for the sheet's rig, so the Pixi affine fallback and the WebGL pose
+// can never drift onto different angles. `rake` reads as degrees of pitch and
+// `tilt` as degrees of yaw — no compression, so the slider number is the angle.
+function tiltRig(v: Record<string, any>) {
+  const pitchDeg = clamp(Number(v.rake ?? -18), -45, 45);
+  const yawDeg = -clamp(Number(v.tilt ?? 0), -60, 60);
+  const zoom = 1 + clamp(v.zoom / 100, 0, 1) * 1.2;
+  return { pitchDeg, yawDeg, pitch: pitchDeg * Math.PI / 180, yaw: yawDeg * Math.PI / 180, zoom };
+}
+
 const tickerTilt: Template = {
   ...ticker,
   meta: {
@@ -161,21 +229,32 @@ const tickerTilt: Template = {
   controls: ticker.controls.flatMap((control) => {
     if (control.key === 'tilt') return [];
     const patched =
-      control.key === 'count' ? { ...control, default: 24 } :
-      control.key === 'rows' ? { ...control, default: 4 } :
+      control.key === 'count' ? { ...control, default: 36 } :
+      control.key === 'rows' ? { ...control, max: 10, default: 6 } :
       control.key === 'flow' ? { ...control, default: 'same' } :
       control.key === 'cardSize' ? { ...control, default: 180 } :
-      control.key === 'gap' ? { ...control, default: 200 } :
-      control.key === 'rowGap' ? { ...control, default: 210 } :
+      // Same gutter rule as the base: BASE * (card edge on that axis + 8%).
+      control.key === 'gap' ? { ...control, default: 300 } :
+      control.key === 'rowGap' ? { ...control, default: 367 } :
       control.key === 'outerFade' ? { ...control, default: 0 } :
       control.key === 'speed' ? { ...control, default: 0.6 } :
       control;
     if (control.key !== 'rowGap') return [patched];
     return [
       patched,
-      { key: 'zoom',        label: 'Zoom',        type: 'slider' as const, min: 0, max: 100, step: 1, default: 32 },
-      { key: 'tilt',        label: 'Tilt',        type: 'slider' as const, min: -55, max: 55, step: 1, default: 30 },
-      { key: 'perspective', label: 'Perspective', type: 'slider' as const, min: 0, max: 100, step: 1, default: 60 },
+      { key: 'zoom',        label: 'Zoom',        type: 'slider' as const, min: 0, max: 100, step: 1, default: 10, section: 'Depth' as const, unit: '%',
+        description: 'Overscan. The sheet is meant to run past the frame, so its clipped edges read as a continuous surface.' },
+      // Two angles, two sliders. Until now `tilt` drove the yaw and
+      // `perspective` drove BOTH the lens and the pitch, so there was no way to
+      // change the lean without also changing the lens — and neither angle
+      // reached far enough to read as depth (yaw topped out at 22°).
+      { key: 'tilt',        label: 'Rotation Y',  type: 'slider' as const, min: -60, max: 60, step: 1, default: 26, section: 'Depth' as const, unit: '°',
+        description: 'Yaw. Swings the sheet so its columns converge on an off-centre vanishing point.' },
+      { key: 'rake',        label: 'Rotation X',  type: 'slider' as const, min: -45, max: 45, step: 1, default: -18, section: 'Depth' as const, unit: '°',
+        description: 'Pitch. Negative tips the top of the sheet away from the camera.' },
+      // The house lens control (0–200 → fov 15–95°, see renderer3d
+      // updateTrackCamera). Here it is ONLY the lens.
+      { key: 'perspective', label: 'Perspective', type: 'slider' as const, min: 0, max: 200, step: 1, default: 60, section: 'Depth' as const },
     ];
   }),
   transform: (frame, index, count, v, ctx) => {
@@ -184,14 +263,9 @@ const tickerTilt: Template = {
     // rigid sheet. Letting both interpretations stack was the source of the
     // crooked, individually scattered look in the old preset.
     const flat = ticker.transform(frame, index, count, { ...v, tilt: 0 }, ctx);
-    const pitch = -(4 + clamp(v.perspective / 100, 0, 1) * 38) * Math.PI / 180;
-    const yaw = -(clamp(v.tilt, -55, 55) / 55) * 22 * Math.PI / 180;
+    const { pitch, yaw, zoom } = tiltRig(v);
     const cp = Math.cos(pitch);
     const shear = -Math.sin(pitch) * Math.sin(yaw);
-    // At the reference default (32%) the sheet deliberately overscans the
-    // frame, so its clipped edges read as a continuous surface rather than a
-    // small floating grid.
-    const zoom = 1.45 + clamp(v.zoom / 100, 0, 1) * 1.8;
     return {
       ...flat,
       x: (flat.x + flat.y * shear) * zoom,
@@ -206,15 +280,7 @@ const tickerTilt: Template = {
   },
   transform3d: (frame, index, count, v, ctx) => {
     const flat = ticker.transform(frame, index, count, { ...v, tilt: 0 }, ctx);
-    const pitchDeg = -(4 + clamp(v.perspective / 100, 0, 1) * 38);
-    const yawDeg = -(clamp(v.tilt, -55, 55) / 55) * 22;
-    const pitch = pitchDeg * Math.PI / 180;
-    const yaw = yawDeg * Math.PI / 180;
-    const cp = Math.cos(pitch);
-    const sp = Math.sin(pitch);
-    const cy = Math.cos(yaw);
-    const sy = Math.sin(yaw);
-    const zoom = 1.45 + clamp(v.zoom / 100, 0, 1) * 1.8;
+    const { pitch, yaw, zoom, pitchDeg, yawDeg } = tiltRig(v);
     const localX = flat.x * zoom;
     const localY = flat.y * zoom;
     const point = tiltPointCanvas({ x: localX, y: localY, z: 0 }, { pitch: pitchDeg, yaw: yawDeg });
@@ -340,7 +406,9 @@ function preset(
   ref: RefMarquee,
   easing: EasingSpec = { id: 'linear' }
 ): Template {
-  const t = variant(ticker, id, name, refMarquee(ref));
+  // Built on `tickerRef` so the transform's gap baseline is the 3:4 card these
+  // presets declare — refMarquee derives their gaps from measured 3:4 pitches.
+  const t = variant(tickerRef, id, name, refMarquee(ref));
   return { ...t, meta: { ...t.meta, defaultEasing: easing, cardAspect: 3 / 4 } };
 }
 
