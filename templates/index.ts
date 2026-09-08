@@ -194,3 +194,8 @@ export function layerCountFor(
   if (typeof derived === 'number' && Number.isFinite(derived)) return Math.max(1, Math.round(derived));
   return Math.max(1, Math.round(values.count ?? 6));
 }
+
+/** Media slots shown in the editor, excluding renderer-only repeated copies. */
+export function mediaCountFor(id: string, values: Record<string, any>, ctx: { width: number; height: number; cardAspect?: number }): number {
+  return getTemplate(id).mediaCount?.(values, ctx) ?? layerCountFor(id, values, ctx);
+}

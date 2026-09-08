@@ -282,9 +282,9 @@ export function renderThumbFrame2d(ctx: Shared, template: Template, frame: numbe
     else if (slot.mesh) slot.mesh.texture = white;
     // The card's own grey, darkened by  — which darkens rather than fading,
     // so a receding card still occludes what is behind it.
-    (node as PIXI.Sprite).tint = scaleTint(toneColor(i % TONE_COUNT), 1 - dim);
+    (node as PIXI.Sprite).tint = scaleTint(toneColor((template.mediaIndex?.(i, count, v, tctx) ?? i) % TONE_COUNT), 1 - dim);
     if ('skew' in node) (node as PIXI.Sprite).skew.set(t.skewX ?? 0, t.skewY ?? 0);
-    node.zIndex = Math.round(t.depth * 1000 + i);
+    node.zIndex = Math.round(t.depth * 1000 + (template.mediaIndex?.(i, count, v, tctx) ?? i));
     applyMask(slot, node, texW, texH, radius, taper ? undefined : t.clip);
   });
 

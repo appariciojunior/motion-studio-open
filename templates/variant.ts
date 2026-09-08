@@ -24,6 +24,7 @@ export function variant(
   meta?: Partial<Template['meta']>,
 ): Template {
   return {
+    ...base,
     meta: { ...base.meta, id, name, ...(easing ? { defaultEasing: easing } : {}), ...(meta ?? {}) },
     controls: base.controls.map((c) =>
       patch[c.key] !== undefined ? { ...c, default: patch[c.key] } : c

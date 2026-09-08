@@ -76,7 +76,7 @@ const coil: Template = {
     { key: 'distance',       label: 'Distance',      type: 'slider', min: 0, max: 6000, step: 50,    default: 3050, section: 'Depth' },
     { key: 'perspective',    label: 'Perspective',   type: 'slider', min: 10, max: 300, step: 5,     default: 100, section: 'Depth' },
     { key: 'cycles',         label: 'Cycles',        type: 'slider', min: 0.25, max: 12, step: 0.25, default: 1, section: 'Motion' },
-    { key: 'cycleDeg',       label: 'Cycle Turn',    type: 'slider', min: 15, max: 360, step: 15,    default: 360, unit: '°', section: 'Motion' },
+    { key: 'cycleDeg',       label: 'Cycle Turn',    type: 'slider', min: 15, max: 360, step: 15,    default: 360, unit: '°', section: 'Motion', description: 'Combined with Cycles and rounded to whole revolutions for a seamless loop.' },
     { key: 'cornerRadius',   label: 'Corner Radius', type: 'slider', min: 0, max: 200, step: 1,      default: 0 },
     { key: 'offset',         label: 'Offset',        type: 'xypad',                                  default: { x: 0, y: 0 } },
   ],
@@ -105,7 +105,8 @@ function coilPose(
   const dir = v.direction === 'reverse' ? -1 : 1;
 
   const spinAngle = dir * refSpinRadians(
-    'continuous', frame, ctx.totalFrames, ctx.easedPhase, n, v.cycles, v.cycleDeg,
+    'continuous', frame, ctx.totalFrames, ctx.easedPhase, n,
+    Math.max(1, Math.round(v.cycles * v.cycleDeg / 360)), 360,
   );
   const spin = eulerQuat(0, spinAngle, 0);
 

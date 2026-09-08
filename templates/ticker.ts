@@ -2,8 +2,10 @@ import type { Template } from '@/lib/types';
 import type { EasingSpec } from '@/lib/easing';
 import { clamp, loopCycles, stepHold } from '@/lib/motion';
 import { cardPath } from '@/lib/cardPath';
+import { canvasScale } from './lattice';
+import { repeatCopies, repeatCoordinate } from './infiniteField';
 import { variant } from './variant';
-import { tiltPointCanvas } from '@/lib/tilt3d';
+import { tiltPointCanvas, multiplyQuaternion, quaternionFromEuler } from '@/lib/tilt3d';
 
 // Reference size (px) shared with the renderer's sprite normalization, so that
 // `cardSize` reads directly in on-screen pixels.
@@ -29,6 +31,16 @@ const BASE = 340;
 //    directions, which is what gives a marquee its woven look.
 // ============================================================
 
+function tickerField(v: Record<string, any>, ctx: {width:number;height:number}) {
+  const n=Math.max(1,Math.round(v.count)), rows=Math.max(1,Math.round(v.rows));
+  const k=canvasScale(ctx), size=v.cardSize*k/BASE;
+  const period=Math.ceil(n/rows)*v.gap*size;
+  // A diagonal bound covers rotation; the tilt preset additionally zooms in.
+  const view=Math.hypot(ctx.width,ctx.height);
+  const offset=Math.hypot(v.offset?.x??0,v.offset?.y??0)*k;
+  return {n,k,period,copies:period>0 ? repeatCopies(view,period,v.cardSize*k,offset) : 1};
+}
+
 const ticker: Template = {
   meta: { id: 'ticker-01', name: 'Ticker 01', group: 'Ticker', isNew: true, defaultEasing: { id: 'linear' }, repeatAssets: true },
 
@@ -49,7 +61,13 @@ const ticker: Template = {
     { key: 'speed',        label: 'Speed',         type: 'slider', min: 0, max: 4, step: 0.1,   default: 0.8 }, // cards/sec
   ],
 
+  layerCount: (v,ctx) => {const g=tickerField(v,ctx);return g.n*g.copies;},
+  mediaCount: (v) => Math.max(1,Math.round(v.count)),
+  mediaIndex: (index,_count,v) => index % Math.max(1,Math.round(v.count)),
   transform: (frame, index, count, v, ctx) => {
+    const geo=tickerField(v,ctx), repeated=count===geo.n*geo.copies;
+    const copy=Math.floor(index/geo.n);
+    if(repeated){index%=geo.n;count=geo.n;}
     const horiz = v.direction === 'left' || v.direction === 'right';
     const baseDir = (v.direction === 'left' || v.direction === 'up') ? 1 : -1;
 
@@ -85,17 +103,17 @@ const ticker: Template = {
     // gap:1 → x carries the raw signed offset in card units
     const p = cardPath({ kind: 'line', index: slot, count: perRow, phase, gap: 1, wrap: true });
     const offset = p.x;
-    const sizeFactor = v.cardSize / BASE;
+    const sizeFactor = v.cardSize * geo.k / BASE;
 
     // Along-track position, and the row's cross-track position centred on 0.
-    const along = offset * v.gap * sizeFactor;
+    const along = repeated && geo.period>0 ? repeatCoordinate(offset * v.gap * sizeFactor, geo.period, copy, geo.copies) : offset * v.gap * sizeFactor;
     const across = (row - (rows - 1) / 2) * v.rowGap * sizeFactor;
 
     const px = horiz ? along : across;
     const py = horiz ? across : along;
     const roll = (Number(v.tilt ?? 0) * Math.PI) / 180;
-    const x = px * Math.cos(roll) - py * Math.sin(roll) + v.offset.x;
-    const y = px * Math.sin(roll) + py * Math.cos(roll) + v.offset.y;
+    const x = px * Math.cos(roll) - py * Math.sin(roll) + v.offset.x * geo.k;
+    const y = px * Math.sin(roll) + py * Math.cos(roll) + v.offset.y * geo.k;
 
     // Constant scale — a ticker has no hero card.
     const scale = sizeFactor;
@@ -104,7 +122,7 @@ const ticker: Template = {
     // the edge, which is what makes the band read as endless.
     let alpha = 1;
     const half = (horiz ? ctx.width : ctx.height) / 2;
-    const cardHalf = v.cardSize / 2;
+    const cardHalf = v.cardSize * geo.k / 2;
     const axisPos = horiz ? x : y;
     const leaving = Math.abs(axisPos) - (half - cardHalf);
     if (leaving > 0) {
@@ -208,9 +226,11 @@ const tickerTilt: Template = {
       x: point.x,
       y: point.y,
       z: point.z,
-      rotationX: pitch,
-      rotationY: yaw,
-      rotationZ: 0,
+      // Match Ry * Rx used for centres; Three's default XYZ Euler order
+      // otherwise makes overlapping cards intersect instead of sharing a plane.
+      quaternion: multiplyQuaternion(quaternionFromEuler(0,yaw,0), quaternionFromEuler(pitch,0,0)),
+      // Every copy of one image shares its rank, even while render slots wrap.
+      depthBias: 8 * (1 + index % Math.max(1,Math.round(v.count))),
       scale: flat.scale * zoom,
       alpha: flat.alpha,
     };

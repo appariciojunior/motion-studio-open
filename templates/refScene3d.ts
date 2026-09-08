@@ -32,7 +32,9 @@ export const refScale = (height: number) => height / REF_H;
  */
 export function refFocal(model: 'ring3d' | 'sphere' | 'spiral' | 'carousel3d', perspective: number, height: number): number {
   const s = Math.max(0.001, perspective / 100);
-  if (model === 'carousel3d') return 600 * s * (height / 1350);
+  // Keep the carousel lens in authoring units. Scaling it by output height
+  // zoomed the camera again when refScale had already scaled the whole scene.
+  if (model === 'carousel3d') return 600 * s * (1080 / 1350);
   return 1000 / s;
 }
 
@@ -83,12 +85,17 @@ export function refSpinRadians(
   count: number, cycles: number, cycleDeg: number,
 ): number {
   const u = frame / Math.max(1, totalFrames);
+  if (cycles === 0 || (model === 'continuous' && cycleDeg === 0)) return 0;
   if (model === 'continuous') {
-    const turns = easedPhase(u * Math.max(0.01, cycles));
-    return (turns * cycleDeg * Math.PI) / 180;
+    // Close the full orientation, not merely a fraction of a card slot.
+    // Preserve authored sub-turn beats (e.g. six 60-degree moves) whenever
+    // their total already closes; fractional settings choose a whole turn.
+    const beats = Math.max(1, Math.round(Math.abs(cycles)));
+    const revolutions = Math.max(1, Math.round(Math.abs(cycles * cycleDeg) / 360));
+    return easedPhase(u * beats) / beats * revolutions * Math.PI * 2 * Math.sign(cycles * cycleDeg);
   }
-  const steps = Math.max(1, Math.round(cycles * count));
-  return easedPhase(u * steps) * ((Math.PI * 2) / Math.max(1, count));
+  const steps = Math.max(1, Math.round(Math.abs(cycles))) * Math.max(1, count);
+  return easedPhase(u * steps) * ((Math.PI * 2) / Math.max(1, count)) * Math.sign(cycles);
 }
 
 /** Rotate a vector by a quaternion. */

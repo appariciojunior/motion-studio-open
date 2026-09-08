@@ -1,6 +1,7 @@
 import type { Template } from '@/lib/types';
 import { TAU, clamp, frac, lerp, smooth, hash2 } from '@/lib/motion';
 import { variant } from './variant';
+import { canvasScale } from './lattice';
 
 const BASE = 340;
 
@@ -58,7 +59,8 @@ const gallery: Template = {
     const s2 = lerp(0.7, 1.1, h(3.7));
     const s3 = lerp(3.0, 4.5, h(4.9));
     const sizeJ = lerp(0.8, 1.15, h(11.3));
-    const k = (v.cardSize / BASE) * sizeJ;
+    const resolution = canvasScale(ctx);
+    const k = (v.cardSize * resolution / BASE) * sizeJ;
 
     let x: number, y: number, sc: number, al: number;
 
@@ -89,8 +91,8 @@ const gallery: Template = {
       // Straight radial run through an anchor on the Blank Area ring.
       const A = h(1.1) * TAU;
       const R0 = (v.blankArea / 100) * halfDiag;
-      const entryD = lerp(80, 140, h(6.1));
-      const exitD = lerp(160, 260, h(8.3));
+      const entryD = lerp(80, 140, h(6.1)) * resolution;
+      const exitD = lerp(160, 260, h(8.3)) * resolution;
       const oRest = grow ? entryD : 0;
       const oExit = oRest + (away ? exitD : -exitD);
       const exitScale = away ? s3 : 0.08;
@@ -100,7 +102,7 @@ const gallery: Template = {
         const t = smooth(u / fA);
         o = grow ? t * entryD : (1 - t) * entryD * 2.5;
         sc = grow ? lerp(s0, s2, t) : lerp(s3, s2, t);
-        al = grow ? 1 : t;
+        al = t; // a newly seeded card always enters from zero opacity
       } else if (u < fA + fH) {
         // Drift: creep 15% of the way toward the exit target while holding.
         const t = fH > 0 ? (u - fA) / fH : 1;
@@ -109,8 +111,8 @@ const gallery: Template = {
         al = 1;
       } else {
         const t = smooth((u - fA - fH) / fE);
-        o = lerp(oRest + (oExit - oRest) * 0.15, oExit, t);
-        sc = lerp(s2 + (exitScale - s2) * 0.15, exitScale, t);
+        o = lerp(oRest + (oExit - oRest) * (fH > 0 ? 0.15 : 0), oExit, t);
+        sc = lerp(s2 + (exitScale - s2) * (fH > 0 ? 0.15 : 0), exitScale, t);
         al = 1 - t;
       }
       sc *= k;
@@ -119,9 +121,9 @@ const gallery: Template = {
     }
 
     return {
-      x: x + v.offset.x,
-      y: y + v.offset.y,
-      scale: Math.max(0.001, sc),
+      x: x + v.offset.x * resolution,
+      y: y + v.offset.y * resolution,
+      scale: Math.max(0, sc),
       rotation: 0,
       alpha: clamp(al, 0, 1),
       depth: 1 - u, // newest tile sits on top, like the source's z counter

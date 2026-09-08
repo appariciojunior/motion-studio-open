@@ -76,6 +76,7 @@ export interface LayerTransform3D {
   rotationY?: number;
   rotationZ?: number;
   quaternion?: { x: number; y: number; z: number; w: number };
+  depthBias?: number;        // positive depth-buffer units bring coplanar cards forward
   thickness?: number;        // px before the card's uniform pose scale
   shadowStrength?: number;   // 0..1, per-card cast/receive contribution
   materialExposure?: number; // linear multiplier, 1 = neutral
@@ -167,6 +168,12 @@ export interface Template {
     values: Record<string, any>,
     ctx: Pick<TransformCtx, 'width' | 'height' | 'cardAspect'>,
   ) => number;
+  // Number of user-facing media slots, excluding offscreen render copies.
+  mediaCount?: (values: Record<string, any>,
+    ctx: Pick<TransformCtx, 'width' | 'height' | 'cardAspect'>) => number;
+  // Offscreen copies must retain the original card's media identity.
+  mediaIndex?: (index: number, count: number, values: Record<string, any>,
+    ctx: Pick<TransformCtx, 'width' | 'height' | 'cardAspect'>) => number;
   transform: (
     frame: number,                            // absolute frame index
     index: number,                            // this layer's slot 0..count-1

@@ -177,7 +177,7 @@ const SHARED_CONTROLS = [
   { key: 'fade',         label: 'Fade',          type: 'slider' as const, min: 0, max: 100, step: 1,      default: 0, unit: '%' as const, section: 'Depth' as const },
   { key: 'distance',     label: 'Distance',      type: 'slider' as const, min: 0, max: 30000, step: 1,    default: 24212, section: 'Depth' as const },
   { key: 'perspective',  label: 'Perspective',   type: 'slider' as const, min: 10, max: 300, step: 5,     default: 100, section: 'Depth' as const },
-  { key: 'cycles',       label: 'Cycles',        type: 'slider' as const, min: 0.25, max: 12, step: 0.25, default: 1, section: 'Motion' as const },
+  { key: 'cycles',       label: 'Cycles',        type: 'slider' as const, min: 0.25, max: 12, step: 0.25, default: 1, section: 'Motion' as const, description: 'Rounded to complete rotations or complete tours of the stops so the clip loops.' },
   { key: 'cornerRadius', label: 'Corner Radius', type: 'slider' as const, min: 0, max: 400, step: 1,      default: 0 },
   { key: 'offsetX',      label: 'Shift X',       type: 'slider' as const, min: -50, max: 50, step: 0.5,   default: 0, unit: '%' as const, section: 'Layout' as const, precision: 1 },
   { key: 'offsetY',      label: 'Shift Y',       type: 'slider' as const, min: -50, max: 50, step: 0.5,   default: 0, unit: '%' as const, section: 'Layout' as const, precision: 1 },

@@ -1,5 +1,6 @@
 import type { Template } from '@/lib/types';
 import { clamp } from '@/lib/motion';
+import { repeatCoordinate } from './infiniteField';
 import { variant } from './variant';
 
 const BASE = 340;
@@ -192,16 +193,23 @@ const proximityField: Template = {
     { key: 'sizeMix',      label: 'Size Mix',      type: 'slider', min: 0, max: 100, step: 1,    default: 0, unit: '%', section: 'Layout', description: 'Random size variation between plates.' },
     { key: 'tilt',         label: 'Tilt',          type: 'slider', min: 0, max: 45, step: 1,     default: 0, unit: '°', section: 'Layout', description: 'Random rotation spread.' },
     { key: 'panRange',     label: 'Pan Range',     type: 'slider', min: 0, max: 200, step: 5,    default: 100, unit: '%', section: 'Motion', description: 'Scales the path about the stage centre.' },
-    { key: 'buildInOut',   label: 'Build In/Out',  type: 'toggle', options: ['off','on'],        default: 'on', section: 'Motion', description: 'Collapse the field to nothing at both ends of the loop.' },
+    { key: 'buildInOut',   label: 'Build In/Out',  type: 'toggle', options: ['off','on'],        default: 'off', section: 'Motion', description: 'Collapse the field to nothing at both ends of the loop.' },
     { key: 'cornerRadius', label: 'Corner Radius', type: 'slider', min: 0, max: 100, step: 1,    default: 0 },
     { key: 'offset',       label: 'Offset',        type: 'xypad',                                default: { x: 0, y: 0 } },
   ],
 
+  layerCount: (v) => Math.max(1,Math.round(v.count))*9,
+  mediaCount: (v) => Math.max(1,Math.round(v.count)),
+  mediaIndex: (index,_count,v) => index % Math.max(1,Math.round(v.count)),
   transform: (frame, index, count, v, ctx) => {
+    const motifCount=Math.max(1,Math.round(v.count));
+    const repeated=count===motifCount*9;
+    const copy=Math.floor(index/motifCount);
+    if(repeated){index%=motifCount;count=motifCount;}
     // One lap of the path per clip — the reference's loop is its `duration`,
     // and pinning the scene duration per preset (store/useSceneStore) is what
     // carries its cadence over.
-    const u = (frame / ctx.totalFrames) % 1;
+    const u = ((frame / ctx.totalFrames) % 1 + 1) % 1;
     const pins = PATHS[v.path] ?? PATHS.wander;
 
     // Stage → frame. The reference measures everything against a 1080-wide
@@ -227,10 +235,14 @@ const proximityField: Template = {
       if (sy < minY) minY = sy;
       if (sy > maxY) maxY = sy;
     }
-    const x0 = minX - CENTRE_X - MARGIN;
-    const x1 = maxX + CENTRE_X + MARGIN;
-    const y0 = minY - halfH - MARGIN;
-    const y1 = maxY + halfH + MARGIN;
+    const maxCard = CARD_W * Math.max(v.maxScale,v.minScale) / 100 * (1 + clamp(v.sizeMix,0,100)/200)
+      / Math.min(1,ctx.cardAspect ?? 2/3);
+    const marginX = Math.max(MARGIN, maxCard/2, Math.abs(v.offset.x));
+    const marginY = Math.max(MARGIN, maxCard/2, Math.abs(v.offset.y));
+    const x0 = minX - CENTRE_X - marginX;
+    const x1 = maxX + CENTRE_X + marginX;
+    const y0 = minY - halfH - marginY;
+    const y1 = maxY + halfH + marginY;
     const spanX = x1 - x0;
     const spanY = y1 - y0;
 
@@ -253,7 +265,9 @@ const proximityField: Template = {
     const far = (Math.max(0, v.minScale) / 100) * env;
     const reach = Math.max(0.01, (Math.max(0.001, v.maxDist) / 100) * REF_W * env);
 
-    const dist = Math.hypot(px - fx, py - fy);
+    const nearX = repeatCoordinate(px-fx,spanX,0,1);
+    const nearY = repeatCoordinate(py-fy,spanY,0,1);
+    const dist = Math.hypot(repeated ? nearX : px-fx, repeated ? nearY : py-fy);
     const t = dist >= reach ? 1 : dist <= 0 ? 0 : dist / reach;
 
     const mix = clamp(v.sizeMix, 0, 100) / 100;
@@ -268,9 +282,8 @@ const proximityField: Template = {
       const w = clamp((t - 0.5) * 2, 0, 1);
       alpha = 1 - haze * w * w * (3 - 2 * w);
     }
-    if (plate <= 0.0015 || alpha <= 0.01) {
-      return { x: 0, y: 0, scale: 0, rotation: 0, alpha: 0, depth: -1 };
-    }
+    // Keep the pose continuous down to zero size/opacity; thresholding here
+    // teleports a small but still visible plate back to the origin.
 
     // The camera rides the focus: it is what puts the swollen plate in the
     // middle of the frame instead of wherever the path happens to be.
@@ -279,11 +292,11 @@ const proximityField: Template = {
     const spread = clamp(v.tilt, 0, 45);
 
     return {
-      x: (px - fx) * k + v.offset.x,
-      y: (py - fy) * k + v.offset.y,
+      x: (repeated ? repeatCoordinate(px-fx,spanX,copy%3,3) : px-fx) * k + v.offset.x * k,
+      y: (repeated ? repeatCoordinate(py-fy,spanY,Math.floor(copy/3),3) : py-fy) * k + v.offset.y * k,
       scale: widthPx / (BASE * Math.min(1, aspect)),
       rotation: spread > 0 ? (hash1(index * 1.917 + 8.3) - 0.5) * 2 * spread * DEG : 0,
-      alpha,
+      alpha: plate > 0 ? alpha : 0,
       // Smallest first, so the plate the focus is standing on is never buried.
       depth: plate,
     };

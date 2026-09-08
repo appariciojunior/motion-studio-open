@@ -291,7 +291,7 @@ export class SceneRenderer {
     const indices = trackAssetIndices(track, s.assets);
     const pool = indices.map((i) => s.assets[i]).filter(Boolean);
 
-    const assetSig = (repeat ? 'R|' : '') + 'A' + aspect.toFixed(4) + '|' +
+    const assetSig = (getTemplate(track.templateId).mediaIndex ? JSON.stringify([s.width, s.height, track.values]) : '') + (repeat ? 'R|' : '') + 'A' + aspect.toFixed(4) + '|' +
       pool.map((a) => a.id + ':' + a.url + ':' + a.visible + ':' + cropKey(a.url, aspect, a.crop)).join('|');
 
     if (count === rt.countSig && assetSig === rt.assetSig) return;
@@ -325,18 +325,20 @@ export class SceneRenderer {
     // assign textures — slot i ↔ pool asset i (or i % pool.length when
     // repeating); slots past the list cycle the set; hidden → placeholder
     rt.slots.forEach((slot, i) => {
-      let asset = pool[assetIndexForSlot(i, pool.length, repeat)];
-      if (!asset && pool.length > 0) asset = pool[i % pool.length];
+      const mediaIndex = getTemplate(track.templateId).mediaIndex?.(i, count, track.values,
+        { width: s.width, height: s.height, cardAspect: aspect }) ?? i;
+      let asset = pool[assetIndexForSlot(mediaIndex, pool.length, repeat)];
+      if (!asset && pool.length > 0) asset = pool[mediaIndex % pool.length];
       const binding = asset
         ? `${asset.id}|${cropKey(asset.url, aspect, asset.crop)}`
-        : `placeholder|${i}`;
+        : `placeholder|${mediaIndex}`;
       const bindingChanged = slot.bindKey !== binding;
       slot.bindKey = binding;
       if (!asset || !asset.visible) {
         slot.sprite.texture = this.placeholder;
         slot.baseTint = PLACEHOLDER_FILL;
         slot.sprite.tint = PLACEHOLDER_FILL;
-        slot.label.text = String(i + 1);
+        slot.label.text = String(mediaIndex + 1);
         slot.label.visible = true;
         slot.texW = 480; slot.texH = 600; slot.maskKey = '';
       } else {
@@ -346,7 +348,7 @@ export class SceneRenderer {
           slot.sprite.texture = this.placeholder;
           slot.baseTint = PLACEHOLDER_FILL;
           slot.sprite.tint = PLACEHOLDER_FILL;
-          slot.label.text = String(i + 1);
+          slot.label.text = String(mediaIndex + 1);
           slot.label.visible = true;
         }
         slot.baseTint = 0xffffff;
@@ -789,6 +791,20 @@ export class SceneRenderer {
         const node = this.selectNode(slot, rt.container, taper);
         node.position.set(t.x, t.y);
         node.scale.set(norm * t.scale * (t.scaleX ?? 1), norm * t.scale * (t.scaleY ?? 1));
+        // Repeated motifs need offscreen copies, but those copies must not spend
+        // draw calls or text rasterization until their bounds enter the frame.
+        const long = SPRITE_BASE * t.scale;
+        const cardW = long * Math.min(1, ctx.cardAspect), cardH = long * Math.min(1, 1 / ctx.cardAspect);
+        // Match the sprite's affine transform, including projected ticker cards.
+        const sx = Math.abs(t.scaleX ?? 1), sy = Math.abs(t.scaleY ?? 1);
+        const ax = Math.abs(Math.cos(t.rotation + (t.skewY ?? 0))) * sx;
+        const ay = Math.abs(Math.sin(t.rotation + (t.skewY ?? 0))) * sx;
+        const bx = Math.abs(Math.sin(t.rotation - (t.skewX ?? 0))) * sy;
+        const by = Math.abs(Math.cos(t.rotation - (t.skewX ?? 0))) * sy;
+        node.renderable = !template.mediaIndex || (
+          Math.abs(t.x) <= s.width / 2 + (ax * cardW + bx * cardH) / 2 &&
+          Math.abs(t.y) <= s.height / 2 + (ay * cardW + by * cardH) / 2
+        );
         node.rotation = t.rotation;
         node.alpha = t.alpha;
         // `dim` darkens toward black rather than going see-through, so a
@@ -796,12 +812,12 @@ export class SceneRenderer {
         const dim = clamp(t.dim ?? 0, 0, 1);
         node.tint = dim > 0 ? scaleTint(slot.baseTint, 1 - dim) : slot.baseTint;
         node.skew.set(t.skewX ?? 0, t.skewY ?? 0);
-        node.zIndex = t.depth * 1000 + i; // stable tiebreak
+        node.zIndex = t.depth * 1000 + (template.mediaIndex?.(i, count, track.values, ctx) ?? i); // stable tiebreak
         this.applyMask(slot, track.values.cornerRadius ?? 0, t.clip, taper);
 
         // Rank across tracks: stacking order dominates, card depth breaks ties.
         const score = order * 1e6 + t.depth;
-        if (score > featuredScore && t.alpha > 0.15) {
+        if (score > featuredScore && t.alpha > 0.15 && node.renderable) {
           featuredScore = score;
           featured = { tex: slot.sprite.texture, x: t.x, y: t.y };
         }

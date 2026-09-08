@@ -1,6 +1,7 @@
 import type { Template } from '@/lib/types';
 import { TAU, clamp, frac } from '@/lib/motion';
 import { variant } from './variant';
+import { canvasScale } from './lattice';
 
 // Reference size (px) shared with the renderer's sprite normalization, so that
 // `cardSize` reads directly in on-screen pixels.
@@ -107,7 +108,8 @@ const spiralImages: Template = {
     // reserving the chosen gap; Card Size still works normally below that cap.
     const centrePitch = (R * arcFromCentre(1, k)) / Math.max(1, count);
     const gap = clamp((v.cardGap ?? 25) / 100, 0, 0.8);
-    const spacedCardSize = Math.min(v.cardSize, centrePitch * (1 - gap));
+    const resolution = canvasScale(ctx);
+    const spacedCardSize = Math.min(v.cardSize * resolution, centrePitch * (1 - gap));
     const u = radiusForArc(1 - s, k);          // normalized radius: 1 = rim, 0 = centre
     const ang = (1 - u) * k;
     const cos = Math.cos(ang);
@@ -123,17 +125,19 @@ const spiralImages: Template = {
     // Fades sit at the ENDS OF TRAVEL rather than at fixed ends of the curve,
     // so reversing Direction does not turn the entry ramp into an exit pop.
     const e = outward ? 1 - s : s;
-    const fadeIn = v.fadeIn / 100;
-    const fadeOut = v.fadeOut / 100;
+    // A small envelope also protects visible endpoints when Fade is zero
+    // or Taper is disabled; authored fades can make that transition longer.
+    const fadeIn = Math.max(0.015, v.fadeIn / 100);
+    const fadeOut = Math.max(0.015, v.fadeOut / 100);
     let alpha = 1;
     if (fadeIn > 0 && e < fadeIn) alpha = e / fadeIn;
     else if (fadeOut > 0 && e > 1 - fadeOut) alpha = (1 - e) / fadeOut;
 
     return {
-      x: R * u * cos + v.offset.x,
-      y: -R * u * sin + v.offset.y,
+      x: R * u * cos + v.offset.x * resolution,
+      y: -R * u * sin + v.offset.y * resolution,
       // Taper 0 leaves pow(u, 0) = 1, i.e. a constant-size ribbon.
-      scale: Math.max(0.001, (spacedCardSize / BASE) * Math.pow(u, v.taper * 0.5)),
+      scale: (spacedCardSize / BASE) * Math.pow(u, v.taper * 0.5),
       rotation,
       alpha: clamp(alpha, 0, 1),
       // The leading end of travel draws on top: the drain for an inward vortex,
