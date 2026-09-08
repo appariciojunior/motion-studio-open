@@ -226,8 +226,34 @@ export interface EffectShader {
   uniforms: (values: Record<string, any>, ctx: EffectContext) => Record<string, number | number[]>;
 }
 
+// Onde um efeito age. Guardado como string na cena para sobreviver a
+// serializacao; ausente significa 'scene', que e como toda cena salva antes
+// deste campo se comporta.
+//
+//   'scene'       o quadro composto inteiro, FUNDO INCLUIDO
+//   'artwork'     so os cards; o fundo da cena passa intacto
+//   'track:<id>'  so uma camada
+export type EffectScope = 'scene' | 'artwork' | `track:${string}`;
+
 export interface Effect {
-  meta: { id: string; name: string };
+  meta: {
+    id: string;
+    name: string;
+    // Onde este efeito entra ao ser adicionado. Grao, vinheta e scanlines sao
+    // efeitos de CAMERA e pertencem ao quadro todo. O Wave desloca geometria: no
+    // quadro todo ele arrasta o fundo junto e abre borda vazia, sem ganhar nada,
+    // entao nasce em 'artwork'. E so o ponto de partida — o usuario troca depois.
+    defaultScope?: EffectScope;
+  };
   controls: ControlDef[];
   shader: EffectShader;
+  // Passes ADICIONAIS, rodados em ordem depois de `shader`, cada um lendo a
+  // saida do anterior. Existe para o blur gaussiano, que so e linear se for
+  // SEPARAVEL: um passe horizontal e um vertical. Um blur de raio r feito num
+  // passe unico custa (2r+1)^2 amostras; separado custa 2*(2r+1) — a 20px de
+  // raio, 1681 contra 82.
+  //
+  // `shader` continua sendo o primeiro passe, entao todo efeito de passe unico
+  // segue valendo sem mudar nada.
+  passes?: EffectShader[];
 }

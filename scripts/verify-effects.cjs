@@ -53,44 +53,64 @@ for (const effect of effectList) {
   check(Array.isArray(effect.controls), id, 'controls nao e uma lista');
   check(!!effect.shader?.fragment, id, 'shader.fragment ausente');
   check(typeof effect.shader?.uniforms === 'function', id, 'shader.uniforms nao e funcao');
+
+  // O escopo em que o efeito NASCE. So faz sentido declarar 'scene' ou
+  // 'artwork': um id de camada nao existe na hora em que o efeito e escrito, e
+  // guardar `track:` aqui daria um efeito que nasce apontando para uma camada
+  // de outra cena — sem alvo, ele simplesmente nao pinta.
+  const escopo = effect.meta?.defaultScope;
+  check(escopo === undefined || escopo === 'scene' || escopo === 'artwork', id,
+    `meta.defaultScope invalido (${escopo}) — use 'scene', 'artwork', ou nada`);
+
   if (!effect.shader?.fragment) continue;
 
+  // Um efeito pode ter mais de um PASSE (blur separavel: um horizontal, um
+  // vertical). Verificar so `shader` deixaria o segundo passe sem rede —
+  // controle morto, uniform declarado e nunca escrito, nome reservado
+  // redeclarado: nada disso apareceria. Cada passe passa pelas MESMAS
+  // checagens, e a contagem de asserçoes sobe junto.
+  const passes = [effect.shader, ...(effect.passes ?? [])];
+  for (const pass of passes) {
+  check(!!pass?.fragment && typeof pass?.uniforms === 'function', id,
+    'um passe esta sem fragment ou sem uniforms()');
+  if (!pass?.fragment) continue;
+
   // ---- the fragment itself ----
-  check(/vec4\s+fxMain\s*\(\s*vec2/.test(effect.shader.fragment), id,
+  check(/vec4\s+fxMain\s*\(\s*vec2/.test(pass.fragment), id,
     'o fragment precisa definir `vec4 fxMain(vec2 p)` — e o ponto de entrada que os dois adaptadores chamam');
-  check(!/<<<<<<<|>>>>>>>/.test(effect.shader.fragment), id, 'marcador de conflito no shader');
+  check(!/<<<<<<<|>>>>>>>/.test(pass.fragment), id, 'marcador de conflito no shader');
 
   // Redeclaring an injected name is a compile error the adapters cannot catch.
   for (const name of RESERVED) {
     if (name === 'fxMain') continue;
-    const declared = new RegExp(`\\b(uniform|varying|in|out)\\s+\\w+\\s+${name}\\b`).test(effect.shader.fragment)
-      || new RegExp(`\\bvec4\\s+${name}\\s*\\(`).test(effect.shader.fragment);
+    const declared = new RegExp(`\\b(uniform|varying|in|out)\\s+\\w+\\s+${name}\\b`).test(pass.fragment)
+      || new RegExp(`\\bvec4\\s+${name}\\s*\\(`).test(pass.fragment);
     check(!declared, id, `redeclara \`${name}\`, que o adaptador ja injeta`);
   }
 
   // ---- assembly, in both engines ----
   for (const [engine, build] of [['pixi', pixiFragment], ['three', threeFragment]]) {
     let src = '';
-    try { src = build(effect); } catch (e) { fail(id, `${engine}: montagem lancou ${e.message}`); continue; }
-    check(src.includes(effect.shader.fragment), id, `${engine}: o corpo do efeito nao entrou no fragment montado`);
+    try { src = build(effect, pass); } catch (e) { fail(id, `${engine}: montagem lancou ${e.message}`); continue; }
+    check(src.includes(pass.fragment), id, `${engine}: o corpo do efeito nao entrou no fragment montado`);
     check(src.includes('fxSample'), id, `${engine}: helper fxSample ausente`);
     const opens = (src.match(/\{/g) || []).length, closes = (src.match(/\}/g) || []).length;
     check(opens === closes, id, `${engine}: chaves desbalanceadas (${opens} abrem, ${closes} fecham)`);
   }
 
   // ---- controls <-> uniforms ----
-  const declaredTypes = effect.shader.uniformTypes ?? {};
+  const declaredTypes = pass.uniformTypes ?? {};
   const WIDTH = { float: 1, vec2: 2, vec3: 3, vec4: 4 };
   for (const [name, type] of Object.entries(declaredTypes)) {
     check(!!WIDTH[type], id, `uniform \`${name}\` tem tipo desconhecido \`${type}\``);
     check(/^u[A-Z]/.test(name), id, `uniform \`${name}\` deveria comecar com u maiusculo (uSize, uAmount)`);
-    check(effect.shader.fragment.includes(name), id, `uniform \`${name}\` e declarado mas o shader nunca o le`);
+    check(pass.fragment.includes(name), id, `uniform \`${name}\` e declarado mas o shader nunca o le`);
   }
 
   const defaults = effectDefaults(id);
   for (const ctx of SIZES) {
     let produced;
-    try { produced = effect.shader.uniforms(defaults, ctx); }
+    try { produced = pass.uniforms(defaults, ctx); }
     catch (e) { fail(id, `uniforms() lancou em ${ctx.width}x${ctx.height}: ${e.message}`); continue; }
 
     check(!!produced && typeof produced === 'object', id, 'uniforms() nao devolveu um objeto');
@@ -117,7 +137,7 @@ for (const effect of effectList) {
   const probe = { ...defaults };
   const reached = new Set();
   for (const control of effect.controls) {
-    const before = JSON.stringify(effect.shader.uniforms(probe, SIZES[0]));
+    const before = JSON.stringify(pass.uniforms(probe, SIZES[0]));
     const bumped = { ...probe };
     const v = probe[control.key];
     bumped[control.key] = typeof v === 'number'
@@ -125,13 +145,14 @@ for (const effect of effectList) {
       : typeof v === 'boolean' ? !v
       : Array.isArray(control.options) ? control.options.find((o) => o !== v) ?? v
       : v;
-    const after = JSON.stringify(effect.shader.uniforms(bumped, SIZES[0]));
+    const after = JSON.stringify(pass.uniforms(bumped, SIZES[0]));
     if (before !== after) reached.add(control.key);
   }
   for (const control of effect.controls) {
     check(reached.has(control.key), id,
       `o controle \`${control.key}\` nao muda uniform nenhum — botao morto no painel`);
   }
+  } // fim do passe
 }
 
 if (failures.length) {

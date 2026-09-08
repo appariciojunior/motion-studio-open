@@ -3,7 +3,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { getTemplate, layerCountFor } from '@/templates';
 import { useSceneStore } from '@/store/useSceneStore';
 import { getEffect } from '@/effects';
-import { applyThreeUniforms, disposeThreeMaterials, threeMaterialFor } from '@/effects/adapters/three';
+import { applyThreeUniforms, disposeThreeMaterials, threeMaterialsFor } from '@/effects/adapters/three';
 import { resolveEasing } from '@/lib/easing';
 import { assetIndexForSlot, clamp, lerp } from '@/lib/motion';
 import { loadImage } from '@/lib/textureLoad';
@@ -93,6 +93,9 @@ export class SceneRenderer3D implements IRenderer {
   private safeLine: THREE.LineLoop | null = null;
   private composeA!: THREE.WebGLRenderTarget;
   private composeB!: THREE.WebGLRenderTarget;
+  // So nascem quando ha efeito fora de 'scene' (ver ensureBackgroundTarget).
+  private bgTarget: THREE.WebGLRenderTarget | null = null;
+  private layerScratch: THREE.WebGLRenderTarget | null = null;
   private composeScene = new THREE.Scene();
   private composeCam = new THREE.OrthographicCamera(-1, 1, 1, -1, -1, 1);
   private composeQuad!: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
@@ -152,6 +155,8 @@ export class SceneRenderer3D implements IRenderer {
     const rw = Math.max(1, Math.round(width * resolution));
     const rh = Math.max(1, Math.round(height * resolution));
     this.composeA?.setSize(rw, rh);
+    this.bgTarget?.setSize(rw, rh);
+    this.layerScratch?.setSize(rw, rh);
     this.composeB?.setSize(rw, rh);
     this.trackRTs.forEach((rt) => rt.target.setSize(rw, rh));
     this.camera.aspect = width / height;
@@ -198,6 +203,18 @@ export class SceneRenderer3D implements IRenderer {
     camera.updateProjectionMatrix();
   }
 
+  // Alvos que so existem quando alguem usa escopo fora de 'scene'. Uma cena sem
+  // efeito de arte ou de camada nao paga por eles.
+  private ensureBackgroundTarget(): THREE.WebGLRenderTarget {
+    if (!this.bgTarget) this.bgTarget = this.makeTarget(false);
+    return this.bgTarget;
+  }
+
+  private ensureLayerScratch(): THREE.WebGLRenderTarget {
+    if (!this.layerScratch) this.layerScratch = this.makeTarget(false);
+    return this.layerScratch;
+  }
+
   private makeTarget(depthBuffer: boolean) {
     const target = new THREE.WebGLRenderTarget(
       Math.max(1, Math.round(this.width * this.resolution)),
@@ -228,6 +245,10 @@ export class SceneRenderer3D implements IRenderer {
         layerMap: { value: null },
         opacity: { value: 1 },
         blendMode: { value: 0 },
+        // A camada chega com alpha PRE-MULTIPLICADO (0, o caso das tracks) ou
+        // DIRETO (1, o acumulador de arte, que ja saiu deste mesmo shader).
+        // Dividir por alpha o que ja e direto estoura a cor nas bordas do card.
+        layerIsStraight: { value: 0 },
       },
       vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0); }`,
       fragmentShader: `
@@ -235,12 +256,15 @@ export class SceneRenderer3D implements IRenderer {
         uniform sampler2D layerMap;
         uniform float opacity;
         uniform int blendMode;
+        uniform int layerIsStraight;
         varying vec2 vUv;
         void main(){
           vec4 base = texture2D(baseMap, vUv);
           vec4 layer = texture2D(layerMap, vUv);
           float a = clamp(layer.a * opacity, 0.0, 1.0);
-          vec3 straight = layer.a > 0.00001 ? layer.rgb / layer.a : vec3(0.0);
+          vec3 straight = layerIsStraight == 1
+            ? layer.rgb
+            : (layer.a > 0.00001 ? layer.rgb / layer.a : vec3(0.0));
           vec3 blend = straight;
           if (blendMode == 1) blend = min(vec3(1.0), base.rgb + straight);
           else if (blendMode == 2) blend = vec3(1.0) - (vec3(1.0) - base.rgb) * (vec3(1.0) - straight);
@@ -1109,18 +1133,89 @@ export class SceneRenderer3D implements IRenderer {
       if (!this.ready || this.destroyed || !this.renderer) return;
       const s = useSceneStore.getState();
 
-      // The accumulator begins with the scene background.
       const rawAlpha = s.background.alpha ?? 100;
       const alphaPct = (rawAlpha > 0 && rawAlpha <= 1) ? rawAlpha * 100 : rawAlpha;
       const bgAlpha = Math.max(0, Math.min(1, alphaPct / 100));
 
-      this.renderer.setRenderTarget(this.composeA);
-      this.renderer.setClearColor(new THREE.Color(s.background.color), bgAlpha);
-      this.renderer.clear(true, true, true);
-      this.renderer.render(this.scene, this.camera);
+      // O resolution entregue ao shader e o do ALVO, nao o da cena: no export a
+      // cadeia inteira roda supersampled, e um efeito medido em pixels de cena
+      // sairia proporcionalmente mais fino no quadro exportado do que na tela.
+      const fxCtx = {
+        width: this.width * this.resolution,
+        height: this.height * this.resolution,
+        time: frame / Math.max(1, s.fps),
+      };
+      const ativos = s.effects.filter((e) => e.enabled && getEffect(e.effectId));
+      const escopoDe = (e: { scope?: string }) => e.scope ?? 'scene';
+      const daCena = ativos.filter((e) => escopoDe(e) === 'scene');
+      const daArte = ativos.filter((e) => escopoDe(e) === 'artwork');
+      const porCamada = new Map<string, typeof ativos>();
+      for (const e of ativos) {
+        const esc = escopoDe(e);
+        if (!esc.startsWith('track:')) continue;
+        const id = esc.slice(6);
+        porCamada.set(id, [...(porCamada.get(id) ?? []), e]);
+      }
+
+      // Um efeito de 'artwork' ou de camada exige que a arte seja composta SEM o
+      // fundo, para o fundo passar intacto. Isso custa um alvo a mais e um
+      // passe de composicao no fim, entao so acontece quando alguem pediu: sem
+      // efeito fora de 'scene', o caminho e exatamente o de antes, com o fundo
+      // entrando direto no acumulador.
+      const separarFundo = daArte.length > 0 || porCamada.size > 0;
 
       let read = this.composeA;
       let write = this.composeB;
+
+      if (separarFundo) {
+        const fundo = this.ensureBackgroundTarget();
+        this.renderer.setRenderTarget(fundo);
+        this.renderer.setClearColor(new THREE.Color(s.background.color), bgAlpha);
+        this.renderer.clear(true, true, true);
+        this.renderer.render(this.scene, this.camera);
+        // O acumulador comeca VAZIO: so a arte entra nele.
+        this.renderer.setRenderTarget(this.composeA);
+        this.renderer.setClearColor(0x000000, 0);
+        this.renderer.clear(true, true, true);
+      } else {
+        // The accumulator begins with the scene background.
+        this.renderer.setRenderTarget(this.composeA);
+        this.renderer.setClearColor(new THREE.Color(s.background.color), bgAlpha);
+        this.renderer.clear(true, true, true);
+        this.renderer.render(this.scene, this.camera);
+      }
+
+      // Uma cadeia de passes sobre um par de alvos, devolvendo o que ficou com o
+      // resultado. Um so lugar para a mecanica, usada pelos tres escopos.
+      const rodarPasses = (
+        lista: typeof ativos,
+        entrada: THREE.WebGLRenderTarget,
+        rascunho: THREE.WebGLRenderTarget,
+      ): THREE.WebGLRenderTarget => {
+        let de = entrada;
+        let para = rascunho;
+        for (const active of lista) {
+          const def = getEffect(active.effectId);
+          if (!def) continue;
+          try {
+            // Um efeito pode ter varios passes (blur separavel); cada passe e um
+            // giro a mais do mesmo ping-pong.
+            const materiais = threeMaterialsFor(def, active.instanceId);
+            for (let i = 0; i < materiais.length; i++) {
+              const material = materiais[i];
+              applyThreeUniforms(material, def, active.values, fxCtx, i);
+              material.uniforms.map.value = de.texture;
+              this.fxQuad.material = material;
+              this.renderer.setRenderTarget(para);
+              this.renderer.clear(true, false, false);
+              this.renderer.render(this.fxScene, this.composeCam);
+              [de, para] = [para, de];
+            }
+          } catch { /* a shader that will not compile must not take the scene down */ }
+        }
+        return de;
+      };
+
       const composeMaterial = this.composeQuad.material;
       s.tracks.forEach((track) => {
         const rt = this.trackRTs.get(track.id);
@@ -1132,9 +1227,16 @@ export class SceneRenderer3D implements IRenderer {
         this.renderer.clear(true, true, true);
         this.renderer.render(rt.scene, rt.camera);
 
+        // Efeitos DESTA camada, antes de ela entrar na composicao: e o que faz
+        // um escopo de camada ser de camada e nao do quadro.
+        let camada = rt.target;
+        const daCamada = porCamada.get(track.id);
+        if (daCamada?.length) camada = rodarPasses(daCamada, rt.target, this.ensureLayerScratch());
+
         composeMaterial.uniforms.baseMap.value = read.texture;
-        composeMaterial.uniforms.layerMap.value = rt.target.texture;
+        composeMaterial.uniforms.layerMap.value = camada.texture;
         composeMaterial.uniforms.opacity.value = rt.opacity;
+        composeMaterial.uniforms.layerIsStraight.value = 0;
         composeMaterial.uniforms.blendMode.value = rt.blend === 'add' ? 1
           : rt.blend === 'screen' ? 2
           : rt.blend === 'multiply' ? 3 : 0;
@@ -1144,36 +1246,29 @@ export class SceneRenderer3D implements IRenderer {
         [read, write] = [write, read];
       });
 
-      // Effects, as further passes on the SAME ping-pong the tracks just used.
-      // Until now this pass looked pixelate up by id and folded it into the output
-      // quad, so the other effects in effects/ simply did not exist for the webgl
-      // presets. Each active effect is now a pass, applied in the order the panel
-      // lists them — the same order the 2D path gives PIXI.Container.filters.
-      //
-      // The resolution handed to the shader is the RENDER TARGET's, not the
-      // scene's: during export the whole chain runs supersampled, and an effect
-      // measured in scene pixels would come out proportionally finer in the
-      // exported frame than on screen.
-      const fxCtx = {
-        width: this.width * this.resolution,
-        height: this.height * this.resolution,
-        time: frame / Math.max(1, s.fps),
-      };
-      for (const active of s.effects) {
-        if (!active.enabled) continue;
-        const def = getEffect(active.effectId);
-        if (!def) continue;
-        try {
-          const material = threeMaterialFor(def);
-          applyThreeUniforms(material, def, active.values, fxCtx);
-          material.uniforms.map.value = read.texture;
-          this.fxQuad.material = material;
-          this.renderer.setRenderTarget(write);
-          this.renderer.clear(true, false, false);
-          this.renderer.render(this.fxScene, this.composeCam);
-          [read, write] = [write, read];
-        } catch { /* a shader that will not compile must not take the scene down */ }
+      if (separarFundo) {
+        // Efeitos da ARTE, com o acumulador ainda sem fundo.
+        read = rodarPasses(daArte, read, write);
+        write = read === this.composeA ? this.composeB : this.composeA;
+        // Agora sim a arte por cima do fundo. `layerIsStraight` porque o
+        // acumulador ja saiu do compose com alpha DIRETO — dividir por alpha de
+        // novo estouraria a cor das bordas dos cards.
+        composeMaterial.uniforms.baseMap.value = this.ensureBackgroundTarget().texture;
+        composeMaterial.uniforms.layerMap.value = read.texture;
+        composeMaterial.uniforms.opacity.value = 1;
+        composeMaterial.uniforms.blendMode.value = 0;
+        composeMaterial.uniforms.layerIsStraight.value = 1;
+        this.renderer.setRenderTarget(write);
+        this.renderer.clear(true, false, false);
+        this.renderer.render(this.composeScene, this.composeCam);
+        [read, write] = [write, read];
+        composeMaterial.uniforms.layerIsStraight.value = 0;
       }
+
+      // Efeitos da CENA, sobre o quadro composto — fundo incluido. Na ordem em
+      // que o painel os lista, a mesma ordem que o caminho 2D da a
+      // PIXI.Container.filters.
+      read = rodarPasses(daCena, read, write);
 
       this.outputQuad.material.uniforms.map.value = read.texture;
       this.renderer.setRenderTarget(null);
@@ -1228,6 +1323,8 @@ export class SceneRenderer3D implements IRenderer {
     this.backgroundTex?.dispose();
     this.backgroundGeneration++;
     this.composeA?.dispose();
+    this.bgTarget?.dispose();
+    this.layerScratch?.dispose();
     this.composeB?.dispose();
     this.composeQuad?.geometry.dispose();
     this.composeQuad?.material.dispose();

@@ -5,6 +5,7 @@ import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type D
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useSceneStore, type ActiveEffect } from '@/store/useSceneStore';
+import type { EffectScope } from '@/lib/types';
 import { effectList, getEffect, effectDefaults } from '@/effects';
 import { ControlRow } from './Controls';
 import { useMobileInteractions } from './MobileInteractions';
@@ -44,6 +45,36 @@ function MobileEffectCard({
   );
 }
 
+// Onde o efeito age. Uma linha so, na mesma forma das outras do card, para nao
+// virar um controle de segunda classe: e a diferenca entre um Wave que ondula
+// os cards e um que arrasta o fundo junto.
+function ScopeRow({
+  scope,
+  tracks,
+  onChange,
+}: {
+  scope: EffectScope;
+  tracks: { id: string; name?: string }[];
+  onChange: (scope: EffectScope) => void;
+}) {
+  return (
+    <div className="ctl-row effect-scope-row">
+      <span className="ctl-label">Applies to</span>
+      <select
+        className="field"
+        value={scope}
+        onChange={(ev) => onChange(ev.target.value as EffectScope)}
+      >
+        <option value="scene">Whole scene</option>
+        <option value="artwork">Cards only</option>
+        {tracks.map((t, i) => (
+          <option key={t.id} value={`track:${t.id}`}>{t.name || `Layer ${i + 1}`}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 export default function EffectsPanel() {
   const mobile = useMobileInteractions();
   const effects = useSceneStore((s) => s.effects);
@@ -52,6 +83,8 @@ export default function EffectsPanel() {
   const toggleEffect = useSceneStore((s) => s.toggleEffect);
   const reorderEffects = useSceneStore((s) => s.reorderEffects);
   const setEffectValue = useSceneStore((s) => s.setEffectValue);
+  const setEffectScope = useSceneStore((s) => s.setEffectScope);
+  const tracks = useSceneStore((s) => s.tracks);
   const [pick, setPick] = useState(effectList[0]?.meta.id ?? '');
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
@@ -71,7 +104,7 @@ export default function EffectsPanel() {
           <select className="field" value={pick} onChange={(e) => setPick(e.target.value)}>
             {effectList.map((e) => <option key={e.meta.id} value={e.meta.id}>{e.meta.name}</option>)}
           </select>
-          <button className="btn" onClick={() => pick && addEffect(pick, effectDefaults(pick))}>Add</button>
+          <button className="btn" onClick={() => pick && addEffect(pick, effectDefaults(pick), getEffect(pick)?.meta.defaultScope)}>Add</button>
         </div>
 
         {mobile ? (
@@ -123,6 +156,11 @@ export default function EffectsPanel() {
                 </button>
               </div>
               <div className="effect-card-body">
+                <ScopeRow
+                  scope={e.scope ?? 'scene'}
+                  tracks={tracks}
+                  onChange={(scope) => setEffectScope(e.instanceId, scope)}
+                />
                 {def.controls.map((c) => (
                   <ControlRow key={c.key} def={c} value={e.values[c.key]} onChange={(val) => setEffectValue(e.instanceId, c.key, val)} />
                 ))}

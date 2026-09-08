@@ -3,6 +3,7 @@ import { defaultsFor, easingFor, templates } from '@/templates';
 import { carouselReferenceDurations } from '@/templates/carousel';
 import type { EasingSpec } from '@/lib/easing';
 import type { CropFocus } from '@/lib/crop';
+import type { EffectScope } from '@/lib/types';
 import { DEMO_ASSETS, demoSourceForSlot, isDemoAssetSource } from '@/lib/demoAssets';
 import { idbPut, idbGet, idbDelete } from '@/lib/assetDb';
 import { DEFAULT_TRACK_TRANSFORM, TRACK_END, type BlendMode, type MotionTrack } from '@/lib/tracks';
@@ -45,6 +46,9 @@ export interface ActiveEffect {
   effectId: string;
   enabled: boolean;
   values: Record<string, any>;
+  // Opcional de proposito: cena salva antes deste campo nao tem `scope`, e le
+  // como 'scene' — exatamente o comportamento que ela tinha.
+  scope?: EffectScope;
 }
 
 export interface BackgroundSettings {
@@ -190,11 +194,12 @@ export interface SceneState {
   loadFavorites: () => void;
   toggleFavorite: (templateId: string) => void;
 
-  addEffect: (effectId: string, values: Record<string, any>) => void;
+  addEffect: (effectId: string, values: Record<string, any>, scope?: EffectScope) => void;
   removeEffect: (instanceId: string) => void;
   toggleEffect: (instanceId: string) => void;
   reorderEffects: (from: number, to: number) => void;
   setEffectValue: (instanceId: string, key: string, val: any) => void;
+  setEffectScope: (instanceId: string, scope: EffectScope) => void;
 
   get totalFrames(): number;
 }
@@ -930,11 +935,11 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       return { favoriteTemplateIds: next };
     }),
 
-  addEffect: (effectId, values) =>
+  addEffect: (effectId, values, scope) =>
     set((s) => ({
       effects: [
         ...s.effects,
-        { instanceId: nid('fx'), effectId, enabled: true, values: { ...values } },
+        { instanceId: nid('fx'), effectId, enabled: true, values: { ...values }, scope: scope ?? 'scene' },
       ],
     })),
   removeEffect: (instanceId) =>
@@ -958,6 +963,12 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         e.instanceId === instanceId
           ? { ...e, values: { ...e.values, [key]: val } }
           : e
+      ),
+    })),
+  setEffectScope: (instanceId, scope) =>
+    set((s) => ({
+      effects: s.effects.map((e) =>
+        e.instanceId === instanceId ? { ...e, scope } : e
       ),
     })),
 
