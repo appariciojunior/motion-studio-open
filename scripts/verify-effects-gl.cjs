@@ -93,6 +93,28 @@ for (const [id, fx] of Object.entries(effects)) {
   const d = effectDefaults('posterize');
   payload.posterize.uMix0 = effects.posterize.shader.uniforms({ ...d, mix: 0 }, CTX);
   payload.posterize.uMix50 = effects.posterize.shader.uniforms({ ...d, mix: 50 }, CTX);
+
+  // Liquid Glass em duas posicoes. O deslocamento do pad resolve o SINAL de y
+  // de uma vez: se o pad e o quadro discordarem, a lente anda para o lado
+  // errado e nenhuma outra medida acusa isso.
+  // Os efeitos de lente, em 'Edges' e em 'Full frame'. E o par que prova a
+  // queixa que originou o controle: aplicado por cima de tudo, o efeito borra os
+  // cards; restrito as bordas, o meio do quadro tem de sair INTACTO.
+  for (const id of ['blur', 'bloom', 'tilt-shift', 'liquid-glass']) {
+    const fx = effects[id];
+    if (!fx.controls.some((c) => c.key === 'area')) continue;
+    const d = effectDefaults(id);
+    payload[id].areaBordas = passesOf(fx).map((p) => p.uniforms({ ...d, area: 'Edges', reach: 25 }, CTX));
+    payload[id].areaTudo = passesOf(fx).map((p) => p.uniforms({ ...d, area: 'Full frame' }, CTX));
+  }
+
+  const lg = effectDefaults('liquid-glass');
+  // Fixa 'Lens': o pad SO existe nesse modo. Com a area em 'Edges' (o default
+  // novo) o centro vem do quadro e ignorar o pad e o comportamento correto.
+  const lgu = (extra) => effects['liquid-glass'].shader.uniforms({ ...lg, area: 'Lens', size: 30, ...extra }, CTX);
+  payload['liquid-glass'].uCentro = lgu({ position: { x: 0, y: 0 } });
+  payload['liquid-glass'].uDireitaBaixo = lgu({ position: { x: 40, y: 24 } });
+  payload['tilt-shift'].uFaixa = effects['tilt-shift'].shader.uniforms({ ...effectDefaults('tilt-shift'), area: 'Band' }, CTX);
 }
 
 (async () => {
@@ -403,12 +425,14 @@ void main(){ vTextureCoord = aPosition; gl_Position = vec4(aPosition*2.0-1.0, 0.
         }
         return soma / n;
       };
-      const original = run(fx.blur.fragmentosDosPasses[0], { ...fx.blur.uniformsDosPasses[0], uRadius: 0 }, TEX.ruido2d);
+      // Fixa 'Full frame': este teste mede a SEPARABILIDADE do blur, e com a area
+      // em 'Edges' (o default novo) o miolo nem e tocado — mediria a mascara.
+      const original = run(fx.blur.fragmentosDosPasses[0], { ...fx.blur.areaTudo[0], uRadius: 0 }, TEX.ruido2d);
       // passe 1 sobre o ruido, depois passe 2 sobre a saida do 1 nao e possivel
       // aqui (o harness desenha para o canvas), entao mede-se cada passe sobre o
       // ruido: o horizontal tem de derrubar a variacao em X, o vertical em Y.
-      const h = run(fx.blur.fragmentosDosPasses[0], fx.blur.uniformsDosPasses[0], TEX.ruido2d);
-      const v = run(fx.blur.fragmentosDosPasses[1], fx.blur.uniformsDosPasses[1], TEX.ruido2d);
+      const h = run(fx.blur.fragmentosDosPasses[0], fx.blur.areaTudo[0], TEX.ruido2d);
+      const v = run(fx.blur.fragmentosDosPasses[1], fx.blur.areaTudo[1], TEX.ruido2d);
       const m = {
         original_x: +desvioEixo(original, 1, 0).toFixed(1),
         horizontal_x: +desvioEixo(h, 1, 0).toFixed(1),
@@ -429,7 +453,9 @@ void main(){ vTextureCoord = aPosition; gl_Position = vec4(aPosition*2.0-1.0, 0.
         }
         return soma / n;
       };
-      const t = run(fx['tilt-shift'].fragmentosDosPasses[0], fx['tilt-shift'].uniformsDosPasses[0], TEX.ruido2d);
+      // Fixa 'Band': e a faixa de foco que este teste mede, e ela deixou de ser o
+      // default quando a area entrou.
+      const t = run(fx['tilt-shift'].fragmentosDosPasses[0], fx['tilt-shift'].uFaixa, TEX.ruido2d);
       const meio = nitidez(t, (H >> 1) - 12, (H >> 1) + 12);
       const topo = nitidez(t, 4, 28);
       r.medidas['tilt-shift'] = { faixaEmFoco: +meio.toFixed(1), foraDaFaixa: +topo.toFixed(1) };
@@ -448,14 +474,117 @@ void main(){ vTextureCoord = aPosition; gl_Position = vec4(aPosition*2.0-1.0, 0.
         for (let y = 0; y < H; y++) for (let x = x0; x < x1; x++) soma += px[(y * W + x) * 4];
         return soma;
       };
-      const b = run(fx.bloom.fragment, fx.bloom.u0, TEX.faixa);
-      const sem = run(fx.bloom.fragment, { ...fx.bloom.u0, uIntensity: 0 }, TEX.faixa);
+      // Fixa Full frame: este teste mede o TRANSBORDO do bloom, e a faixa branca
+      // fica no meio do quadro — com a area em Edges (o default novo) a mascara
+      // apagaria justamente o que se quer medir.
+      const b = run(fx.bloom.fragment, fx.bloom.areaTudo[0], TEX.faixa);
+      const sem = run(fx.bloom.fragment, { ...fx.bloom.areaTudo[0], uIntensity: 0 }, TEX.faixa);
       const x0 = (W >> 1) + 6, x1 = (W >> 1) + 30;
       const com = energia(b, x0, x1), base = energia(sem, x0, x1);
       r.medidas.bloom = { energiaVizinha_com: com, energiaVizinha_sem: base, centro: linha(b, W >> 1) };
       if (com <= base) r.falhas.push('bloom: o brilho nao transbordou para o lado da faixa (' + base + ' -> ' + com + ')');
       if (linha(b, W >> 1) < 250) r.falhas.push('bloom: o centro da faixa branca escureceu (' + linha(b, W >> 1) + ') — bloom SOMA, nao mistura');
     } catch (e) { r.falhas.push('bloom: ' + String(e.message).slice(0, 160)); }
+
+    // ---- LIQUID GLASS: a lente e LOCAL, e anda com o pad ----
+    //
+    // Duas perguntas que compilar nao responde. Primeira: o efeito e local — o
+    // quadro fora da lente tem de sair identico a fonte, ou nao e uma lente, e
+    // um filtro de tela cheia. Segunda: o pad move a lente para o lado certo;
+    // com pad e quadro discordando no sinal de y, a lente anda para cima quando
+    // se pede para baixo e nenhuma outra medida acusa.
+    //
+    // Mede o CENTROIDE da diferenca contra a fonte, que e onde a lente esta.
+    try {
+      const fonte = run(fx['liquid-glass'].fragment, { ...fx['liquid-glass'].uCentro, uZoom: 0, uDispersion: 0, uRipple: 0, uGlow: 0, uRing: 0, uBlur: 0, uHalf: [0.001, 0.001] }, TEX.degrade);
+      const centroide = (px) => {
+        let sx = 0, sy = 0, peso = 0, mudados = 0;
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+          const i = (y * W + x) * 4;
+          const dif = Math.abs(px[i] - fonte[i]) + Math.abs(px[i + 1] - fonte[i + 1]) + Math.abs(px[i + 2] - fonte[i + 2]);
+          if (dif < 6) continue;
+          mudados++;
+          sx += x * dif; sy += y * dif; peso += dif;
+        }
+        return { x: peso ? sx / peso : -1, y: peso ? sy / peso : -1, mudados };
+      };
+      const c0 = centroide(run(fx['liquid-glass'].fragment, fx['liquid-glass'].uCentro, TEX.degrade));
+      const c1 = centroide(run(fx['liquid-glass'].fragment, fx['liquid-glass'].uDireitaBaixo, TEX.degrade));
+      r.medidas['liquid-glass'] = {
+        centro: [Math.round(c0.x), Math.round(c0.y)], pixelsMudados: c0.mudados,
+        deslocada: [Math.round(c1.x), Math.round(c1.y)],
+        andou: [Math.round(c1.x - c0.x), Math.round(c1.y - c0.y)], pedido: [40, 24],
+      };
+      // A lente ocupa uma fracao do quadro: mudar tudo significa que ela nao
+      // recortou nada, e mudar quase nada significa que ela nao pintou.
+      const fracao = c0.mudados / (W * H);
+      if (fracao < 0.02) r.falhas.push('liquid-glass: a lente quase nao mudou pixel (' + (fracao * 100).toFixed(1) + '% do quadro)');
+      if (fracao > 0.35) r.falhas.push('liquid-glass: a lente vazou para fora do disco (' + (fracao * 100).toFixed(1) + '% do quadro mudou)');
+      // O centroide tem de ANDAR junto com o pad, com o sinal certo nos dois eixos.
+      if (Math.abs((c1.x - c0.x) - 40) > 10) r.falhas.push('liquid-glass: o pad pediu +40 em x e a lente andou ' + (c1.x - c0.x).toFixed(1));
+      if (Math.abs((c1.y - c0.y) - 24) > 10) r.falhas.push('liquid-glass: o pad pediu +24 em y e a lente andou ' + (c1.y - c0.y).toFixed(1) + ' — sinal de y invertido entre o pad e o quadro');
+    } catch (e) { r.falhas.push('liquid-glass: ' + String(e.message).slice(0, 160)); }
+
+    // ---- AREA: 'Edges' tem de deixar o MEIO do quadro intacto ----
+    //
+    // A queixa que originou o controle: os efeitos de lente aplicavam por cima
+    // de tudo e borravam os cards, que ficam no meio. O teste e literalmente
+    // isso — comparar o miolo com a fonte e exigir zero diferenca, e comparar
+    // os cantos e exigir diferenca. Sem as duas metades, um efeito inerte
+    // passaria na primeira e um efeito de tela cheia passaria na segunda.
+    for (const id of ['blur', 'bloom', 'tilt-shift', 'liquid-glass']) {
+      const e = fx[id];
+      if (!e.areaBordas) continue;
+      try {
+        // fonte: o mesmo shader com a area em 'Edges' e alcance minimo — assim
+        // a comparacao e contra o proprio efeito desligado, nao contra outro
+        // shader, e um erro no wrapper nao se esconde na diferenca.
+        const nulo = { ...e.areaBordas[0], uBand: 0.0001 };
+        const fonte = run(e.fragmentosDosPasses[0], nulo, TEX.ruido2d);
+        const bordas = run(e.fragmentosDosPasses[0], e.areaBordas[0], TEX.ruido2d);
+        const tudo = run(e.fragmentosDosPasses[0], e.areaTudo[0], TEX.ruido2d);
+        const dif = (px, x0, y0, x1, y1) => {
+          let soma = 0, n = 0;
+          for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+            const i = (y * W + x) * 4;
+            soma += Math.abs(px[i] - fonte[i]) + Math.abs(px[i + 1] - fonte[i + 1]) + Math.abs(px[i + 2] - fonte[i + 2]);
+            n++;
+          }
+          return soma / Math.max(1, n);
+        };
+        const meio = [W / 2 - 24, H / 2 - 24, W / 2 + 24, H / 2 + 24];
+        const canto = [0, 0, 40, 40];
+        const m = {
+          bordas_meio: +dif(bordas, ...meio).toFixed(2),
+          bordas_canto: +dif(bordas, ...canto).toFixed(2),
+          tudo_meio: +dif(tudo, ...meio).toFixed(2),
+        };
+        r.medidas['area:' + id] = m;
+        if (m.bordas_meio > 1.5) r.falhas.push('area ' + id + ": em 'Edges' o meio do quadro mudou (" + m.bordas_meio + ') — o efeito nao esta respeitando a area');
+        if (m.bordas_canto < 3) r.falhas.push('area ' + id + ": em 'Edges' o canto nao mudou (" + m.bordas_canto + ') — o efeito ficou inerte em vez de restrito');
+        if (m.tudo_meio < 3) r.falhas.push('area ' + id + ": em 'Full frame' o meio deveria mudar (" + m.tudo_meio + ')');
+        // SATURACAO na moldura. Um brilho que num circulo curto le como reflexo
+        // de vidro, correndo pelo quadro inteiro, estoura e vira tubo de neon.
+        // Contar quantos pixels da moldura batem em 255 pega isso; olhar a
+        // imagem nao pega, porque neon tambem "parece de proposito".
+        // Sobre CINZA MEDIO, nao sobre o ruido: no ruido metade dos pixels ja
+        // nasce claro e qualquer soma satura, entao a medida diria mais sobre a
+        // textura do que sobre o efeito. Em 128 uniforme, saturar significa
+        // exatamente uma coisa — o efeito somou mais de 0,5 de luz.
+        const bordasCinza = run(e.fragmentosDosPasses[0], e.areaBordas[0], TEX.cinza);
+        let estourados = 0, borda = 0;
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+          if (!(x < 6 || y < 6 || x > W - 7 || y > H - 7)) continue;
+          borda++;
+          const i = (y * W + x) * 4;
+          if (bordasCinza[i] >= 254 || bordasCinza[i + 1] >= 254 || bordasCinza[i + 2] >= 254) estourados++;
+        }
+        m.bordaEstourada = +((estourados / Math.max(1, borda)) * 100).toFixed(1);
+        if (m.bordaEstourada > 25) {
+          r.falhas.push('area ' + id + ': ' + m.bordaEstourada + '% da moldura saturou em 255 — o brilho estourou em vez de iluminar');
+        }
+      } catch (err) { r.falhas.push('area ' + id + ': ' + String(err.message).slice(0, 140)); }
+    }
 
     // ---- PARIDADE ENTRE ENGINES ----
     //

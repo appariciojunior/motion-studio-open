@@ -1,4 +1,5 @@
 import type { Effect, EffectShader } from '@/lib/types';
+import { AREA_OPTIONS, AREA_UNIFORM_TYPES, areaUniforms } from './area';
 
 // Tilt-shift: uma FAIXA em foco, o resto borrado, com a transicao suave.
 //
@@ -18,18 +19,24 @@ import type { Effect, EffectShader } from '@/lib/types';
 const TAPS = 6;
 
 const corpo = `
-float fx_desfoque(vec2 p) {
-  // distancia ate a faixa, em pixels, 0 dentro dela
+// A faixa horizontal: 0 dentro dela, subindo para fora. E o modo 'Band', o
+// tilt-shift classico — plano de foco paralelo ao chao.
+float ts_faixa(vec2 p) {
   float centro = uFocus * uResolution.y;
-  float meia = max(1.0, uBand * uResolution.y * 0.5);
+  float meia = max(1.0, uBandY * uResolution.y * 0.5);
   float d = abs(p.y - centro) - meia;
   if (d <= 0.0) return 0.0;
   float rampa = max(1.0, uFeather * uResolution.y);
-  return uRadius * smoothstep(0.0, rampa, d);
+  return smoothstep(0.0, rampa, d);
 }
 
 vec4 fxMain(vec2 p) {
-  float raio = fx_desfoque(p);
+  // Faixa (codigo 3) usa a mascara propria; bordas e cantos usam a
+  // compartilhada. A faixa deixa o meio nitido e borra TOPO E BASE, o que numa
+  // cena de cards deitados ainda come metade deles — por isso ela deixou de ser
+  // o unico modo, e nao e mais o default.
+  float mascara = (uArea > 2.5) ? ts_faixa(p) : fx_areaMask(p, uArea, uBand);
+  float raio = uRadius * mascara;
   if (raio < 0.5) return fxSample(p);
   vec4 soma = fxSample(p);
   float peso = 1.0;
@@ -47,29 +54,57 @@ vec4 fxMain(vec2 p) {
 function passe(direcao: [number, number]): EffectShader {
   return {
     uniformTypes: {
-      uRadius: 'float', uFocus: 'float', uBand: 'float', uFeather: 'float', uDir: 'vec2',
+      uRadius: 'float', uFocus: 'float', uBandY: 'float', uFeather: 'float', uDir: 'vec2',
+      ...AREA_UNIFORM_TYPES,
     },
     uniforms: (v) => ({
       uRadius: Math.max(0, Number(v.radius ?? 14)),
       // 0 = topo, 1 = base. Metade e o centro do quadro.
       uFocus: Math.max(0, Math.min(1, Number(v.focus ?? 50) / 100)),
-      uBand: Math.max(0, Math.min(1, Number(v.band ?? 25) / 100)),
+      // `uBandY` e a faixa de foco; `uBand`, que vem da area compartilhada, e o
+      // alcance da mascara de borda. Nomes distintos porque sao duas coisas
+      // diferentes e o mesmo nome nos dois era um bug esperando acontecer.
+      uBandY: Math.max(0, Math.min(1, Number(v.band ?? 25) / 100)),
       // Nunca exatamente zero: smoothstep com as duas bordas iguais e indefinido,
       // e o mesmo cuidado que o Vignette ja precisou ter na sua rampa.
       uFeather: Math.max(0.001, Number(v.feather ?? 12) / 100),
       uDir: direcao,
+      ...areaUniforms(v),
+      // 'Band' nao esta na tabela compartilhada: e um modo so deste efeito.
+      uArea: String(v.area ?? 'Edges') === 'Band' ? 3 : areaUniforms(v).uArea,
     }),
+    fixedUniforms: ['uDir'],
     fragment: corpo,
   };
 }
 
 export const tiltShift: Effect = {
-  meta: { id: 'tilt-shift', name: 'Tilt-shift', defaultScope: 'scene' },
+  // Nasce em 'artwork': age sobre os CARDS, e o fundo da cena passa intacto.
+  // Aplicado ao fundo tambem, um efeito de lente amassa a cena inteira e o
+  // assunto se perde junto. Quem quiser o fundo troca no seletor de escopo.
+  meta: { id: 'tilt-shift', name: 'Tilt-shift', defaultScope: 'artwork' },
   controls: [
     { key: 'radius', label: 'Radius', type: 'slider', min: 0, max: 40, step: 1, default: 14, unit: 'px' },
-    { key: 'focus', label: 'Focus', type: 'slider', min: 0, max: 100, step: 1, default: 50, unit: '%' },
-    { key: 'band', label: 'Band', type: 'slider', min: 0, max: 100, step: 1, default: 25, unit: '%' },
-    { key: 'feather', label: 'Feather', type: 'slider', min: 0, max: 60, step: 1, default: 12, unit: '%' },
+    // A faixa horizontal virou UMA das areas em vez de a unica. Ela deixa o
+    // meio nitido e borra topo e base, o que numa cena de cards deitados ainda
+    // come metade deles; bordas e cantos protegem o assunto de verdade.
+    { key: 'area', label: 'Applies at', type: 'pills', options: [...AREA_OPTIONS, 'Band'], default: 'Edges' },
+    {
+      key: 'reach', label: 'Reach', type: 'slider', min: 2, max: 100, step: 1, default: 35, unit: '%',
+      visibleWhen: { key: 'area', not: 'Full frame' },
+    },
+    {
+      key: 'focus', label: 'Focus', type: 'slider', min: 0, max: 100, step: 1, default: 50, unit: '%',
+      visibleWhen: { key: 'area', equals: 'Band' },
+    },
+    {
+      key: 'band', label: 'Band', type: 'slider', min: 0, max: 100, step: 1, default: 25, unit: '%',
+      visibleWhen: { key: 'area', equals: 'Band' },
+    },
+    {
+      key: 'feather', label: 'Feather', type: 'slider', min: 0, max: 60, step: 1, default: 12, unit: '%',
+      visibleWhen: { key: 'area', equals: 'Band' },
+    },
   ],
   shader: passe([1, 0]),
   passes: [passe([0, 1])],
