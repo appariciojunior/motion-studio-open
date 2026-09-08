@@ -19,8 +19,15 @@ import type { Effect } from '@/lib/types';
 // Out-of-frame samples come back transparent instead of clamped: clamping
 // smears the edge pixel into a band along the border wherever the wave reaches
 // past the canvas.
+// Nasce em 'artwork', nao no quadro todo. O Wave desloca a COORDENADA de
+// amostragem, e num quadro ja composto isso arrasta o fundo junto: sobre um
+// fundo chapado o efeito nem aparece la (deslocar cor uniforme nao muda nada) e
+// o unico resultado visivel e a borda, onde a amostra sai do quadro e volta
+// transparente, abrindo uma faixa vazia na lateral da cena. Sobre os cards, o
+// mesmo deslocamento e exatamente o que se quer ver ondular. O seletor de
+// escopo permite voltar para 'scene'; isto e so onde o efeito comeca.
 export const wave: Effect = {
-  meta: { id: 'wave', name: 'Wave' },
+  meta: { id: 'wave', name: 'Wave', defaultScope: 'artwork' },
   controls: [
     { key: 'amount', label: 'Amount', type: 'slider', min: 0, max: 120, step: 1, default: 18, unit: 'px' },
     { key: 'freq', label: 'Frequency', type: 'slider', min: 1, max: 20, step: 1, default: 3 },

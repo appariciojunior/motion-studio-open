@@ -2,7 +2,7 @@ import * as PIXI from 'pixi.js';
 import type { LayerTransform } from '@/lib/types';
 import { getTemplate, layerCountFor } from '@/templates';
 import { getEffect } from '@/effects';
-import { applyPixiUniforms, pixiFilterFor } from '@/effects/adapters/pixi';
+import { applyPixiUniforms, dropPixiFilters, pixiFiltersFor } from '@/effects/adapters/pixi';
 import { useSceneStore, type SceneState } from '@/store/useSceneStore';
 import { resolveEasing } from '@/lib/easing';
 import { assetIndexForSlot, clamp } from '@/lib/motion';
@@ -504,22 +504,69 @@ export class SceneRenderer {
   // floats. The old code lumped the two together and rebuilt filters whenever
   // any VALUE changed, which under the old contract cost nothing and under this
   // one would recompile a shader on every pixel of a dragged slider.
+  // O ESCOPO decide em qual container o filtro entra:
+  //   'scene'       `content`, que tem o fundo dentro (addChild(bg, ..., motion))
+  //   'artwork'     `motion`, so os cards — o fundo passa intacto
+  //   'track:<id>'  o container daquela camada
+  //
+  // `filterArea` e obrigatorio nos alvos que nao sao `content`. Sem ela o Pixi
+  // usa os limites do container, e ai `uInputSize` passa a descrever aquele
+  // retangulo em vez do quadro — um efeito medido a partir do centro (vinheta)
+  // se centraria no aglomerado de cards, e nao no canvas. A area e LOCAL ao
+  // container, e `motion` esta transladado para o centro, entao o retangulo
+  // comeca em -w/2,-h/2.
+  private targetFor(scope: string | undefined): PIXI.Container | null {
+    if (!scope || scope === 'scene') return this.content;
+    if (scope === 'artwork') return this.motion;
+    if (scope.startsWith('track:')) {
+      return this.trackRTs.get(scope.slice(6))?.container ?? null;
+    }
+    return this.content;
+  }
+
   private syncEffects(frame: number) {
     const s = useSceneStore.getState();
     const active = s.effects.filter((e) => e.enabled);
 
-    const sig = active.map((e) => e.instanceId + ':' + e.effectId).join('|');
+    // O escopo entra na assinatura: mudar de alvo troca a lista dos DOIS
+    // containers envolvidos, e sem isso a mudanca so apareceria no proximo
+    // add/remove.
+    const sig = active.map((e) => e.instanceId + ':' + e.effectId + '@' + (e.scope ?? 'scene')).join('|');
     if (sig !== this.lastFxSig) {
       this.lastFxSig = sig;
-      const filters: PIXI.Filter[] = [];
+      const porAlvo = new Map<PIXI.Container, PIXI.Filter[]>();
       for (const e of active) {
         const def = getEffect(e.effectId);
         if (!def) continue;
+        const alvo = this.targetFor(e.scope);
+        if (!alvo) continue;   // camada removida: o efeito fica sem alvo, e sem efeito
         try {
-          filters.push(pixiFilterFor(def));
+          const lista = porAlvo.get(alvo) ?? [];
+          // Um efeito pode ser mais de um passe (blur separavel). O Pixi
+          // encadeia uma lista de filtros sozinho, entao os passes entram em
+          // sequencia na mesma lista.
+          lista.push(...pixiFiltersFor(def, e.instanceId));
+          porAlvo.set(alvo, lista);
         } catch { /* a shader that will not compile must not take the scene down */ }
       }
-      this.content.filters = filters.length ? filters : [];
+      // Limpar TODOS os alvos possiveis antes de aplicar: um efeito que saiu de
+      // 'artwork' para 'scene' deixaria o filtro velho pendurado em `motion`.
+      const alvos: PIXI.Container[] = [this.content, this.motion];
+      for (const rt of this.trackRTs.values()) alvos.push(rt.container);
+      for (const alvo of alvos) {
+        const lista = porAlvo.get(alvo) ?? [];
+        alvo.filters = lista.length ? lista : [];
+      }
+      // Instancias que sairam da cena nao precisam segurar filtro.
+      dropPixiFilters(new Set(active.map((e) => e.instanceId)));
+    }
+
+    // A area de filtro acompanha o canvas, e e reavaliada todo frame porque uma
+    // camada pode ter acabado de nascer.
+    const area = new PIXI.Rectangle(-s.width / 2, -s.height / 2, s.width, s.height);
+    if (this.motion.filters && (this.motion.filters as PIXI.Filter[]).length) this.motion.filterArea = area;
+    for (const rt of this.trackRTs.values()) {
+      if (rt.container.filters && (rt.container.filters as PIXI.Filter[]).length) rt.container.filterArea = area;
     }
 
     // Time comes from the FRAME, never from the clock: an animated effect has to
@@ -530,7 +577,7 @@ export class SceneRenderer {
       const def = getEffect(e.effectId);
       if (!def) continue;
       try {
-        applyPixiUniforms(pixiFilterFor(def), def, e.values, ctx);
+        applyPixiUniforms(pixiFiltersFor(def, e.instanceId), def, e.values, ctx);
       } catch { /* a bad uniform must not take the scene down either */ }
     }
   }

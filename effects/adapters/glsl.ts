@@ -4,7 +4,12 @@
 // verify script that had to import pixi.js (which wants a DOM) or three (which
 // wants a GL context) to look at a string would test neither. Here it is plain
 // string work, so scripts/verify-effects.cjs exercises the REAL generator.
-import type { Effect } from '@/lib/types';
+import type { Effect, EffectShader } from '@/lib/types';
+
+/** Todo passe do efeito, em ordem. `shader` e sempre o primeiro. */
+export function passesOf(effect: Effect): EffectShader[] {
+  return [effect.shader, ...(effect.passes ?? [])];
+}
 
 /** Names the adapters inject. An effect redeclaring one is a compile error. */
 export const RESERVED = ['uTexture', 'map', 'uInputSize', 'uResolution', 'uTime', 'fxSample', 'fxMain', 'vTextureCoord', 'vUv'];
@@ -45,14 +50,14 @@ vec3 fx_toLinear(vec3 c) {
 RESERVED.push('fx_toSrgb', 'fx_toLinear');
 
 
-function declarations(effect: Effect): string {
-  return Object.entries(effect.shader.uniformTypes ?? {})
+function declarations(pass: EffectShader): string {
+  return Object.entries(pass.uniformTypes ?? {})
     .map(([name, type]) => `uniform ${type} ${name};`)
     .join('\n');
 }
 
 /** GLSL ES 3.00 fragment for Pixi, where a pixel coordinate must unmap through uInputSize. */
-export function pixiFragment(effect: Effect): string {
+export function pixiFragment(effect: Effect, pass: EffectShader = effect.shader): string {
   return `#version 300 es
 precision highp float;
 in vec2 vTextureCoord;
@@ -62,7 +67,7 @@ uniform sampler2D uTexture;
 uniform vec4 uInputSize;
 uniform vec2 uResolution;
 uniform float uTime;
-${declarations(effect)}
+${declarations(pass)}
 
 // uInputSize.xy is the filter area in pixels, .zw its offset inside the texture
 // Pixi actually allocated — a filter's input can be padded, so a pixel
@@ -71,7 +76,7 @@ vec2 fx_toPixels(vec2 uv) { return uv * uInputSize.xy + uInputSize.zw; }
 vec2 fx_toUv(vec2 p)      { return (p - uInputSize.zw) / uInputSize.xy; }
 vec4 fxSample(vec2 p)     { return texture(uTexture, fx_toUv(p)); }
 
-${effect.shader.fragment}
+${pass.fragment}
 
 void main(void) {
   finalColor = fxMain(fx_toPixels(vTextureCoord));
@@ -79,12 +84,12 @@ void main(void) {
 }
 
 /** GLSL ES 1.00 fragment for three, where the pass reads a full-screen target. */
-export function threeFragment(effect: Effect): string {
+export function threeFragment(effect: Effect, pass: EffectShader = effect.shader): string {
   return `
 uniform sampler2D map;
 uniform vec2 uResolution;
 uniform float uTime;
-${declarations(effect)}
+${declarations(pass)}
 varying vec2 vUv;
 
 ${SRGB_HELPERS}
@@ -96,7 +101,7 @@ vec4 fxSample(vec2 p) {
   return vec4(fx_toSrgb(c.rgb), c.a);
 }
 
-${effect.shader.fragment}
+${pass.fragment}
 
 void main() {
   vec4 fx_result = fxMain(vUv * uResolution);

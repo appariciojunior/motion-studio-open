@@ -41,7 +41,7 @@ Module._resolveFilename = function (request, parent, isMain, options) {
 };
 
 const { effects, effectDefaults } = require('../effects');
-const { pixiFragment, threeFragment } = require('../effects/adapters/glsl');
+const { passesOf, pixiFragment, threeFragment } = require('../effects/adapters/glsl');
 
 const CHROME = [
   'C:/Program Files/Google/Chrome/Application/chrome.exe',
@@ -69,6 +69,12 @@ for (const [id, fx] of Object.entries(effects)) {
       // Cabecalho de ES 3.00 na frente: o vertex compartilhado deste teste e
       // 300 es, e misturar versoes nao linka.
       .replace(/^/, ["#version 300 es", "precision highp float;", "out vec4 fx_out;", ""].join(String.fromCharCode(10))),
+    // TODOS os passes, para o compilador ver cada um. Um efeito separavel tem o
+    // segundo passe fora de `shader`, e sem isto ele nunca chegaria a GPU — que
+    // e exatamente onde `sample`, palavra reservada em GLSL ES 3.00, apareceu da
+    // primeira vez, com a suite estrutural verde ao lado.
+    fragmentosDosPasses: passesOf(fx).map((p) => pixiFragment(fx, p)),
+    uniformsDosPasses: passesOf(fx).map((p) => p.uniforms(d, { width: 256, height: 256, time: 0 })),
     u0: fx.shader.uniforms(d, { width: 256, height: 256, time: 0 }),
     u1: fx.shader.uniforms(d, { width: 256, height: 256, time: 1 }),
     // Os valores dos CONTROLES vao junto: o esperado de um teste tem de vir da
@@ -140,6 +146,14 @@ void main(){ vTextureCoord = aPosition; gl_Position = vec4(aPosition*2.0-1.0, 0.
       // faixa branca de 8px no meio, para o split ter uma borda para deslocar
       faixa: makeTex((x) => (Math.abs(x - W / 2) < 4 ? [255, 255, 255] : [0, 0, 0])),
       ruido: makeTex((x, y) => { const i = y * W + x; return [(i*37)%256, (i*91)%256, (i*17)%256]; }),
+      // Ruido que varia nos DOIS eixos. O `ruido` acima nao serve para medir um
+      // blur vertical: com i = y*W + x e W = 256, andar uma linha soma 256 a i,
+      // e (i*37)%256 volta ao mesmo valor — a textura e constante em Y, e o
+      // teste do segundo passe media zero contra zero e "passava" por acidente.
+      ruido2d: makeTex((x, y) => {
+        const h = (x * 73856093) ^ (y * 19349663);
+        return [(h >>> 3) % 256, (h >>> 11) % 256, (h >>> 19) % 256];
+      }),
       // degrade horizontal liso: revela banding (posterize) e a trama (halftone)
       degrade: makeTex((x) => { const v = Math.round((x / (W - 1)) * 255); return [v, v, v]; }),
       // O MESMO degrade, mas em espaco LINEAR — que e o que o three recebe de
@@ -351,6 +365,97 @@ void main(){ vTextureCoord = aPosition; gl_Position = vec4(aPosition*2.0-1.0, 0.
       r.medidas.pixelate = { desvio_intra_bloco: +dv.toFixed(3), desvio_original: +desvio(run(fx.pixelate.fragment, { uSize: [1, 1] }, TEX.ruido)).toFixed(3) };
       if (dv > 0.5) r.falhas.push(`pixelate: os blocos de ${N}px nao ficaram uniformes (desvio ${dv.toFixed(2)})`);
     } catch (e) { r.falhas.push('pixelate: ' + String(e.message).slice(0, 160)); }
+
+    // ---- TODO PASSE TEM DE COMPILAR ----
+    //
+    // Um efeito separavel tem o segundo passe fora de `shader`, e as medidas
+    // acima so tocam o primeiro. Sem isto, um erro de GLSL no passe vertical de
+    // um blur passaria verde nas duas suites — que foi exatamente o que
+    // aconteceu com `sample`, palavra reservada em GLSL ES 3.00, quando so a
+    // suite estrutural existia.
+    let passesCompilados = 0;
+    for (const [id, e] of Object.entries(fx)) {
+      const lista = e.fragmentosDosPasses || [];
+      for (let i = 0; i < lista.length; i++) {
+        try {
+          run(lista[i], e.uniformsDosPasses[i] || {}, TEX.degrade);
+          passesCompilados++;
+        } catch (err) {
+          r.falhas.push(id + ': passe ' + (i + 1) + '/' + lista.length + ' nao compilou — ' + String(err.message).slice(0, 140));
+        }
+      }
+    }
+    r.medidas['passes'] = { compilados: passesCompilados, efeitos: Object.keys(fx).length };
+
+    // ---- BLUR: o desvio local tem de CAIR, e o passe 2 tem de participar ----
+    //
+    // Rodar so o passe horizontal deixa a variacao VERTICAL intacta. Medir os
+    // dois desvios separadamente e o que distingue "borrou" de "borrou nos dois
+    // eixos" — um blur separavel com o segundo passe morto passaria num teste de
+    // desvio global.
+    try {
+      const desvioEixo = (px, dx, dy) => {
+        let soma = 0, n = 0;
+        for (let y = 4; y < H - 4; y += 3) for (let x = 4; x < W - 4; x += 3) {
+          const a = px[((y) * W + x) * 4];
+          const b = px[((y + dy) * W + (x + dx)) * 4];
+          soma += Math.abs(a - b); n++;
+        }
+        return soma / n;
+      };
+      const original = run(fx.blur.fragmentosDosPasses[0], { ...fx.blur.uniformsDosPasses[0], uRadius: 0 }, TEX.ruido2d);
+      // passe 1 sobre o ruido, depois passe 2 sobre a saida do 1 nao e possivel
+      // aqui (o harness desenha para o canvas), entao mede-se cada passe sobre o
+      // ruido: o horizontal tem de derrubar a variacao em X, o vertical em Y.
+      const h = run(fx.blur.fragmentosDosPasses[0], fx.blur.uniformsDosPasses[0], TEX.ruido2d);
+      const v = run(fx.blur.fragmentosDosPasses[1], fx.blur.uniformsDosPasses[1], TEX.ruido2d);
+      const m = {
+        original_x: +desvioEixo(original, 1, 0).toFixed(1),
+        horizontal_x: +desvioEixo(h, 1, 0).toFixed(1),
+        original_y: +desvioEixo(original, 0, 1).toFixed(1),
+        vertical_y: +desvioEixo(v, 0, 1).toFixed(1),
+      };
+      r.medidas.blur = m;
+      if (m.horizontal_x >= m.original_x * 0.6) r.falhas.push('blur: o passe horizontal nao derrubou a variacao em X (' + m.original_x + ' -> ' + m.horizontal_x + ')');
+      if (m.vertical_y >= m.original_y * 0.6) r.falhas.push('blur: o passe vertical nao derrubou a variacao em Y (' + m.original_y + ' -> ' + m.vertical_y + ') — o segundo passe pode estar inerte');
+    } catch (e) { r.falhas.push('blur: ' + String(e.message).slice(0, 160)); }
+
+    // ---- TILT-SHIFT: a faixa em foco tem de ficar mais nitida que as pontas ----
+    try {
+      const nitidez = (px, y0, y1) => {
+        let soma = 0, n = 0;
+        for (let y = y0; y < y1; y++) for (let x = 4; x < W - 4; x += 2) {
+          soma += Math.abs(px[(y * W + x) * 4] - px[(y * W + x + 1) * 4]); n++;
+        }
+        return soma / n;
+      };
+      const t = run(fx['tilt-shift'].fragmentosDosPasses[0], fx['tilt-shift'].uniformsDosPasses[0], TEX.ruido2d);
+      const meio = nitidez(t, (H >> 1) - 12, (H >> 1) + 12);
+      const topo = nitidez(t, 4, 28);
+      r.medidas['tilt-shift'] = { faixaEmFoco: +meio.toFixed(1), foraDaFaixa: +topo.toFixed(1) };
+      if (meio <= topo * 1.5) r.falhas.push('tilt-shift: a faixa de foco nao esta mais nitida que as pontas (' + meio.toFixed(1) + ' vs ' + topo.toFixed(1) + ')');
+    } catch (e) { r.falhas.push('tilt-shift: ' + String(e.message).slice(0, 160)); }
+
+    // ---- BLOOM: so o que passa do limiar transborda, e ele SOMA luz ----
+    try {
+      const linha = (px, x) => px[((H >> 1) * W + x) * 4];
+      // A ENERGIA numa faixa ao lado, nao um pixel: o bloom espalha pouca luz
+      // por muitos pixels, entao um ponto isolado mede quase nada e o teste
+      // viraria uma questao de escolher bem o ponto. Somar a banda mede o que o
+      // efeito realmente entrega.
+      const energia = (px, x0, x1) => {
+        let soma = 0;
+        for (let y = 0; y < H; y++) for (let x = x0; x < x1; x++) soma += px[(y * W + x) * 4];
+        return soma;
+      };
+      const b = run(fx.bloom.fragment, fx.bloom.u0, TEX.faixa);
+      const sem = run(fx.bloom.fragment, { ...fx.bloom.u0, uIntensity: 0 }, TEX.faixa);
+      const x0 = (W >> 1) + 6, x1 = (W >> 1) + 30;
+      const com = energia(b, x0, x1), base = energia(sem, x0, x1);
+      r.medidas.bloom = { energiaVizinha_com: com, energiaVizinha_sem: base, centro: linha(b, W >> 1) };
+      if (com <= base) r.falhas.push('bloom: o brilho nao transbordou para o lado da faixa (' + base + ' -> ' + com + ')');
+      if (linha(b, W >> 1) < 250) r.falhas.push('bloom: o centro da faixa branca escureceu (' + linha(b, W >> 1) + ') — bloom SOMA, nao mistura');
+    } catch (e) { r.falhas.push('bloom: ' + String(e.message).slice(0, 160)); }
 
     // ---- PARIDADE ENTRE ENGINES ----
     //
