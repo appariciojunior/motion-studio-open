@@ -660,6 +660,52 @@ for (const t of templateList.filter((x) => x.meta.group === 'Ticker')) {
     check(Math.max(...lanePhase) - Math.min(...lanePhase) > 1, t.meta.name,
       'lanes are all in phase — the rows line up into columns and the band reads as a table');
   }
+
+  // ---- the gutter survives the card shape ----
+  //
+  // `gap`/`rowGap` are centre distances, but the SCENE picks the card shape
+  // (lib/crop cardAspectFor overrides every template's declared aspect), so a
+  // centre distance that ignores it silently eats the gutter: measured before
+  // the fix, 24 of the 25 presets collided at the 1:1 card, by up to 91px, and
+  // nothing here saw it because this block only ever ran the declared shape.
+  //
+  // Distance is measured from the transform's own output — a rigid roll or the
+  // tilted sheet's rotation preserves it, so no preset needs an exception.
+  const shapeCtx = (aspect) => makeCtx(t.meta.id, { width: W, height: H, cardAspect: aspect });
+  for (const shape of [1, 4 / 5, 3 / 4, 4 / 3, 9 / 16, 16 / 9]) {
+    const sc = shapeCtx(shape);
+    const n = layerCountFor(t.meta.id, v, sc);
+    const pose = (i) => {
+      const p = t.transform3d ? t.transform3d(0, i, n, v, sc) : t.transform(0, i, n, v, sc);
+      return { x: p.x, y: p.y, z: p.z || 0, s: p.scale };
+    };
+    const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+    const alongEdge = horizontal ? Math.min(1, shape) : Math.min(1, 1 / shape);
+    const acrossEdge = horizontal ? Math.min(1, 1 / shape) : Math.min(1, shape);
+    let worstGutter = Infinity, where = '';
+    for (let lane = 0; lane < rows; lane++) {
+      const pts = [];
+      for (let i = lane; i < n; i += rows) pts.push(pose(i));
+      for (let a = 0; a < pts.length; a++) for (let b = a + 1; b < pts.length; b++) {
+        const d = dist(pts[a], pts[b]);
+        if (d <= 1e-6) continue;
+        const g = d - SPRITE_BASE * pts[a].s * alongEdge;
+        if (g < worstGutter) { worstGutter = g; where = 'along the track'; }
+      }
+    }
+    for (let slot = 0; rows > 1 && slot * rows + rows - 1 < n; slot++) {
+      for (let r = 0; r + 1 < rows; r++) {
+        const a = pose(slot * rows + r);
+        const d = dist(a, pose(slot * rows + r + 1));
+        if (d <= 1e-6) continue;
+        const g = d - SPRITE_BASE * a.s * acrossEdge;
+        if (g < worstGutter) { worstGutter = g; where = 'between lanes'; }
+      }
+    }
+    // -0.5px of slack: ticker-23 is the authored gapless ribbon and sits at 0.
+    check(worstGutter >= -0.5, t.meta.name,
+      `cards overlap by ${Math.abs(worstGutter).toFixed(0)}px ${where} at the ${shape.toFixed(3)} card shape`);
+  }
 }
 
 // ============================================================
