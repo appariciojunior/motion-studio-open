@@ -1,4 +1,5 @@
 import type { Effect, EffectShader } from '@/lib/types';
+import { AREA_CONTROLS, AREA_UNIFORM_TYPES, areaUniforms } from './area';
 
 // Blur gaussiano, SEPARAVEL: um passe horizontal e um vertical.
 //
@@ -23,12 +24,17 @@ const TAPS = 6; // de cada lado; 13 amostras no total por passe
 // vezes seria duas oportunidades de divergir.
 const corpo = `
 vec4 fxMain(vec2 p) {
-  if (uRadius < 0.5) return fxSample(p);
+  // O raio e MODULADO pela area. No meio do quadro a mascara vale 0, a funcao
+  // devolve o pixel intacto e nem entra no laco — e o que separa "desfocar as
+  // bordas" de "desfocar tudo". Aplicado ao quadro inteiro, o blur come os
+  // cards, que sao justamente o assunto da cena.
+  float raio = uRadius * fx_areaMask(p, uArea, uBand);
+  if (raio < 0.5) return fxSample(p);
   vec4 soma = fxSample(p);
   float peso = 1.0;
-  float sigma = max(0.0001, uRadius * 0.5);
+  float sigma = max(0.0001, raio * 0.5);
   for (int i = 1; i <= ${TAPS}; i++) {
-    float d = (float(i) / float(${TAPS})) * uRadius;
+    float d = (float(i) / float(${TAPS})) * raio;
     float w = exp(-(d * d) / (2.0 * sigma * sigma));
     soma += fxSample(p + uDir * d) * w;
     soma += fxSample(p - uDir * d) * w;
@@ -39,21 +45,28 @@ vec4 fxMain(vec2 p) {
 
 function passe(direcao: [number, number]): EffectShader {
   return {
-    uniformTypes: { uRadius: 'float', uDir: 'vec2' },
+    uniformTypes: { uRadius: 'float', uDir: 'vec2', ...AREA_UNIFORM_TYPES },
     uniforms: (v) => ({
       uRadius: Math.max(0, Number(v.radius ?? 8)),
       uDir: direcao,
+      ...areaUniforms(v),
     }),
+    fixedUniforms: ['uDir'],
     fragment: corpo,
   };
 }
 
 export const blur: Effect = {
-  // Nasce no quadro todo: desfocar a cena inteira, fundo incluido, e o que um
-  // blur de cena faz. Quem quiser so os cards troca no seletor.
-  meta: { id: 'blur', name: 'Blur', defaultScope: 'scene' },
+  // Nasce em 'artwork': age sobre os CARDS, e o fundo da cena passa intacto.
+  // Aplicado ao fundo tambem, um efeito de lente amassa a cena inteira e o
+  // assunto se perde junto. Quem quiser o fundo troca no seletor de escopo.
+  meta: { id: 'blur', name: 'Blur', defaultScope: 'artwork' },
   controls: [
     { key: 'radius', label: 'Radius', type: 'slider', min: 0, max: 40, step: 1, default: 8, unit: 'px' },
+    // Nasce em 'Edges', nao em 'Full frame'. O default certo e o que serve na
+    // maioria dos casos, e desfocar o quadro inteiro raramente e o que se quer
+    // numa cena cujo assunto esta no meio.
+    ...AREA_CONTROLS,
   ],
   shader: passe([1, 0]),
   passes: [passe([0, 1])],

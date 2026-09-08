@@ -1,4 +1,5 @@
 import type { Effect } from '@/lib/types';
+import { AREA_CONTROLS, AREA_UNIFORM_TYPES, areaUniforms } from './area';
 
 // Bloom: o que passa do limiar transborda e ilumina a vizinhanca.
 //
@@ -29,18 +30,23 @@ const ANEIS = 4;
 const DIRECOES = 8;
 
 export const bloom: Effect = {
-  meta: { id: 'bloom', name: 'Bloom', defaultScope: 'scene' },
+  // Nasce em 'artwork': age sobre os CARDS, e o fundo da cena passa intacto.
+  // Aplicado ao fundo tambem, um efeito de lente amassa a cena inteira e o
+  // assunto se perde junto. Quem quiser o fundo troca no seletor de escopo.
+  meta: { id: 'bloom', name: 'Bloom', defaultScope: 'artwork' },
   controls: [
     { key: 'threshold', label: 'Threshold', type: 'slider', min: 0, max: 100, step: 1, default: 65, unit: '%' },
     { key: 'radius', label: 'Radius', type: 'slider', min: 1, max: 60, step: 1, default: 22, unit: 'px' },
     { key: 'intensity', label: 'Intensity', type: 'slider', min: 0, max: 200, step: 1, default: 70, unit: '%' },
+    ...AREA_CONTROLS,
   ],
   shader: {
-    uniformTypes: { uThreshold: 'float', uRadius: 'float', uIntensity: 'float' },
+    uniformTypes: { uThreshold: 'float', uRadius: 'float', uIntensity: 'float', ...AREA_UNIFORM_TYPES },
     uniforms: (v) => ({
       uThreshold: Math.max(0, Math.min(1, Number(v.threshold ?? 65) / 100)),
       uRadius: Math.max(1, Number(v.radius ?? 22)),
       uIntensity: Math.max(0, Number(v.intensity ?? 70) / 100),
+      ...areaUniforms(v),
     }),
     fragment: `
 // O que passa do limiar, e SO o excedente: subtrair o limiar em vez de deixar
@@ -72,8 +78,13 @@ vec4 fxMain(vec2 p) {
     }
   }
   brilho /= max(0.0001, peso);
+  // A area modula a INTENSIDADE, nao o raio: o bloom segue colhendo luz de todo
+  // vizinho claro — inclusive dos cards no meio — e so a DEPOSITA onde a
+  // mascara deixa. Modular o raio faria o brilho encolher em vez de recuar, o
+  // que le como bloom fraco e nao como bloom nas bordas.
+  float area = fx_areaMask(p, uArea, uBand);
   // Aditivo, nao mistura: bloom SOMA luz. Misturar apagaria a imagem embaixo.
-  return vec4(base.rgb + brilho * uIntensity, base.a);
+  return vec4(base.rgb + brilho * uIntensity * area, base.a);
 }`,
   },
 };

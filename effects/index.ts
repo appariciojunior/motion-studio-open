@@ -3,6 +3,7 @@ import { bloom } from './bloom';
 import { blur } from './blur';
 import { grain } from './grain';
 import { halftone } from './halftone';
+import { liquidGlass } from './liquidGlass';
 import { pixelate } from './pixelate';
 import { posterize } from './posterize';
 import { rgbSplit } from './rgbSplit';
@@ -25,6 +26,7 @@ export const effects: Record<string, Effect> = {
   [blur.meta.id]: blur,
   [bloom.meta.id]: bloom,
   [tiltShift.meta.id]: tiltShift,
+  [liquidGlass.meta.id]: liquidGlass,
   [halftone.meta.id]: halftone,
   [posterize.meta.id]: posterize,
   [scanlines.meta.id]: scanlines,

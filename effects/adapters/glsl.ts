@@ -46,8 +46,38 @@ vec3 fx_toLinear(vec3 c) {
   return mix(c / 12.92, pow((max(c, vec3(0.0)) + 0.055) / 1.055, vec3(2.4)), step(0.04045, c));
 }`;
 
-// Os helpers de espaco de cor tambem sao injetados, entao tambem sao reservados.
-RESERVED.push('fx_toSrgb', 'fx_toLinear');
+// AREA DE APLICACAO: onde no quadro o efeito age.
+//
+// Um efeito de lente aplicado ao quadro inteiro borra os CARDS, que sao o
+// assunto da cena — o resultado e uma imagem uniformemente mole em vez de uma
+// imagem com foco. Blur, Bloom, Tilt-shift e Liquid Glass ganharam este
+// controle porque os quatro tinham o mesmo defeito, e resolver quatro vezes
+// seriam quatro chances de divergir.
+//
+// A mascara sai de DUAS linhas, e as duas formas caem dela:
+//   n = |p - centro| / (tamanho/2)   0 no centro, 1 nas bordas
+//   max(n.x, n.y)   distancia de Chebyshev: um ANEL retangular    (bordas)
+//   length(n)/raiz2 distancia radial: forte nos CANTOS            (cantos)
+//
+// `band` e o quanto o efeito entra para dentro, e o smoothstep da a rampa: um
+// corte duro entre borrado e nitido desenha uma moldura visivel, que e um
+// defeito diferente do que se estava consertando.
+//
+// 0 = quadro inteiro (mascara 1.0 em todo lugar), 1 = bordas, 2 = cantos.
+// Qualquer outro valor devolve 1.0, para um efeito poder ter modo proprio — o
+// Tilt-shift usa 3 para a sua faixa de foco horizontal.
+const AREA_HELPERS = `
+float fx_areaMask(vec2 p, float area, float band) {
+  if (area < 0.5 || area > 2.5) return 1.0;
+  vec2 n = abs(p - uResolution * 0.5) / max(uResolution * 0.5, vec2(1.0));
+  float m = (area < 1.5) ? max(n.x, n.y) : length(n) * 0.70710678;
+  float b = clamp(band, 0.001, 1.0);
+  return smoothstep(1.0 - b, 1.0, m);
+}`;
+
+// Os helpers de espaco de cor e de area tambem sao injetados, entao tambem sao
+// reservados.
+RESERVED.push('fx_toSrgb', 'fx_toLinear', 'fx_areaMask');
 
 
 function declarations(pass: EffectShader): string {
@@ -75,6 +105,7 @@ ${declarations(pass)}
 vec2 fx_toPixels(vec2 uv) { return uv * uInputSize.xy + uInputSize.zw; }
 vec2 fx_toUv(vec2 p)      { return (p - uInputSize.zw) / uInputSize.xy; }
 vec4 fxSample(vec2 p)     { return texture(uTexture, fx_toUv(p)); }
+${AREA_HELPERS}
 
 ${pass.fragment}
 
@@ -100,6 +131,7 @@ vec4 fxSample(vec2 p) {
   vec4 c = texture2D(map, p / uResolution);
   return vec4(fx_toSrgb(c.rgb), c.a);
 }
+${AREA_HELPERS}
 
 ${pass.fragment}
 
