@@ -16,7 +16,7 @@ function visible(p,c) {
  return p.alpha>.01 && Math.abs(p.x)<c.width/2+(a*w+b*h)/2 && Math.abs(p.y)<c.height/2+(b*w+a*h)/2;
 }
 const {templateList}=require('../templates');
-const ids=templateList.filter(t=>['Parallax','Drift','Proximity','Warp','Ticker'].includes(t.meta.group)).map(t=>t.meta.id);
+const ids=templateList.filter(t=>['Parallax','Drift','Proximity','Ticker'].includes(t.meta.group) || /^field-0[1-4]$/.test(t.meta.id)).map(t=>t.meta.id);
 for (const id of ids) {
  const t=getTemplate(id),base=defaultsFor(id);
  for (const [label,patch,w,h] of [

@@ -163,7 +163,6 @@ scenes but are withheld from the pickers until their look is ready.)
 | **Orbit 3D** | 24 | true-3D rings: Pure, Carousel, Lightroom, Bloom, Stream, Showcase |
 | **Shuffle** | 4 | a perspective deck — the front card lifts away, followers advance |
 | **Ferris** | 14 | cards ride a rotating ellipse, a wheel that keeps them upright, or the crest of a very large arc |
-| **Warp** | 4 | a starfield — cards drift out of depth toward the camera |
 | **Takeover** | 7 | full-bleed images push in from an edge, hard-covering the last |
 | **Wipe** | 4 | the image never moves; a straight edge uncovers it |
 | **Spotlight** | 4 | one dominant featured card, neighbours peeking at the edges |
@@ -178,7 +177,7 @@ scenes but are withheld from the pickers until their look is ready.)
 | **Bloom** | 4 | the image takes the frame by scale — no travel, no dissolve |
 | **Frames** | 7 | a woven gallery wall: rows offset like brickwork, each drifting at its own rate |
 | **Grid** | 5 | Frames' squared-off sibling — aligned columns stepping cell by cell |
-| **Canvas** | 4 | a blank slate to build from, plus the Gallery spawn-settle-vanish ring |
+| **Canvas** | 3 | Depth: radial travel toward the camera; Gallery: spaced arrivals with a reading pause; Spiral: a continuous outward spiral |
 | **Ticker** | 25 | a marquee band running edge to edge, including a WebGL Tilt and a stepped variant |
 | **Isometric** | 3 | tiles on a 2:1 projected grid |
 | **Coverflow** | 3 | a face-on centre card with the rest turned away into two packs |
@@ -240,6 +239,16 @@ A Mockup studio is stored with the project from an explicit **Save** button, not
 by autosave.
 
 ## Canvas, assets and easing
+
+Warp and Canvas now share the **Canvas** catalogue group. The redundant Warp
+02–04, static Canvas 01, and Gallery 03 are hidden from pickers, not deleted:
+their IDs still load in saved projects and scene exports. Existing scenes use
+the revised geometry, so their composition can change. Gallery limits scale
+variation and adapts its spacing to the canvas and card shape; Depth keeps
+size and radial travel tied to the same perspective factor.
+
+Run `node scripts/verify-canvas.cjs` to check the curated catalogue, legacy IDs,
+visible content, loop boundaries, lifecycle transitions, and resolution scaling.
 
 - **Canvas**: 6 aspect presets (3:4, 4:5, 9:16, 1:1, 4:3, 16:9) plus a custom
   pixel size, safe-area guides, a logo slot, and a background that can be a
