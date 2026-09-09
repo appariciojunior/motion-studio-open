@@ -358,7 +358,9 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       const group = templates[id]?.meta.group;
       const isStickerPreset = id.startsWith('stickers-');
       const isPosterPreset = id.startsWith('poster-');
-      const isSpinnerPreset = group === 'Spinner';
+      // Catalogue grouping can change independently of a preset's timing.
+      // Carousel 3D now lives in Spinner but keeps its authored duration below.
+      const isSpinnerPreset = /^(spinner|hinge|fan)-/.test(id);
       const posterDuration = id === 'poster-04' || id === 'poster-05' ? 13
         : id === 'poster-06' ? 22 : 21;
       const stickerDuration = id === 'stickers-01' ? 36 : id === 'stickers-02' ? 5 : 13;
@@ -512,7 +514,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         // Lightroom drums, 9:16 for Bloom 05), and 'auto' is what defers to each
         // template's own declared cardAspect. Any fixed shape here overrides it
         // and every preset comes out the same proportion.
-        cardShape: group === 'Spinner' || isOrbit3dPreset || isArcPreset || isWheelRefPreset ? 'auto' : isStickerPreset ? '1:1' : isPosterPreset ? '4:5' : s.cardShape,
+        cardShape: isSpinnerPreset || isOrbit3dPreset || isArcPreset || isWheelRefPreset ? 'auto' : isStickerPreset ? '1:1' : isPosterPreset ? '4:5' : s.cardShape,
         duration: isSpinnerPreset ? spinnerDuration : isStickerPreset ? stickerDuration : isPosterPreset ? posterDuration
           : isPulseRefPreset ? pulseDuration : isFlipPreset ? 12 : isOrbit3dPreset ? orbitDuration
             : isArcPreset ? arcDuration : isWheelRefPreset ? wheelRefDuration

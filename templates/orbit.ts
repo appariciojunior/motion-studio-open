@@ -59,4 +59,9 @@ export const orbitVariants: Template[] = [
     radiusX: 300, radiusY: 300, count: 8, cardSize: 150, bigScale: 110,
     depthShrink: 25, fade: 10, speed: 0.5,
   }),
-];
+].map((template) => ({
+  ...template,
+  // Keep the stronger depth treatment in Ring Carousel 05 (side pass) and
+  // Ring Bloom 02 (upright-card wheel). Old scenes still resolve these IDs.
+  meta: { ...template.meta, catalogHidden: ['orbit-01', 'orbit-03'].includes(template.meta.id) },
+}));
