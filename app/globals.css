@@ -457,6 +457,75 @@ input[type=range] {
 }
 
 /* ============================================================
+   FOLDER GLYPH — the Projects icon opens when its section is active
+   (components/EditorIcons.tsx → ProjectsIcon)
+
+   Clicking Projects makes the rail item `.active`, and that is what opens the
+   folder: the front panel tips out about its own bottom-left corner, the one
+   the reference clip holds fixed. Plus the little squash on the way in,
+   borrowed from the reference — anticipation, so the panel does not just
+   appear.
+
+   Anywhere without an `.active` ancestor (ProjectDock, the mobile header) the
+   panel sits at identity, on the closed folder, and the glyph is the plain
+   closed folder it has always been.
+   ============================================================ */
+.folder-glyph {
+  --dur: 380ms;
+  transform-box: fill-box;
+  transform-origin: center bottom;
+  overflow: visible;
+}
+
+/* plain (unmasked) back is what renders almost all the time; the masked copy
+   only takes over while the panel is actually open. See EditorIcons.tsx. */
+.folder-glyph .folder-back-masked { visibility: hidden; }
+.rail-item.active .folder-glyph .folder-back-plain { visibility: hidden; }
+.rail-item.active .folder-glyph .folder-back-masked { visibility: visible; }
+
+.folder-glyph .folder-front {
+  transform-box: fill-box;
+  /* the corner the reference holds fixed through the whole opening */
+  transform-origin: left bottom;
+  /* Hidden when closed, and NOT transitioned in either direction: a
+     transition only reaches its final value if it runs, and when it does not
+     (a backgrounded tab, a dropped frame, a remount mid-flight) the computed
+     value stays pinned where it came FROM. That left the tipped panel painted
+     over the closed folder. `visibility` on top of opacity because it cannot
+     paint under any compositing path, and unlike `display: none` it keeps the
+     element in the layout so the transform still transitions. */
+  visibility: hidden;
+  opacity: 0;
+  transition: transform var(--dur) cubic-bezier(.4, 0, .2, 1);
+}
+
+.rail-item.active .folder-glyph .folder-front {
+  /* ORDER MATTERS: this way round the skew acts on the already-shortened
+     panel, which puts the right edge at x19.1 instead of x21.0 — the only one
+     of the two that fits the 20-unit box. */
+  transform: skewX(-18deg) scaleY(.56);
+  visibility: visible;
+  opacity: 1;
+  transition: transform var(--dur) cubic-bezier(.4, 0, .2, 1);
+}
+
+/* the squash is the reference's "pinch": the folder takes a breath before the
+   panel swings out. Runs on activation only. */
+.rail-item.active .folder-glyph { animation: folder-pinch var(--dur) cubic-bezier(.4, 0, .2, 1); }
+
+@keyframes folder-pinch {
+  0%   { transform: scaleY(1)    scaleX(1);    }
+  25%  { transform: scaleY(.92)  scaleX(1.03); }
+  60%  { transform: scaleY(1.02) scaleX(.99);  }
+  100% { transform: scaleY(1)    scaleX(1);    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .folder-glyph .folder-front { transition-duration: 1ms; }
+  .rail-item.active .folder-glyph { animation: none; }
+}
+
+/* ============================================================
    THEME GLYPH — the sun/moon toggle, one shape that morphs
    (components/EditorIcons.tsx → ThemeGlyph)
 
