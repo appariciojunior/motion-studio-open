@@ -67,8 +67,92 @@ export function AddIcon(props: EditorIconProps) {
   return <svg {...iconProps(props)}><path d="M10 3v14M3 10h14"/></svg>;
 }
 
-export function ProjectsIcon(props: EditorIconProps) {
-  return <svg {...iconProps(props)}><path d="M3 17V4h5.5l2 2H17v11Z"/></svg>;
+// The folder opens when its section is active. Transcribed from the
+// system-outline folder animation by measuring its frames over a 20-unit grid.
+//
+//  · The front panel TIPS about its own bottom-left corner, which stays fixed
+//    through the whole opening. It does not slide and it does not grow.
+//  · ORDER of the transform is load-bearing. `scaleY() skewX()` skews the
+//    ORIGINAL height and the top edge travels 11*tan(t); `skewX() scaleY()`
+//    skews the already-shortened panel and it travels 11*sy*tan(t). Measured,
+//    the same numbers put the right edge at x21.0 one way and x19.1 the other,
+//    and only the second fits the 20-unit box.
+//  · The reference's front panel is OPAQUE — it hides the back's right side
+//    and floor below it. So the back is the whole folder and the `cover` mask
+//    cuts it where the front covers it. That mask's content carries
+//    `folder-front`, so one rule drives the panel and its cutout together.
+//    It is STROKED as well as filled: cut to the fill alone and the cut lands
+//    on the centreline of the panel's stroke, leaving the outer half of the
+//    back's to add to it.
+//  · The `lip` mask subtracts the tab's region from the panel's top edge, or
+//    the closed state carries a seam across the tab. It starts at x3.2 —
+//    measured as the only position that neither leaves a parasite pixel in the
+//    tab's gap nor eats the panel's own left stroke.
+//
+// `non-scaling-stroke` keeps the panel's weight equal to the back's: the open
+// transform scales Y, which would otherwise thin its horizontal edges. The
+// width is given in screen px, scaled from `size`, so it matches at 13, 18
+// and 20.
+const FOLDER_BACK = 'M3 17V4h5.5l2 2H17v11Z';
+const FOLDER_FRONT = 'M3 6h14v11H3Z';
+
+export function ProjectsIcon({ size = 20, ...rest }: EditorIconProps) {
+  const uid = useId();
+  const lip = `folder-lip-${uid}`;
+  const cover = `folder-cover-${uid}`;
+  return <svg {...iconProps({ size, ...rest })} className="folder-glyph">
+    <defs>
+      {/* the panel's top edge, cut where the tab sits over it */}
+      <mask id={lip} maskUnits="userSpaceOnUse" x="0" y="0" width="20" height="20">
+        <rect x="0" y="0" width="20" height="20" fill="#fff"/>
+        <rect x="3.2" y="3.2" width="7.3" height="5.3" fill="#000"/>
+      </mask>
+      {/* the back, cut where the panel covers it */}
+      <mask id={cover} maskUnits="userSpaceOnUse" x="0" y="0" width="20" height="20">
+        <rect x="0" y="0" width="20" height="20" fill="#fff"/>
+        <path
+          className="folder-front"
+          d={FOLDER_FRONT}
+          fill="#000"
+          stroke="#000"
+          vectorEffect="non-scaling-stroke"
+          strokeWidth={1.5 * size / 20}
+          strokeMiterlimit={1.5}
+        />
+        {/* the stroke above widens the cut upwards too, into the tab. The
+            panel never reaches above y6, so giving this corner back costs
+            nothing. */}
+        <rect x="0" y="0" width="11.3" height="6" fill="#fff"/>
+      </mask>
+    </defs>
+    {/* Two copies of the back, switched by `visibility` rather than by the
+        mask alone. A mask forces its content onto a separate rasterised
+        buffer before compositing, and a browser is free to sample that buffer
+        at whatever resolution it likes — closed, the cut is a no-op (nothing
+        painted into the mask, so nothing is removed), but the back is still
+        going through that extra buffer for no reason, and an independently
+        rasterised layer's edges are not guaranteed to land on the exact same
+        sub-pixel grid as a directly painted path. Closed is the state every
+        rail item is in almost all the time, so it gets the plain path with no
+        mask in its render path at all — zero chance of a masking artefact —
+        and the masked copy exists purely for when the panel is open. */}
+    <path className="folder-back-plain" d={FOLDER_BACK}/>
+    <g className="folder-back-masked" mask={`url(#${cover})`}>
+      <path d={FOLDER_BACK}/>
+    </g>
+    <g mask={`url(#${lip})`}>
+      {/* miterlimit 1.5 bevels the tipped panel's 72-degree bottom-left
+          corner, whose miter would spit a spur out past the box, and keeps the
+          miter on the closed state's 90-degree corners. */}
+      <path
+        className="folder-front"
+        d={FOLDER_FRONT}
+        vectorEffect="non-scaling-stroke"
+        strokeWidth={1.5 * size / 20}
+        strokeMiterlimit={1.5}
+      />
+    </g>
+  </svg>;
 }
 
 // A featured card with two more receding behind it — which is literally what
