@@ -89,10 +89,20 @@ export function AddIcon(props: EditorIconProps) {
 //    measured as the only position that neither leaves a parasite pixel in the
 //    tab's gap nor eats the panel's own left stroke.
 //
-// `non-scaling-stroke` keeps the panel's weight equal to the back's: the open
-// transform scales Y, which would otherwise thin its horizontal edges. The
-// width is given in screen px, scaled from `size`, so it matches at 13, 18
-// and 20.
+// The panel's stroke is PLAIN — no `vector-effect` — matching the back and
+// every other glyph in this file. `non-scaling-stroke` was here before, on the
+// theory that scaleY(.56) would thin the panel's horizontal edges to 0.84
+// against the back's 1.5. Measured (not assumed, this time): a plain 1.5
+// stroke under this exact transform — skewX(-18deg) scaleY(.56) — renders at
+// 1.657, matching an untransformed 1.5 stroke's own 1.641 almost exactly,
+// because the skew's contribution to the edge's true screen-perpendicular
+// width happens to offset the scaleY thinning for this specific pair of
+// numbers. `non-scaling-stroke` does not know that; its correction is a single
+// scalar derived from the transform as a whole, not the true perpendicular of
+// each edge, and applied here it rendered the top edge at 0.376 — a hairline
+// far thinner than the rest of the icon, dense enough at full opacity to read
+// as a different, darker tone next to the softer antialiased 1.5 elsewhere.
+// That was the "the open folder is a different colour at the edges" report.
 const FOLDER_BACK = 'M3 17V4h5.5l2 2H17v11Z';
 const FOLDER_FRONT = 'M3 6h14v11H3Z';
 
@@ -100,6 +110,7 @@ export function ProjectsIcon({ size = 20, ...rest }: EditorIconProps) {
   const uid = useId();
   const lip = `folder-lip-${uid}`;
   const cover = `folder-cover-${uid}`;
+  const coverClip = `folder-cover-clip-${uid}`;
   return <svg {...iconProps({ size, ...rest })} className="folder-glyph">
     <defs>
       {/* the panel's top edge, cut where the tab sits over it */}
@@ -107,6 +118,18 @@ export function ProjectsIcon({ size = 20, ...rest }: EditorIconProps) {
         <rect x="0" y="0" width="20" height="20" fill="#fff"/>
         <rect x="3.2" y="3.2" width="7.3" height="5.3" fill="#000"/>
       </mask>
+      {/* Keeps the cutout below y6 — measured, not assumed to be a no-op
+          above it. A later opaque rect painted OVER the cutout there was the
+          first attempt, on the assumption that mask content composites like
+          anything else, later element wins. It does not, reliably: the tab's
+          own left edge, well above y6 and never touched by the transformed
+          panel, still measured a third of its normal ink with that rect in
+          place, and only a `clipPath` — which stops the cutout from painting
+          there at all rather than trying to paint over it after — removed it.
+          Real cause not chased further; the clip is the fix either way. */}
+      <clipPath id={coverClip} clipPathUnits="userSpaceOnUse">
+        <rect x="0" y="6" width="20" height="14"/>
+      </clipPath>
       {/* the back, cut where the panel covers it */}
       <mask id={cover} maskUnits="userSpaceOnUse" x="0" y="0" width="20" height="20">
         <rect x="0" y="0" width="20" height="20" fill="#fff"/>
@@ -115,14 +138,9 @@ export function ProjectsIcon({ size = 20, ...rest }: EditorIconProps) {
           d={FOLDER_FRONT}
           fill="#000"
           stroke="#000"
-          vectorEffect="non-scaling-stroke"
-          strokeWidth={1.5 * size / 20}
           strokeMiterlimit={1.5}
+          clipPath={`url(#${coverClip})`}
         />
-        {/* the stroke above widens the cut upwards too, into the tab. The
-            panel never reaches above y6, so giving this corner back costs
-            nothing. */}
-        <rect x="0" y="0" width="11.3" height="6" fill="#fff"/>
       </mask>
     </defs>
     {/* Two copies of the back, switched by `visibility` rather than by the
@@ -147,8 +165,6 @@ export function ProjectsIcon({ size = 20, ...rest }: EditorIconProps) {
       <path
         className="folder-front"
         d={FOLDER_FRONT}
-        vectorEffect="non-scaling-stroke"
-        strokeWidth={1.5 * size / 20}
         strokeMiterlimit={1.5}
       />
     </g>

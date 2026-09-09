@@ -12,8 +12,12 @@ import type { Effect } from '@/lib/types';
 // pixels: a normalized offset would come out as a different visible distance in
 // a 1080x1350 canvas than in a 1920x1080 one, and the same slider value would
 // mean two different looks depending on the aspect the user picked.
+//
+// Nasce em 'artwork', como os outros efeitos de lente (Blur, Bloom, Tilt-shift,
+// Liquid Glass). Separar os canais de um fundo chapado nao produz nada alem de
+// franjas na borda do quadro; a aberracao se le nos cards.
 export const rgbSplit: Effect = {
-  meta: { id: 'rgb-split', name: 'RGB Split' },
+  meta: { id: 'rgb-split', name: 'RGB Split', defaultScope: 'artwork' },
   controls: [
     { key: 'offset', label: 'Offset', type: 'slider', min: 0, max: 40, step: 0.5, default: 4, unit: 'px' },
     { key: 'angle', label: 'Angle', type: 'slider', min: 0, max: 360, step: 1, default: 0, unit: '°' },
