@@ -757,6 +757,19 @@ const GLIDE: EasingSpec = { id: 'custom', bezier: [0.85, 0.15, 0.15, 0.85] };
 const SQUARE = { cardAspect: 1 };
 const PORTRAIT = { cardAspect: 0.8 };
 
+// Hide only the clearest visual overlaps, rather than limiting the family to
+// a few representative shapes. Keep the other camera and motion variations.
+// Every ID remains registered so saved scenes retain their original motion.
+const HIDDEN_CATALOG_IDS = new Set([
+  'orbit-3d-02', // Orbit Showcase: straight ring band covered by Ring Stream.
+  'orbit-3d-07', // Ring Pure 04: denser, smaller version of Ring Pure 03.
+  'orbit-3d-08', // Ring Pure 05: larger version of the same horizontal drum.
+  'orbit-3d-10', // Ring Carousel 01: dense version of the retained Carousel 02.
+  'orbit-3d-18', // Ring Lightroom 04: thin, dense version of the inside horizontal view.
+  'orbit-3d-25', // Ring Bloom 03: another upright-card wheel, close to Bloom 02.
+  'orbit-3d-27', // Ring Bloom 05: radial wheel already covered by Wheel 04.
+]);
+
 export const orbit3dVariants: Template[] = [
   // ----- ours, not the reference's -----
   variant(ring3d, 'orbit-3d-01', 'Ring Stream', {
@@ -903,4 +916,7 @@ export const orbit3dVariants: Template[] = [
     count: 16, gap: 49, surface: 'flat', facing: 'ring', fade: 0, fadeMode: 'alpha',
     tiltX: 90, ringYaw: 0, ringRoll: 0, zoom: 119.3, perspective: 610, speed: 1.35,
   }, LINEAR, { cardAspect: 0.5625 }),
-];
+].map((template) => ({
+  ...template,
+  meta: { ...template.meta, catalogHidden: HIDDEN_CATALOG_IDS.has(template.meta.id) },
+}));
