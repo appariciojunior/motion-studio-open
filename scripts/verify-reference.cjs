@@ -951,7 +951,7 @@ const SPINNER_UNIT = (height, zoom) => height / 2 / ((600 / 200) * ((585 * 100) 
 
   // Loop closure, on every preset: the belt turns a whole number of slots per
   // clip, so frame 0 and frame N have to be the same picture.
-  for (const t of templateList.filter((x) => x.meta.group === 'Spinner')) {
+  for (const t of templateList.filter((x) => /^(spinner|hinge|fan)-/.test(x.meta.id))) {
     const v = defaultsFor(t.meta.id);
     const aspect = t.meta.cardAspect === 'canvas' ? W / H : (t.meta.cardAspect ?? 1);
     const ctx = makeCtx(t.meta.id, { width: W, height: H, cardAspect: aspect });
@@ -985,7 +985,9 @@ const SPINNER_UNIT = (height, zoom) => height / 2 / ((600 / 200) * ((585 * 100) 
   // so the columns must come out along the card's own two axes, turned by its
   // quaternion and projected. The scales carry the foreshortening, which is why
   // the DIRECTIONS are what get compared here.
-  for (const t of templateList.filter((x) => x.meta.group === 'Spinner')) {
+  // This projection convention belongs to the original belt implementation;
+  // catalogue membership also includes Carousel 3D, whose fallback differs.
+  for (const t of templateList.filter((x) => /^(spinner|hinge|fan)-/.test(x.meta.id))) {
     const v = defaultsFor(t.meta.id);
     const aspect = t.meta.cardAspect === 'canvas' ? W / H : (t.meta.cardAspect ?? 1);
     const ctx = makeCtx(t.meta.id, { width: W, height: H, cardAspect: aspect });
@@ -1639,6 +1641,37 @@ const WHEEL_UNIT = (height, zoom) => height / 2 / ((170 / 200) * ((631 * 100) / 
     }
     check(finite, preset.meta.name, 'emits a non-finite pose');
     check(everVisible, preset.meta.name, 'draws nothing at all');
+  }
+}
+
+// Catalogue moves must not apply Spinner's 12-second fallback, white
+// background or automatic card shape to the authored Carousel 3D presets.
+{
+  const { useSceneStore } = require('../store/useSceneStore');
+  const initial = useSceneStore.getState();
+  const movedDurations = {
+    'carousel3d-01': 8, 'carousel3d-02': 9, 'carousel3d-03': 8,
+    'carousel3d-04': 12, 'carousel3d-05': 20,
+    'ring-r02': 16, 'ring-r08': 12.8, 'ring-r09': 12.8,
+    'ring-r10': 16, 'ring-r11': 12.8,
+  };
+  try {
+    for (const [id, duration] of Object.entries(movedDurations)) {
+      const background = { ...initial.background, color: '#123456', userSet: false };
+      useSceneStore.setState({ ...initial, duration: 99, cardShape: '4:3', background });
+      useSceneStore.getState().setActiveTemplate(id);
+      const scene = useSceneStore.getState();
+      check(scene.duration === duration, id, 'catalogue move changed the authored duration');
+      check(scene.cardShape === '4:3', id, 'catalogue move reset the card shape');
+      check(scene.background.color === '#123456', id, 'catalogue move reset the background');
+    }
+    for (const [id, duration] of [['spinner-01', 12], ['spinner-03', 64], ['hinge-05', 15], ['fan-03', 18], ['flip-01', 12]]) {
+      useSceneStore.setState({ ...initial, duration: 99 });
+      useSceneStore.getState().setActiveTemplate(id);
+      check(useSceneStore.getState().duration === duration, id, 'original preset timing changed');
+    }
+  } finally {
+    useSceneStore.setState(initial, true);
   }
 }
 

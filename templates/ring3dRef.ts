@@ -210,7 +210,7 @@ const ring: Template = {
 
 const carousel3d: Template = {
   meta: {
-    id: 'carousel3d-01', name: 'Carousel 3D 01', group: 'Orbit', engine: 'webgl', isNew: true, catalog3d: true,
+    id: 'carousel3d-01', name: 'Carousel 3D 01', group: 'Spinner', engine: 'webgl', isNew: true,
     defaultEasing: { id: 'linear' },
     cardAspect: 3 / 4, repeatAssets: true,
   },
@@ -239,6 +239,25 @@ const carousel3d: Template = {
 const E86 = { id: 'custom' as const, bezier: [0.86, 0.14, 0.14, 0.86] as [number, number, number, number] };
 const LIN = { id: 'linear' as const };
 
+// Curate by the rendered motion, keeping saved projects addressable by ID.
+const HIDDEN_RING_CATALOG_IDS = new Set([
+  'ring-r03', // Open horizontal ring: retain Orbit Bloom and its radius pulse.
+  'ring-r06', // Inside horizontal flat ring: Ring Lightroom 05.
+  'ring-r07', // Inside vertical flat ring: Ring Lightroom 06.
+  'ring-r12', // Diagonal curved ring: Ring Pure 01.
+  'ring-r15', // Inside a horizontal curved ring: Ring Lightroom 01.
+]);
+
+// These read as faceted objects or four-face flips, rather than open orbits.
+// Only catalogue metadata changes; their geometry, defaults and IDs stay intact.
+const BOX_CATALOG_NAMES: Record<string, string> = {
+  'ring-r02': 'Box Fold',
+  'ring-r08': 'Box Inside',
+  'ring-r09': 'Box Inside Vertical',
+  'ring-r10': 'Box Fold Open',
+  'ring-r11': 'Box Tower',
+};
+
 // The fifteen of the reference's "3D" family that earned a place, off its own
 // `paramsPerModeBaseline`, 2026-08-23, renumbered over the gaps the eight
 // dropped ones left. Its own label is kept in the comment so a value can be
@@ -260,7 +279,16 @@ export const ringRefVariants: Template[] = [
   variant(ring, 'ring-r13', 'Ring 13', { axis: 'vertical', surface: 'cylinder', distance: 16754, planeSize: 4222, orbitRadius: 8920 }, E86), // 3D 21
   variant(ring, 'ring-r14', 'Ring 14', { flipImage: 'on', axis: 'vertical', surface: 'cylinder', distance: 7740, planeSize: 4222, rotationZ: 180, orbitRadius: 8920, perspective: 90 }, E86), // 3D 22
   variant(ring, 'ring-r15', 'Ring 15', { flipImage: 'on', count: 16, surface: 'cylinder', distance: 4214, planeSize: 2478, rotationY: 360, orbitRadius: 7073, perspective: 120 }, LIN), // 3D 23
-];
+].map((template) => ({
+  ...template,
+  meta: {
+    ...template.meta,
+    ...(BOX_CATALOG_NAMES[template.meta.id]
+      ? { group: 'Box', name: BOX_CATALOG_NAMES[template.meta.id] }
+      : {}),
+    catalogHidden: HIDDEN_RING_CATALOG_IDS.has(template.meta.id),
+  },
+}));
 // Its five Carousel 3D presets. This branch runs the continuous time model, so
 // `cycles` and `cycleDeg` are what set the beat rather than the card count.
 export const carousel3dRefVariants: Template[] = [
@@ -281,4 +309,10 @@ export const carousel3dRefVariants: Template[] = [
     count: 33, offsetY: -6, distance: 1370, direction: 'reverse', planeSize: 250,
     rotationX: 22, rotationY: 0, orbitRadius: 480, perspective: 160,
   }, LIN),
-];
+].map((template) => ({
+  ...template,
+  // Oblique (01/02), frontal (03) and dense (05) fans are already covered by
+  // Spinner 03/04/06. Keep only the asymmetric single-card close-up (04).
+  // All five IDs remain registered for saved projects.
+  meta: { ...template.meta, catalogHidden: template.meta.id !== 'carousel3d-04' },
+}));

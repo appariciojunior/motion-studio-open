@@ -75,6 +75,7 @@ export const templateList: Template[] = [
   ...perspective3dTemplates,
   ...interactiveCardsVariants,
   ...spinnerVariants,
+  ...carousel3dRefVariants,
   ...stickerVariants,
   ...carouselVariants,
   ...carouselRefVariants,
@@ -96,8 +97,7 @@ export const templateList: Template[] = [
   ...flickerRefVariants,
   ...globeVariants.slice(2),
   ...globeRefVariants,
-  ...ringRefVariants,
-  ...carousel3dRefVariants,
+  ...ringRefVariants.filter((t) => t.meta.group !== 'Box'),
   ...spiralVariants,
   ...coilVariants,
   ...spiralImagesVariants,
@@ -126,6 +126,7 @@ export const templateList: Template[] = [
   ...magazineSolidVariants,
   ...rippleVariants,
   ...boxVariants,
+  ...ringRefVariants.filter((t) => t.meta.group === 'Box'),
 ];
 
 export const templates: Record<string, Template> = Object.fromEntries(
