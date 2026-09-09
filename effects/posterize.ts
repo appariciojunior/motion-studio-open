@@ -17,8 +17,13 @@ import type { Effect } from '@/lib/types';
 // produces the colour banding a posterized print has; quantizing luma would
 // give a grey staircase with the original hue laid back over it, which is a
 // different look entirely.
+//
+// Nasce em 'artwork' exatamente pelo motivo que o comentario do Mix descreve
+// abaixo: quantizar o quadro composto colapsa o fundo e as regioes escuras do
+// card no mesmo preto, e o card perde a silhueta. O Mix continua valendo para
+// quem voltar o escopo para 'scene'.
 export const posterize: Effect = {
-  meta: { id: 'posterize', name: 'Posterize' },
+  meta: { id: 'posterize', name: 'Posterize', defaultScope: 'artwork' },
   controls: [
     { key: 'levels', label: 'Levels', type: 'slider', min: 2, max: 16, step: 1, default: 5 },
     // Mix exists because the effect runs on the WHOLE composed frame, the scene

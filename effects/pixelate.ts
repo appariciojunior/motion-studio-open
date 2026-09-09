@@ -13,8 +13,15 @@ import type { Effect } from '@/lib/types';
 // value. Moving both onto this one shader closes that gap; the webgl side shifts
 // by half a block, which is it converging on the 2D behaviour rather than
 // drifting from it.
+//
+// Nasce em 'artwork' por consistencia com os outros, nao por defeito medido:
+// sobre um fundo CHAPADO os dois escopos dao a mesma imagem (medido na sonda
+// _probe_effect_scope: 572016 pixels de fundo e 4992 de borda quebrada em
+// 'scene' e em 'artwork', identicos). A diferenca aparece quando o fundo e
+// imagem ou gradiente, e ai blocar o fundo junto tira dos cards o papel de
+// assunto da cena.
 export const pixelate: Effect = {
-  meta: { id: 'pixelate', name: 'Pixelate' },
+  meta: { id: 'pixelate', name: 'Pixelate', defaultScope: 'artwork' },
   controls: [
     { key: 'size', label: 'Pixel Size', type: 'slider', min: 1, max: 64, step: 1, default: 8 },
   ],

@@ -19,8 +19,14 @@ import type { Effect } from '@/lib/types';
 // image screens each channel separately (which is what the colour path does
 // here, one dot size per channel), while a single-colour screen measures
 // luminance once. Those are different pictures, not two ends of one scale.
+//
+// Nasce em 'artwork', nao no quadro todo. A reticula mede o TOM do que esta
+// embaixo, e um fundo chapado tem um tom so: aplicada ao quadro composto, ela
+// cobre o fundo de pontos de tamanho constante e a borda do card desaparece
+// dentro dessa mesma trama. Sobre os cards, a trama existe onde ha imagem — que
+// e onde print se le como print. O seletor de escopo devolve 'scene'.
 export const halftone: Effect = {
-  meta: { id: 'halftone', name: 'Halftone' },
+  meta: { id: 'halftone', name: 'Halftone', defaultScope: 'artwork' },
   controls: [
     { key: 'dotSize', label: 'Dot Size', type: 'slider', min: 2, max: 40, step: 1, default: 8, unit: 'px' },
     { key: 'angle', label: 'Screen Angle', type: 'slider', min: 0, max: 90, step: 1, default: 45, unit: '°' },
