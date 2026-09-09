@@ -46,20 +46,38 @@ const zoom: Template = {
     const handoff = smooth(clamp((count / 2 - Math.abs(e)) / 0.25, 0, 1));
     const alpha = edgeAlpha * handoff;
 
-    // growFrom origin: scaling about an anchor point O — layers emerge at O
-    // when tiny and expand past the canvas centre as they grow
-    const O =
-      v.growFrom === 'top'    ? [0, -ctx.height * 0.4] :
-      v.growFrom === 'bottom' ? [0, ctx.height * 0.4] :
-      v.growFrom === 'left'   ? [-ctx.width * 0.4, 0] :
-      v.growFrom === 'right'  ? [ctx.width * 0.4, 0] : [0, 0];
-    const x = O[0] * (1 - s) + v.offset.x * canvasScale(ctx);
-    const y = O[1] * (1 - s) + v.offset.y * canvasScale(ctx);
+    // Actual on-screen scale factor — must match `scale` below.
+    const renderScale = (v.cardSize * canvasScale(ctx) / BASE) * s;
+
+    // The card's own rendered footprint at this scale (mirrors how the
+    // renderer sizes the sprite: SPRITE_BASE * scale, split by the resolved
+    // card aspect — see lib/renderer.ts and lib/crop cardAspectFor).
+    const aspect = ctx.cardAspect ?? ctx.width / ctx.height;
+    const long = BASE * renderScale;
+    const cardW = long * Math.min(1, aspect);
+    const cardH = long * Math.min(1, 1 / aspect);
+
+    // growFrom pins the corresponding edge of the card to that edge of the
+    // canvas — the card grows/shrinks from the frame's boundary inward rather
+    // than around an arbitrary fixed point. A fixed-point anchor (the previous
+    // approach) scaled its offset at a different rate than the card's own
+    // edge grows, so for every off-centre option the offset eventually (in
+    // fact, always) outran the card and left a background gap on every frame,
+    // not just at the extremes. Pinning the edge directly makes full coverage
+    // on that edge exact by construction, at any scale.
+    const pinX =
+      v.growFrom === 'left'  ? -ctx.width / 2 + cardW / 2 :
+      v.growFrom === 'right' ? ctx.width / 2 - cardW / 2 : 0;
+    const pinY =
+      v.growFrom === 'top'    ? -ctx.height / 2 + cardH / 2 :
+      v.growFrom === 'bottom' ? ctx.height / 2 - cardH / 2 : 0;
+    const x = pinX + v.offset.x * canvasScale(ctx);
+    const y = pinY + v.offset.y * canvasScale(ctx);
 
     return {
       x,
       y,
-      scale: (v.cardSize * canvasScale(ctx) / BASE) * s,
+      scale: renderScale,
       rotation: 0,
       alpha,
       depth: s, // bigger (nearer) layers draw on top
