@@ -2,13 +2,13 @@ import type { ControlDef } from './types';
 
 // ----- The house camera: a SHOT, on top of whatever the template poses -----
 //
-// A webgl template may declare `camera(values, ctx) -> CameraPose`, and 17 of
-// them do. The other webgl presets leave the camera parked on the z axis at the
-// fov-derived fit distance and pose the CARDS instead, so the same motion can
-// only ever be seen from one place. This is that missing half: five controls
-// that move the camera itself, composed onto the template's pose rather than
-// replacing it, so a preset with its own camera work keeps it and merely gets
-// re-framed.
+// A webgl template may declare `camera(values, ctx) -> CameraPose`, and 72 of
+// the 82 webgl presets in the catalogue do — measured, not guessed. So the gap
+// was never that the camera has no pose: it is that the pose is a function of
+// the TEMPLATE's own controls, so each preset had exactly one framing and the
+// person using it had none. This is that missing half: five controls that move
+// the camera itself, composed onto the template's pose rather than replacing
+// it, so a preset with its own camera work keeps it and merely gets re-framed.
 //
 // Why these five and not more:
 //
@@ -16,9 +16,14 @@ import type { ControlDef } from './types';
 //     its target, which makes the subject fill more of the frame at the same
 //     fov — the keystone/perspective feel is untouched. Widening the lens is a
 //     different move and already belongs to each template's own `perspective`.
-//   · Pan trucks the camera AND its target by the same vector, so the view
-//     direction never changes. On a scene with depth this is not the same
-//     picture as sliding the layer: near cards shift more than far ones.
+//   · Pan is a LENS SHIFT — it slides the film gate across the projection
+//     (three's `setViewOffset`), it does not move the camera. Trucking the
+//     camera sideways was the first implementation and it was wrong for a
+//     REFRAMING control: measured on Spinner 01, a +30% truck widened the
+//     silhouette's box from 172px to 201px, because moving the camera off axis
+//     adds keystone. The shot is supposed to be re-centred, not re-shaped. A
+//     lens shift translates the frame and leaves every angle intact, and it
+//     cannot push a template's authored composition out of shape.
 //   · Orbit swings the camera around the target on a sphere — pitch first, then
 //     yaw, which is what makes the pair read as one orbit instead of two
 //     independent shears.
@@ -39,9 +44,9 @@ export interface SceneCameraValues {
   orbitY: number;  // degrees; positive swings the camera to the right
 }
 
-// Reserved keys, stored in the track's own `values` alongside the template's.
-// Prefixed so they can never collide with a template control, and so a glance
-// at a saved scene says which keys are the house's.
+// Reserved keys, stored on the SCENE (see SceneCameraState below). Prefixed so
+// they can never collide with a template control, and so a glance at a saved
+// scene says which keys are the house's.
 export const SCENE_CAMERA_CONTROLS: ControlDef[] = [
   { key: '_camZoom', label: 'Zoom', type: 'slider', min: 25, max: 300, step: 1, default: 100, unit: '%',
     description: 'Moves the camera closer to what it is aimed at. The lens stays the same width.' },
@@ -118,8 +123,6 @@ export function frameSceneCamera(
   position: Vec3,
   target: Vec3,
   cam: SceneCameraValues,
-  fov: number,
-  aspect: number,
 ): { position: Vec3; target: Vec3 } {
   let vx = position.x - target.x;
   let vy = position.y - target.y;
@@ -145,43 +148,37 @@ export function frameSceneCamera(
     vx = x; vz = z;
   }
 
-  const out = {
+  // Pan is NOT here: it is a lens shift on the projection, not a move in
+  // space. See sceneLensShift.
+  return {
     position: { x: target.x + vx, y: target.y + vy, z: target.z + vz },
     target: { x: target.x, y: target.y, z: target.z },
   };
+}
 
-  // 3. Pan. Measured against the frame the camera can see AT ITS TARGET, after
-  //    the dolly — so a pan of 100% is always one frame across, whatever the
-  //    zoom. Camera and target move together: the view direction is unchanged.
-  if (cam.panX !== 0 || cam.panY !== 0) {
-    const dist = Math.hypot(vx, vy, vz) || 1;
-    const frameH = 2 * dist * Math.tan((fov * DEG) / 2);
-    const frameW = frameH * aspect;
-    // Camera basis. Forward runs position -> target; world up in pose space is
-    // (0,-1,0) because y is down. right = up x forward, up = forward x right.
-    const fx = -vx / dist, fy = -vy / dist, fz = -vz / dist;
-    let rx = -fz, ry = 0, rz = fx;          // (0,-1,0) x forward
-    const rlen = Math.hypot(rx, ry, rz);
-    if (rlen < 1e-9) {
-      // Looking straight down the world up axis: any right vector will do, and
-      // x is the one that keeps a top-down shot's pan reading left/right.
-      rx = 1; ry = 0; rz = 0;
-    } else {
-      rx /= rlen; ry /= rlen; rz /= rlen;
-    }
-    const ux = fy * rz - fz * ry;
-    const uy = fz * rx - fx * rz;
-    const uz = fx * ry - fy * rx;
-
-    // The control moves the IMAGE, in canvas convention (x right, y down) —
-    // the same contract as the Offset pad. Moving the image right means
-    // trucking the camera LEFT; moving it down means lifting the camera.
-    const dx = -rx * cam.panX * frameW + ux * cam.panY * frameH;
-    const dy = -ry * cam.panX * frameW + uy * cam.panY * frameH;
-    const dz = -rz * cam.panX * frameW + uz * cam.panY * frameH;
-    out.position.x += dx; out.position.y += dy; out.position.z += dz;
-    out.target.x += dx; out.target.y += dy; out.target.z += dz;
-  }
-
-  return out;
+// The pan, as the projection offset three wants for setViewOffset: the window
+// this camera renders, expressed inside a larger frame. Sliding that window
+// LEFT is what makes the image move RIGHT, hence the negation — so a positive
+// Pan X sends the image right and a positive Pan Y sends it down, the canvas
+// convention the Offset pad already uses. 100% is exactly one frame.
+// Returns null when there is nothing to shift, so the caller can clear the
+// offset instead of setting a no-op one (the cameras are reused frame to
+// frame; a stale offset would outlive the value that asked for it).
+export function sceneLensShift(
+  cam: SceneCameraValues,
+  width: number,
+  height: number,
+): { fullWidth: number; fullHeight: number; x: number; y: number; width: number; height: number } | null {
+  if (cam.panX === 0 && cam.panY === 0) return null;
+  // `-0` for the untouched axis is what a plain negation produces, and it is
+  // not the same value as `0` to anything comparing offsets. Normalise it.
+  const zero = (v: number) => (v === 0 ? 0 : v);
+  return {
+    fullWidth: width,
+    fullHeight: height,
+    x: zero(-cam.panX * width),
+    y: zero(-cam.panY * height),
+    width,
+    height,
+  };
 }

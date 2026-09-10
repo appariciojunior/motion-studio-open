@@ -12,7 +12,7 @@ import { advanceVideoForExport, createCardVideo, isVideoSource, prepareVideoForS
 import { BASE_PATH, IS_STATIC_EXPORT } from '@/lib/paths';
 import type { IRenderer } from '@/lib/rendererTypes';
 import type { CameraPose, LayerTransform3D } from '@/lib/types';
-import { frameSceneCamera, isNeutralSceneCamera, readSceneCamera, type SceneCameraValues } from '@/lib/sceneCamera';
+import { frameSceneCamera, isNeutralSceneCamera, readSceneCamera, sceneLensShift, type SceneCameraValues } from '@/lib/sceneCamera';
 import { resolveTrackTime, trackAssetIndices, type MotionTrack } from '@/lib/tracks';
 import type { SceneState } from '@/store/useSceneStore';
 import { advancedRasterSize, gradientRasterMaxEdge, gradientSignature, normalizeGradientSpec, paintGradientCanvas } from '@/lib/gradient';
@@ -215,7 +215,7 @@ export class SceneRenderer3D implements IRenderer {
     // depth precision is untouched.
     let framedFar: number | undefined;
     if (cam && !isNeutralSceneCamera(cam)) {
-      const framed = frameSceneCamera(position, target, cam, fov, camera.aspect);
+      const framed = frameSceneCamera(position, target, cam);
       position = framed.position;
       target = framed.target;
       framedFar = Math.hypot(position.x - target.x, position.y - target.y, position.z - target.z) * 8;
@@ -225,6 +225,16 @@ export class SceneRenderer3D implements IRenderer {
     camera.near = pose?.near ?? 0.1;
     camera.far = pose?.far ?? Math.max(D * 8, Math.abs(position.z) * 8);
     if (framedFar !== undefined) camera.far = Math.max(camera.far, framedFar);
+    // Pan is a lens shift, so it lands on the PROJECTION and not on the pose:
+    // the frame slides and no angle in the picture changes. Always clear it
+    // when the value is back to zero — these cameras live for the whole
+    // session, and a view offset left behind would outlast the pan that set it.
+    const shift = cam ? sceneLensShift(cam, this.width, this.height) : null;
+    if (shift) {
+      camera.setViewOffset(shift.fullWidth, shift.fullHeight, shift.x, shift.y, shift.width, shift.height);
+    } else if (camera.view?.enabled) {
+      camera.clearViewOffset();
+    }
     camera.updateProjectionMatrix();
   }
 
