@@ -90,11 +90,14 @@ const semear = function (templateId) {
   }));
 };
 
+// A secao Camera agora e de CENA: section-head com eyebrow "Camera" e o
+// section-body seguinte — nao mais um .ctl-section dentro do bloco da camada.
 const secaoCamera = function () {
-  const s = Array.from(document.querySelectorAll('.ctl-section'))
-    .find((el) => (el.querySelector('.ctl-section-title') || {}).textContent === 'Camera');
-  if (!s) return null;
-  return Array.from(s.querySelectorAll('.ctl-row')).map((r) => (r.querySelector('.ctl-label') || {}).textContent);
+  const cab = Array.from(document.querySelectorAll('.section-head'))
+    .find((el) => ((el.querySelector('.eyebrow') || {}).textContent || '').trim() === 'Camera');
+  const secao = cab ? cab.nextElementSibling : null;
+  if (!secao) return null;
+  return Array.from(secao.querySelectorAll('.ctl-row')).map((r) => (r.querySelector('.ctl-label') || {}).textContent);
 };
 
 // Entrada digitada real: Enter na trilha abre o editor, o valor entra pelo
@@ -102,8 +105,9 @@ const secaoCamera = function () {
 // React escuta focusout e o documento headless nao tem foco.
 const digitar = async function (rotulo, valor) {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  const secao = Array.from(document.querySelectorAll('.ctl-section'))
-    .find((el) => (el.querySelector('.ctl-section-title') || {}).textContent === 'Camera');
+  const cab = Array.from(document.querySelectorAll('.section-head'))
+    .find((el) => ((el.querySelector('.eyebrow') || {}).textContent || '').trim() === 'Camera');
+  const secao = cab ? cab.nextElementSibling : null;
   if (!secao) return 'sem secao Camera';
   const row = Array.from(secao.querySelectorAll('.ctl-row'))
     .find((r) => ((r.querySelector('.ctl-label') || {}).textContent || '').trim() === rotulo);
@@ -126,10 +130,7 @@ const digitar = async function (rotulo, valor) {
 const lerStore = function () {
   try {
     const raw = localStorage.getItem('motion-project-cam');
-    const v = (JSON.parse(raw).tracks || [])[0].values || {};
-    const out = {};
-    for (const k of Object.keys(v)) if (k.startsWith('_cam')) out[k] = v[k];
-    return out;
+    return JSON.parse(raw).sceneCamera || 'SEM sceneCamera';
   } catch (e) { return String(e); }
 };
 

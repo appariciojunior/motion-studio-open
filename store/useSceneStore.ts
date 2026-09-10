@@ -7,6 +7,7 @@ import type { EffectScope } from '@/lib/types';
 import { DEMO_ASSETS, demoSourceForSlot, isDemoAssetSource } from '@/lib/demoAssets';
 import { idbPut, idbGet, idbDelete } from '@/lib/assetDb';
 import { DEFAULT_TRACK_TRANSFORM, TRACK_END, type BlendMode, type MotionTrack } from '@/lib/tracks';
+import { SCENE_CAMERA_DEFAULTS, sanitizeSceneCamera, type SceneCameraState } from '@/lib/sceneCamera';
 import { createGradientSpec, legacyColorsForGradient, normalizeGradientSpec, type GradientSpec } from '@/lib/gradient';
 
 // ---------- canvas dimension helpers ----------
@@ -125,6 +126,10 @@ export interface SceneState {
   // assets → layer slots
   assets: AssetItem[];
   cardShape: string; // scene-level crop aspect for cards: 'auto' or a CARD_SHAPES key
+  // The shot: where the camera stands, on top of whatever pose the template
+  // asks for (lib/sceneCamera). Scene-level and not per-track on purpose — two
+  // layers seen from two different camera positions are not one shot.
+  sceneCamera: SceneCameraState;
   // when a card video is shorter than the clip: restart it ('loop') or freeze
   // on its final frame ('hold') — applies to preview and export alike
   videoEnd: 'loop' | 'hold';
@@ -178,6 +183,8 @@ export interface SceneState {
   setAssetCrop: (id: string, crop: CropFocus) => void;
   setAllAssetCrops: (crop: CropFocus) => void;
   setCardShape: (shape: string) => void;
+  setSceneCameraValue: (key: string, value: number) => void;
+  resetSceneCamera: () => void;
   setVideoEnd: (mode: 'loop' | 'hold') => void;
 
   // persistence (see lib/scenePersist)
@@ -337,6 +344,7 @@ function initialSceneState() {
     // start populated with the bundled demo set so every template shows real motion
     assets: DEMO_ASSETS.map((a) => ({ ...a, id: nid('asset'), visible: true, origin: 'demo' as const })),
     cardShape: 'auto',
+    sceneCamera: { ...SCENE_CAMERA_DEFAULTS },
     videoEnd: 'loop' as const,
     effects: [],
   };
@@ -751,6 +759,10 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setAllAssetCrops: (crop) =>
     set((s) => ({ assets: s.assets.map((a) => ({ ...a, crop })) })),
   setCardShape: (shape) => set(() => ({ cardShape: shape })),
+  // A new object every time: the autosave compares document fields by identity.
+  setSceneCameraValue: (key, value) =>
+    set((s) => ({ sceneCamera: sanitizeSceneCamera({ ...s.sceneCamera, [key]: value }) })),
+  resetSceneCamera: () => set(() => ({ sceneCamera: { ...SCENE_CAMERA_DEFAULTS } })),
   setVideoEnd: (mode) => set(() => ({ videoEnd: mode })),
 
   // Apply a persisted scene (from lib/scenePersist). Each track's `values` is
@@ -835,6 +847,9 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         ...partial,
         background,
         assets,
+        // Rebuilt, never inherited: a project saved before the shot existed must
+        // open neutral, not wearing whatever framing the last project had.
+        sceneCamera: sanitizeSceneCamera((partial as { sceneCamera?: unknown }).sceneCamera),
         ...projectActive(safeTracks, activeId),
         frame: 0, // always start at the clip head
       };

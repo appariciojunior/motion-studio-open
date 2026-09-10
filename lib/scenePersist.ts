@@ -43,6 +43,7 @@ export function buildScenePartial(s: SceneState) {
       : s.background,
     logo: s.logo.url?.startsWith('blob:') ? { ...s.logo, url: null } : s.logo,
     cardShape: s.cardShape,
+    sceneCamera: s.sceneCamera,
     videoEnd: s.videoEnd,
     effects: s.effects,
     assets: s.assets.map((a) => (a.origin === 'upload' ? { ...a, url: '' } : a)),
@@ -135,7 +136,7 @@ export function startSceneAutosave(): () => void {
 const DOC_KEYS = [
   'tracks', 'activeTrackId', 'activeTemplateId', 'values', 'easing', 'fps', 'duration',
   'aspect', 'width', 'height', 'customW', 'customH', 'safeArea', 'background', 'logo',
-  'cardShape', 'videoEnd', 'effects', 'assets',
+  'cardShape', 'sceneCamera', 'videoEnd', 'effects', 'assets',
 ] as const satisfies readonly (keyof SceneState)[];
 
 function documentTouched(a: SceneState, b: SceneState): boolean {

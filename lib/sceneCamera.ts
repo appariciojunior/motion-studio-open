@@ -56,6 +56,36 @@ export const SCENE_CAMERA_CONTROLS: ControlDef[] = [
 
 export const NEUTRAL_SCENE_CAMERA: SceneCameraValues = { zoom: 1, panX: 0, panY: 0, orbitX: 0, orbitY: 0 };
 
+// How the shot is STORED: the raw control values, keyed by control key, so the
+// panel is a straight map and the declared defaults stay the single source of
+// truth. It lives on the scene, not on a track — a camera is a property of the
+// SHOT, and two layers composited from two different camera positions cannot be
+// one. Measured before this moved: with the values on the track, Zoom 200% grew
+// the active layer's silhouette from 105x182 to 136x363 and left the other
+// layer byte-identical at 104x182.
+export type SceneCameraState = Record<string, number>;
+
+export const SCENE_CAMERA_DEFAULTS: SceneCameraState = Object.fromEntries(
+  SCENE_CAMERA_CONTROLS.map((def) => [def.key, Number(def.default)]),
+);
+
+// A saved scene may carry no camera at all (saved before the shot existed), a
+// stale key, or garbage. Rebuild it from the declared controls every time and
+// clamp to each control's own range: an out-of-range value is not hypothetical
+// here — a slider in this app once stored 3405 on a control whose max was 360.
+export function sanitizeSceneCamera(raw: unknown): SceneCameraState {
+  const out: SceneCameraState = { ...SCENE_CAMERA_DEFAULTS };
+  if (!raw || typeof raw !== 'object') return out;
+  for (const def of SCENE_CAMERA_CONTROLS) {
+    const v = Number((raw as Record<string, unknown>)[def.key]);
+    if (!Number.isFinite(v)) continue;
+    const min = def.min ?? -Infinity;
+    const max = def.max ?? Infinity;
+    out[def.key] = Math.min(max, Math.max(min, v));
+  }
+  return out;
+}
+
 const num = (v: unknown, fallback: number) => (Number.isFinite(Number(v)) ? Number(v) : fallback);
 
 // A track that has never been re-framed has none of these keys, so every read

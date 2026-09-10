@@ -1084,7 +1084,9 @@ export class SceneRenderer3D implements IRenderer {
       rt.camera,
       Number(track.values.perspective ?? 100),
       template.camera?.(track.values, ctx),
-      readSceneCamera(track.values),
+      // The scene's shot, not the track's: every layer is composited from the
+      // same camera position, or the stack is not one picture.
+      readSceneCamera(s.sceneCamera),
     );
     rt.group.position.set(track.transform.x, -track.transform.y, 0);
     rt.group.scale.setScalar(track.transform.scale);

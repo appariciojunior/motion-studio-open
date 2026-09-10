@@ -7,6 +7,7 @@ require('sucrase/register');
 const assert = require('node:assert/strict');
 const {
   readSceneCamera, isNeutralSceneCamera, frameSceneCamera, NEUTRAL_SCENE_CAMERA, SCENE_CAMERA_CONTROLS,
+  SCENE_CAMERA_DEFAULTS, sanitizeSceneCamera,
 } = require('../lib/sceneCamera');
 
 const near = (a, b, tol = 1e-7, what = '') => assert.ok(Math.abs(a - b) < tol, `${what} ${a} != ${b}`);
@@ -30,6 +31,22 @@ for (const def of SCENE_CAMERA_CONTROLS) fromDefaults[def.key] = def.default;
 assert.deepEqual(readSceneCamera(fromDefaults), NEUTRAL_SCENE_CAMERA);
 assert.equal(SCENE_CAMERA_CONTROLS.length, 5);
 assert.ok(SCENE_CAMERA_CONTROLS.every((d) => d.key.startsWith('_cam')), 'house keys stay prefixed');
+
+// ---- what gets stored on the scene, and survives a save ----
+// A project saved before the shot existed, or with a stale/garbage value, has to
+// open neutral. And the value must be a FRESH object every time: the autosave
+// decides a document changed by comparing these fields by identity.
+assert.deepEqual(sanitizeSceneCamera(undefined), SCENE_CAMERA_DEFAULTS);
+assert.deepEqual(sanitizeSceneCamera(null), SCENE_CAMERA_DEFAULTS);
+assert.deepEqual(sanitizeSceneCamera('nope'), SCENE_CAMERA_DEFAULTS);
+assert.deepEqual(sanitizeSceneCamera({}), SCENE_CAMERA_DEFAULTS);
+assert.ok(isNeutralSceneCamera(readSceneCamera(SCENE_CAMERA_DEFAULTS)));
+assert.notEqual(sanitizeSceneCamera(undefined), SCENE_CAMERA_DEFAULTS, 'must not hand out the shared default object');
+assert.deepEqual(sanitizeSceneCamera({ _camZoom: 5000, _camOrbitX: -999, _camPanX: 1e9 }),
+  { ...SCENE_CAMERA_DEFAULTS, _camZoom: 300, _camOrbitX: -80, _camPanX: 100 });
+assert.deepEqual(sanitizeSceneCamera({ _camZoom: NaN, _camPanY: 'x', _camOrbitY: null }), SCENE_CAMERA_DEFAULTS);
+assert.deepEqual(sanitizeSceneCamera({ _camZoom: 140, lixo: 7 }), { ...SCENE_CAMERA_DEFAULTS, _camZoom: 140 });
+assert.deepEqual(Object.keys(sanitizeSceneCamera({ lixo: 7 })), SCENE_CAMERA_CONTROLS.map((d) => d.key));
 
 // ---- the poses a template can hand us ----
 const POSES = [

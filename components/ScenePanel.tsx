@@ -22,6 +22,14 @@ export default function ScenePanel() {
   const activeTrackName = useSceneStore(
     (s) => s.tracks.find((t) => t.id === s.activeTrackId)?.name ?? '',
   );
+  const sceneCamera = useSceneStore((s) => s.sceneCamera);
+  const setSceneCameraValue = useSceneStore((s) => s.setSceneCameraValue);
+  const resetSceneCamera = useSceneStore((s) => s.resetSceneCamera);
+  // The renderer picks the webgl engine when ANY visible track is webgl, so the
+  // camera is live under exactly that condition — not under the active layer.
+  const sceneHasWebgl = useSceneStore((s) =>
+    s.tracks.some((t) => t.visible && getTemplate(t.templateId).meta.engine === 'webgl'),
+  );
 
   const template = getTemplate(activeTemplateId);
   const visibleControls = template.controls.filter((def) => controlVisible(def, values));
@@ -72,24 +80,6 @@ export default function ScenePanel() {
             </div>
           );
         })}
-        {/* The shot. Only webgl templates get a real camera — a 2D track is
-            composited through an orthographic view where none of these moves
-            would do anything, and a control that does nothing is worse than a
-            missing one. */}
-        {template.meta.engine === 'webgl' && (
-          <div className="ctl-section">
-            <div className="ctl-section-title">Camera</div>
-            <div className="ctl-hint">Moves the camera, not the cards — the same motion seen from somewhere else.</div>
-            {SCENE_CAMERA_CONTROLS.map((def) => (
-              <ControlRow
-                key={def.key}
-                def={def}
-                value={values[def.key] ?? def.default}
-                onChange={(val) => setValue(def.key, val)}
-              />
-            ))}
-          </div>
-        )}
         {advancedControls.length > 0 && (
           <div className="ctl-advanced">
             <button
@@ -108,6 +98,33 @@ export default function ScenePanel() {
       </div>
 
       <div className="hairline" />
+
+      {/* The shot: where the camera stands. Scene-level, so it sits OUTSIDE the
+          per-layer block above — two layers composited from two camera
+          positions are not one picture. Shown only when some visible layer is
+          webgl: a 2D track is composited through an orthographic view where
+          none of these moves would do anything, and a control that does
+          nothing is worse than a missing one. */}
+      {sceneHasWebgl && (
+        <>
+          <div className="section-head">
+            <span className="eyebrow">Camera</span>
+            <button type="button" className="badge" onClick={resetSceneCamera}>Reset</button>
+          </div>
+          <div className="section-body">
+            <div className="ctl-hint">Moves the camera, not the cards — the same motion seen from somewhere else.</div>
+            {SCENE_CAMERA_CONTROLS.map((def) => (
+              <ControlRow
+                key={def.key}
+                def={def}
+                value={sceneCamera[def.key] ?? def.default}
+                onChange={(val) => setSceneCameraValue(def.key, Number(val))}
+              />
+            ))}
+          </div>
+          <div className="hairline" />
+        </>
+      )}
 
       {/* layer compositing: opacity, blend, retiming, asset split. Only
           meaningful once a second layer exists. */}
