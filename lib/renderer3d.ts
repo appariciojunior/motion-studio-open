@@ -12,6 +12,7 @@ import { advanceVideoForExport, createCardVideo, isVideoSource, prepareVideoForS
 import { BASE_PATH, IS_STATIC_EXPORT } from '@/lib/paths';
 import type { IRenderer } from '@/lib/rendererTypes';
 import type { CameraPose, LayerTransform3D } from '@/lib/types';
+import { frameSceneCamera, isNeutralSceneCamera, readSceneCamera, type SceneCameraValues } from '@/lib/sceneCamera';
 import { resolveTrackTime, trackAssetIndices, type MotionTrack } from '@/lib/tracks';
 import type { SceneState } from '@/store/useSceneStore';
 import { advancedRasterSize, gradientRasterMaxEdge, gradientSignature, normalizeGradientSpec, paintGradientCanvas } from '@/lib/gradient';
@@ -171,7 +172,17 @@ export class SceneRenderer3D implements IRenderer {
   // Map the house `perspective` control (0–200) onto the camera: low values =
   // long lens (near-ortho), high = wide-angle. Camera distance keeps the z=0
   // plane at exact preview-pixel scale for any fov.
-  private updateTrackCamera(camera: THREE.PerspectiveCamera | THREE.OrthographicCamera, perspective: number, pose?: CameraPose) {
+  //
+  // `cam` is the house camera (lib/sceneCamera) — the user's re-framing, applied
+  // ON TOP of whatever pose the template asked for. Neutral values skip the
+  // composition entirely, so an untouched scene renders the same numbers it did
+  // before the shot controls existed.
+  private updateTrackCamera(
+    camera: THREE.PerspectiveCamera | THREE.OrthographicCamera,
+    perspective: number,
+    pose?: CameraPose,
+    cam?: SceneCameraValues,
+  ) {
     if (camera instanceof THREE.OrthographicCamera) {
       camera.left = -this.width / 2;
       camera.right = this.width / 2;
@@ -194,12 +205,26 @@ export class SceneRenderer3D implements IRenderer {
     // the frame at the SAME fov, so the keystone/perspective feel is
     // unchanged — a different move than widening the lens). Templates that
     // set an explicit `position` bypass this entirely, same as before.
-    const position = pose?.position ?? { x: 0, y: 0, z: D * (pose?.distance ?? 1) };
-    const target = pose?.target ?? { x: 0, y: 0, z: 0 };
+    let position = pose?.position ?? { x: 0, y: 0, z: D * (pose?.distance ?? 1) };
+    let target = pose?.target ?? { x: 0, y: 0, z: 0 };
+    // The far plane has to clear wherever the SHOT put the camera. A template's
+    // own `far` is authored for its own pose, so pulling the camera back past it
+    // would clip the whole scene away — that has already erased two presets
+    // once, silently, with every suite green. Only a re-framed shot pays for
+    // this: a neutral camera keeps the exact far plane it had before, so its
+    // depth precision is untouched.
+    let framedFar: number | undefined;
+    if (cam && !isNeutralSceneCamera(cam)) {
+      const framed = frameSceneCamera(position, target, cam, fov, camera.aspect);
+      position = framed.position;
+      target = framed.target;
+      framedFar = Math.hypot(position.x - target.x, position.y - target.y, position.z - target.z) * 8;
+    }
     camera.position.set(position.x, -position.y, position.z);
     camera.lookAt(target.x, -target.y, target.z);
     camera.near = pose?.near ?? 0.1;
     camera.far = pose?.far ?? Math.max(D * 8, Math.abs(position.z) * 8);
+    if (framedFar !== undefined) camera.far = Math.max(camera.far, framedFar);
     camera.updateProjectionMatrix();
   }
 
@@ -1055,7 +1080,12 @@ export class SceneRenderer3D implements IRenderer {
       // shape updates the mesh but leaves the path geometry at its default.
       cardAspect: cardAspectFor(template.meta, s.width, s.height, s.cardShape),
     };
-    this.updateTrackCamera(rt.camera, Number(track.values.perspective ?? 100), template.camera?.(track.values, ctx));
+    this.updateTrackCamera(
+      rt.camera,
+      Number(track.values.perspective ?? 100),
+      template.camera?.(track.values, ctx),
+      readSceneCamera(track.values),
+    );
     rt.group.position.set(track.transform.x, -track.transform.y, 0);
     rt.group.scale.setScalar(track.transform.scale);
     rt.group.rotation.set(0, 0, -(track.transform.rotation * Math.PI) / 180);

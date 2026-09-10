@@ -6,6 +6,7 @@ import { catalogTemplateList, getTemplate } from '@/templates';
 import { ControlRow, controlVisible } from './Controls';
 import EasingPanel from './EasingPanel';
 import TrackInspector from './TrackInspector';
+import { SCENE_CAMERA_CONTROLS } from '@/lib/sceneCamera';
 import type { ControlDef } from '@/lib/types';
 
 // Renders the SCENE + TIMING sections (no card wrapper — the page composes cards).
@@ -71,6 +72,24 @@ export default function ScenePanel() {
             </div>
           );
         })}
+        {/* The shot. Only webgl templates get a real camera — a 2D track is
+            composited through an orthographic view where none of these moves
+            would do anything, and a control that does nothing is worse than a
+            missing one. */}
+        {template.meta.engine === 'webgl' && (
+          <div className="ctl-section">
+            <div className="ctl-section-title">Camera</div>
+            <div className="ctl-hint">Moves the camera, not the cards — the same motion seen from somewhere else.</div>
+            {SCENE_CAMERA_CONTROLS.map((def) => (
+              <ControlRow
+                key={def.key}
+                def={def}
+                value={values[def.key] ?? def.default}
+                onChange={(val) => setValue(def.key, val)}
+              />
+            ))}
+          </div>
+        )}
         {advancedControls.length > 0 && (
           <div className="ctl-advanced">
             <button
