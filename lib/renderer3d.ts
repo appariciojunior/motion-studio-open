@@ -184,14 +184,35 @@ export class SceneRenderer3D implements IRenderer {
     cam?: SceneCameraValues,
   ) {
     if (camera instanceof THREE.OrthographicCamera) {
-      camera.left = -this.width / 2;
-      camera.right = this.width / 2;
-      camera.top = this.height / 2;
-      camera.bottom = -this.height / 2;
+      // A 2D track composited into a webgl scene renders through this. It has
+      // to honour the shot too, or a mixed stack ends up with its layers framed
+      // differently — the same defect, one renderer down, that moving the camera
+      // off the track already fixed for two webgl layers.
+      //
+      // A dolly on an orthographic camera is a frustum scale: halving the
+      // extent doubles the subject, so the divisor is the same `zoom` the
+      // perspective path applies to its distance. The pan is the very same lens
+      // shift. An ORBIT is dropped on purpose: there is no perspective here, so
+      // swinging this camera around a flat track would only squash it, which is
+      // a squash and not a point of view.
+      const frame = cam ? 1 / Math.max(0.05, cam.zoom) : 1;
+      camera.left = (-this.width / 2) * frame;
+      camera.right = (this.width / 2) * frame;
+      camera.top = (this.height / 2) * frame;
+      camera.bottom = (-this.height / 2) * frame;
       camera.near = -20000;
       camera.far = 20000;
       camera.position.set(0, 0, 1000);
       camera.lookAt(0, 0, 0);
+      const orthoShift = cam ? sceneLensShift(cam, this.width, this.height) : null;
+      if (orthoShift) {
+        camera.setViewOffset(
+          orthoShift.fullWidth, orthoShift.fullHeight,
+          orthoShift.x, orthoShift.y, orthoShift.width, orthoShift.height,
+        );
+      } else if (camera.view?.enabled) {
+        camera.clearViewOffset();
+      }
       camera.updateProjectionMatrix();
       return;
     }

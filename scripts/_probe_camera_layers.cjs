@@ -12,6 +12,9 @@ const CHROME = ['C:/Program Files/Google/Chrome/Application/chrome.exe',
   .find((p) => { try { return fs.existsSync(p); } catch { return false; } });
 const U = process.argv[2] || 'http://localhost:3123';
 const TPL = process.argv[3] || 'spinner-01';
+// argv[4] semeia a SEGUNDA camada com outro template — e o caso que importa e
+// o misto: um webgl e um 2D, que dentro do renderer3d usa camera ortografica.
+const TPL2 = process.argv[4] || TPL;
 
 const MEDIR = function () {
   const c = document.querySelector('canvas.stage-canvas');
@@ -45,14 +48,14 @@ const MEDIR = function () {
   return { esquerda: meia(0, meio), direita: meia(meio, c.width) };
 };
 
-const semear = function (templateId) {
-  const track = (id, x) => ({ id, templateId, visible: true, opacity: 1, blend: 'normal',
+const semear = function (templateId, templateId2) {
+  const track = (id, x, tpl) => ({ id, templateId: tpl, visible: true, opacity: 1, blend: 'normal',
     inFrame: 0, outFrame: 1e9, offset: 0, timeScale: 1, fade: 0, assetIds: [],
     name: 'L' + id, transform: { x, y: 0, scale: 0.55, rotation: 0 } });
   const scene = {
     activeTemplateId: templateId,
     activeTrackId: 't0',
-    tracks: [track('t0', -190), track('t1', 190)],
+    tracks: [track('t0', -190, templateId), track('t1', 190, templateId2)],
     width: 810, height: 1080, fps: 30, duration: 8,
     background: { source: 'color', color: '#1a1a1a', gradient: false, color2: '#1a1a1a', imageUrl: null, blur: 28 },
     effects: [],
@@ -111,7 +114,7 @@ const lerStore = function () {
   const p = await b.newPage();
   p.on('pageerror', (e) => console.log('  [pageerror]', String(e).slice(0, 200)));
   await p.goto(U + '/library', { waitUntil: 'domcontentloaded', timeout: 180000 });
-  await p.evaluate(semear, TPL);
+  await p.evaluate(semear, TPL, TPL2);
   await p.goto(U + '/library', { waitUntil: 'networkidle2', timeout: 180000 });
   await p.evaluate(() => {
     document.querySelectorAll('[role=dialog], .modal-backdrop').forEach((el) => { el.style.display = 'none'; });
