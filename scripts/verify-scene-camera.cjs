@@ -167,6 +167,24 @@ const P = { x: 0, y: 0, z: 1000 }, T = { x: 0, y: 0, z: 0 };
 }
 
 
+
+// ---- the three lists that must all know about a scene field ----
+// A field on SceneState has to be enumerated in three places: the persisted
+// partial, the autosave document keys, and the undo snapshot. Missing one is
+// silent, and it bit exactly once here: `sceneCamera` was in the first two and
+// not in the third, so every undo reset the camera to neutral — `apply` restores
+// through `hydrate`, which REBUILDS the field from the partial it is handed.
+//
+// A text tripwire rather than a semantic test, because none of the three lists
+// is exported. It cannot prove the lists are right; it does refuse to let the
+// next person add the field to two of them.
+for (const file of ['lib/scenePersist.ts', 'store/useHistoryStore.ts']) {
+  const src = require('fs').readFileSync(path.join(root, file), 'utf8');
+  assert.ok(src.includes("'sceneCamera'") || src.includes('sceneCamera:'),
+    `${file} does not mention sceneCamera — a scene field left out of one of these lists is lost on save or on undo`);
+  cases++;
+}
+
 // ---- the duplicate gate, against the REAL catalogue ----
 // The rule chosen for this feature: never two knobs for one move. So a house
 // control may only appear where no visible layer declares the same move. This

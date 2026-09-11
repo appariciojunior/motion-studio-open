@@ -69,7 +69,14 @@ export const NEUTRAL_SCENE_CAMERA: SceneCameraValues = { zoom: 1, panX: 0, panY:
 //
 //   Zoom     duplicated in 67 (`zoom` 35, `distance` 32)   -> new in 15
 //   Pan X/Y  duplicated in 61 (`offset` xypad 50, `offsetX/Y` 11) -> new in 21
-//   Orbit Y  duplicated in 47 (`ringYaw` 20, `tilt` 16, `rotationY` 11)
+//   Orbit Y  duplicated in 31 (`ringYaw` 20, `rotationY` 11)
+//
+// `tilt` is NOT on that list, and the reason is worth keeping: it looked like a
+// duplicate because ONE preset (ticker-02) labels it "Rotation Y". In the other
+// fifteen that declare it — Deck 04, Box, Card Tunnel, Surface — it is a ROLL or
+// a lean (box.ts: "rolls the whole prism in the view plane"; deck.ts applies it
+// as `rotation`). Gating on the label hid a control nobody duplicated and zeroed
+// a value the person had set. Read what a key DOES, not how it is labelled.
 //   Orbit X  duplicated in 31 (`tiltX` 20, `rotationX` 11, plus the 9 coil
 //            presets whose `cameraView` pills ARE the elevation: side/down)
 //
@@ -90,7 +97,7 @@ export const SCENE_CAMERA_DUPLICATES: Record<string, string[]> = {
   _camPanX: ['offset', 'offsetX'],
   _camPanY: ['offset', 'offsetY'],
   _camOrbitX: ['rotationX', 'tiltX', 'cameraView'],
-  _camOrbitY: ['rotationY', 'ringYaw', 'tilt'],
+  _camOrbitY: ['rotationY', 'ringYaw'],
 };
 
 interface HasControls { controls: ControlDef[] }
