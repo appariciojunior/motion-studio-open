@@ -8,6 +8,7 @@ import { resolveEasing } from '@/lib/easing';
 import { assetIndexForSlot, clamp } from '@/lib/motion';
 import { resolveTrackTime, trackAssetIndices, type MotionTrack } from '@/lib/tracks';
 import { cardAspectFor, coverCrop, cropKey, type CropFocus } from '@/lib/crop';
+import { gateSceneCamera, readSceneCamera, sceneCameraFilterRect, sceneCameraPlanar } from '@/lib/sceneCamera';
 import { advanceVideoForExport, createCardVideo, isVideoSource, prepareVideoForSequentialExport, useVideoProxies, whenVideoReady } from '@/lib/videoTexture';
 import { BASE_PATH, IS_STATIC_EXPORT } from '@/lib/paths';
 import { advancedRasterSize, gradientRasterMaxEdge, gradientSignature, normalizeGradientSpec, paintGradientCanvas } from '@/lib/gradient';
@@ -526,6 +527,21 @@ export class SceneRenderer {
     return this.content;
   }
 
+  // The shot the scene asks for, gated by the same rule the panel uses so a
+  // hidden control is inert. Memoised on WHICH templates are visible, because
+  // that is all the gate depends on.
+  private camGateKey = '';
+  private camGateTemplates: ReturnType<typeof getTemplate>[] = [];
+  private sceneCameraFor(s: SceneState) {
+    const visible = s.tracks.filter((t) => t.visible);
+    const key = visible.map((t) => t.templateId).join(',');
+    if (key !== this.camGateKey) {
+      this.camGateKey = key;
+      this.camGateTemplates = visible.map((t) => getTemplate(t.templateId));
+    }
+    return gateSceneCamera(readSceneCamera(s.sceneCamera), this.camGateTemplates);
+  }
+
   private syncEffects(frame: number) {
     const s = useSceneStore.getState();
     const active = s.effects.filter((e) => e.enabled);
@@ -565,7 +581,11 @@ export class SceneRenderer {
 
     // A area de filtro acompanha o canvas, e e reavaliada todo frame porque uma
     // camada pode ter acabado de nascer.
-    const area = new PIXI.Rectangle(-s.width / 2, -s.height / 2, s.width, s.height);
+    // In the artwork container's own coordinates, which the shot moves —
+    // `filterArea` is local, so a zoomed scene needs the inverse of the shot or
+    // an artwork-scope effect covers a fraction of the frame.
+    const rect = sceneCameraFilterRect(this.sceneCameraFor(s), s.width, s.height);
+    const area = new PIXI.Rectangle(rect.x, rect.y, rect.width, rect.height);
     if (this.motion.filters && (this.motion.filters as PIXI.Filter[]).length) this.motion.filterArea = area;
     for (const rt of this.trackRTs.values()) {
       if (rt.container.filters && (rt.container.filters as PIXI.Filter[]).length) rt.container.filterArea = area;
@@ -733,6 +753,19 @@ export class SceneRenderer {
     this.drawOverlays(s);
 
     const totalFrames = Math.max(1, Math.round(s.duration * s.fps));
+
+    // ---- the shot ----
+    // In 2D a dolly IS a scale and a pan IS a translation, so the whole camera
+    // lands on the artwork container. Deliberately not on `content`: the
+    // background stays put, the same way the webgl path frames the 3D content
+    // and leaves its background as a full-frame pass behind it.
+    //
+     // The gate is the panel's gate, so a control the panel hides is inert here
+    // too. Orbit never arrives in a 2D-only scene — `sceneCameraControlsFor`
+    // drops it where there is no perspective to swing.
+    const shot = sceneCameraPlanar(this.sceneCameraFor(s), s.width, s.height);
+    this.motion.position.set(shot.x, shot.y);
+    this.motion.scale.set(shot.scale);
 
     // Track the featured (front-most) card so a 'card' background can reflect
     // it. Later tracks draw on top, so their cards win ties — the background

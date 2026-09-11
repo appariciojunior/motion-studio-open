@@ -261,16 +261,18 @@ export class SceneRenderer3D implements IRenderer {
 
   // The gate depends only on WHICH templates are visible, so it is recomputed
   // when that set changes and not once per track per frame.
+  //
+  // EVERY visible layer counts, not only the webgl ones: the panel asks the
+  // same question of the same set, and if the two disagreed a control could be
+  // hidden in the panel while still steering the camera here.
   private camGateKey = '';
   private camGateTemplates: Template[] = [];
   private sceneCameraFor(s: SceneState): SceneCameraValues {
-    const key = s.tracks
-      .filter((t) => t.visible && getTemplate(t.templateId).meta.engine === 'webgl')
-      .map((t) => t.templateId)
-      .join(',');
+    const visible = s.tracks.filter((t) => t.visible);
+    const key = visible.map((t) => t.templateId).join(',');
     if (key !== this.camGateKey) {
       this.camGateKey = key;
-      this.camGateTemplates = key ? key.split(',').map((id) => getTemplate(id)) : [];
+      this.camGateTemplates = visible.map((t) => getTemplate(t.templateId));
     }
     return gateSceneCamera(readSceneCamera(s.sceneCamera), this.camGateTemplates);
   }

@@ -64,12 +64,27 @@ const MEDIR = function () {
     }
   }
   if (!n) return { arte: 0, fundo: fundo.join(',') };
+  // Perfil por coluna e por linha: a soma do desvio em relacao ao fundo. Uma
+  // TRANSLACAO aparece como deslocamento do perfil, e a correlacao mede isso em
+  // pixels — o centroide nao mede, porque com a arte cobrindo o quadro o que
+  // sai por uma borda move o centroide para o lado CONTRARIO ao do pan.
+  const perfilX = new Array(c.width).fill(0);
+  const perfilY = new Array(c.height).fill(0);
+  for (let y = 0; y < c.height; y++) {
+    for (let x = 0; x < c.width; x++) {
+      const i = (y * c.width + x) * 4;
+      const dif = Math.abs(d[i] - fundo[0]) + Math.abs(d[i + 1] - fundo[1]) + Math.abs(d[i + 2] - fundo[2]);
+      perfilX[x] += dif;
+      perfilY[y] += dif;
+    }
+  }
   return {
     w: c.width, h: c.height, fundo: fundo.join(','),
     arte: n,
     cx: +(sx / n).toFixed(1), cy: +(sy / n).toFixed(1),
     caixa: `${x0}..${x1} x ${y0}..${y1}`,
     cw: x1 - x0 + 1, ch: y1 - y0 + 1,
+    perfilX, perfilY,
   };
 };
 
@@ -126,6 +141,30 @@ const digitar = async function (rotulo, valor) {
   return ((row.querySelector('.sval') || {}).textContent || '?').trim();
 };
 
+// EFEITO=Halftone adiciona um efeito antes de medir. Serve para a interacao de
+// risco do caminho 2D: `filterArea` do Pixi e LOCAL, entao um palco com zoom
+// precisa do inverso do shot — sem isso o Pixi recorta a arte no retangulo
+// errado e a caixa envolvente encolhe.
+const adicionarEfeito = async function (nome) {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const sel = Array.from(document.querySelectorAll('select'))
+    .find((x) => Array.from(x.options).some((o) => o.textContent.trim() === nome));
+  if (!sel) return 'sem select de efeito';
+  const opt = Array.from(sel.options).find((o) => o.textContent.trim() === nome);
+  Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(sel, opt.value);
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+  await sleep(200);
+  const add = Array.from(document.querySelectorAll('button')).find((b) => b.textContent.trim() === 'Add');
+  if (!add) return 'sem botao Add';
+  add.click();
+  await sleep(1800);
+  const card = Array.from(document.querySelectorAll('.effect-card'))
+    .find((c) => ((c.querySelector('.effect-title') || {}).textContent || '').trim() === nome);
+  if (!card) return 'card do efeito nao apareceu';
+  const escopo = card.querySelector('.effect-scope-row select');
+  return 'escopo ' + (escopo ? escopo.value : '?');
+};
+
 // Canal de leitura que nao mente: o autosave do projeto.
 const lerStore = function () {
   try {
@@ -134,8 +173,32 @@ const lerStore = function () {
   } catch (e) { return String(e); }
 };
 
+// Correlacao 1D por soma de diferencas absolutas: devolve o deslocamento (em
+// pixels) que melhor alinha `b` sobre `a`. Varre ate 45% do eixo, o suficiente
+// para um pan de 30% e barato o bastante para rodar por caso.
+function melhorLag(a, b) {
+  if (!a || !b || a.length !== b.length) return null;
+  const n = a.length;
+  const max = Math.round(n * 0.45);
+  let melhor = 0, menor = Infinity;
+  for (let lag = -max; lag <= max; lag++) {
+    let soma = 0, contados = 0;
+    for (let i = 0; i < n; i++) {
+      const j = i + lag;
+      if (j < 0 || j >= n) continue;
+      soma += Math.abs(a[i] - b[j]);
+      contados++;
+    }
+    if (!contados) continue;
+    const media = soma / contados;
+    if (media < menor) { menor = media; melhor = lag; }
+  }
+  return melhor;
+}
+
 (async () => {
   for (const preset of PRESETS) {
+    let base = null;
     console.log('');
     console.log('=== ' + preset.nome + ' ===');
     const b = await puppeteer.launch({
@@ -156,6 +219,7 @@ const lerStore = function () {
     ).then(() => true).catch(() => false);
     if (!pintou) { console.log('  palco nao pintou'); await b.close(); continue; }
     console.log('  secao Camera: ' + JSON.stringify(await p.evaluate(secaoCamera)));
+    if (process.env.EFEITO) console.log('  efeito       ' + await p.evaluate(adicionarEfeito, process.env.EFEITO));
     // Pausa: todas as leituras tem de sair do MESMO frame.
     await p.evaluate(async () => {
       const btn = document.querySelector('.play-btn');
@@ -169,7 +233,12 @@ const lerStore = function () {
         }
       }
       const m = await p.evaluate(MEDIR);
-      console.log('  ' + caso.nome.padEnd(15) + JSON.stringify(m));
+      if (!base) base = m;
+      const { perfilX, perfilY, ...resumo } = m;
+      // Deslocamento que melhor alinha este quadro com o neutro, em pixels.
+      resumo.lagX = melhorLag(base.perfilX, perfilX);
+      resumo.lagY = melhorLag(base.perfilY, perfilY);
+      console.log('  ' + caso.nome.padEnd(15) + JSON.stringify(resumo));
       if (caso.vals && Object.keys(caso.vals).length) console.log('    store: ' + JSON.stringify(await p.evaluate(lerStore)));
     }
     await b.close();

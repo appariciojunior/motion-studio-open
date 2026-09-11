@@ -25,19 +25,19 @@ export default function ScenePanel() {
   const sceneCamera = useSceneStore((s) => s.sceneCamera);
   const setSceneCameraValue = useSceneStore((s) => s.setSceneCameraValue);
   const resetSceneCamera = useSceneStore((s) => s.resetSceneCamera);
-  // The renderer picks the webgl engine when ANY visible track is webgl, so the
-  // camera is live under exactly that condition — not under the active layer.
-  const webglTemplateIds = useSceneStore((s) => s.tracks
-    .filter((t) => t.visible && getTemplate(t.templateId).meta.engine === 'webgl')
+  // Every VISIBLE layer decides, whatever engine draws it: both renderers apply
+  // the shot now, so both have to be asked whether they already offer the move.
+  const visibleTemplateIds = useSceneStore((s) => s.tracks
+    .filter((t) => t.visible)
     .map((t) => t.templateId)
     .join(','));
   // Only the moves no visible layer already offers: a second knob for the same
   // move makes the panel fiddlier, not more capable. See lib/sceneCamera.
   const cameraControls = useMemo(
-    () => (webglTemplateIds
-      ? sceneCameraControlsFor(webglTemplateIds.split(',').map((id) => getTemplate(id)))
+    () => (visibleTemplateIds
+      ? sceneCameraControlsFor(visibleTemplateIds.split(',').map((id) => getTemplate(id)))
       : []),
-    [webglTemplateIds],
+    [visibleTemplateIds],
   );
 
   const template = getTemplate(activeTemplateId);
@@ -112,11 +112,12 @@ export default function ScenePanel() {
           per-layer block above — two layers composited from two camera
           positions are not one picture.
 
-          What shows up here is only what is NOT already on the panel: a 2D
-          track has no camera to move, and 67 of the 82 webgl presets declare
-          their own zoom, 61 their own offset, 47 their own yaw. A second knob
-          for the same move is what makes a panel feel fiddly instead of
-          capable, so the section can come out empty and disappear. */}
+          What shows up here is only what is NOT already on the panel: 67 of the
+          82 webgl presets declare their own zoom, 61 their own offset, 31 their
+          own yaw, and a 2D scene is offered no orbit because there is no
+          perspective to swing. A second knob for the same move is what makes a
+          panel feel fiddly instead of capable, so the section can come out
+          empty and disappear. */}
       {cameraControls.length > 0 && (
         <>
           <div className="section-head">

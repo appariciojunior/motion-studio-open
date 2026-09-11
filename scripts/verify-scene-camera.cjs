@@ -23,6 +23,7 @@ const {
   readSceneCamera, isNeutralSceneCamera, frameSceneCamera, NEUTRAL_SCENE_CAMERA, SCENE_CAMERA_CONTROLS,
   SCENE_CAMERA_DEFAULTS, sanitizeSceneCamera, sceneLensShift,
   SCENE_CAMERA_DUPLICATES, sceneCameraControlsFor, gateSceneCamera,
+  sceneCameraPlanar, sceneCameraFilterRect,
 } = require('../lib/sceneCamera');
 
 const near = (a, b, tol = 1e-7, what = '') => assert.ok(Math.abs(a - b) < tol, `${what} ${a} != ${b}`);
@@ -185,6 +186,69 @@ for (const file of ['lib/scenePersist.ts', 'store/useHistoryStore.ts']) {
   cases++;
 }
 
+
+// ---- the same shot in the 2D compositor ----
+// A dolly is a scale and a pan is a translation there, and both have to land on
+// the same picture the webgl path gives on the z=0 plane. The numbers below are
+// the contract the Pixi renderer assigns straight to its artwork container.
+assert.deepEqual(sceneCameraPlanar(cam(), 810, 1080), { scale: 1, x: 405, y: 540 });
+assert.deepEqual(sceneCameraPlanar(cam({ zoom: 2 }), 810, 1080), { scale: 2, x: 405, y: 540 });
+// Pan moves the IMAGE, so a positive value moves the container the same way —
+// and 100% is one frame, the same unit the lens shift uses.
+assert.deepEqual(sceneCameraPlanar(cam({ panX: 0.5 }), 810, 1080), { scale: 1, x: 810, y: 540 });
+assert.deepEqual(sceneCameraPlanar(cam({ panY: -0.25 }), 810, 1080), { scale: 1, x: 405, y: 270 });
+// The 2D path ignores orbit outright, because the gate never lets one through.
+assert.deepEqual(sceneCameraPlanar(cam({ orbitX: 40, orbitY: 70 }), 810, 1080),
+  sceneCameraPlanar(cam(), 810, 1080));
+
+// `filterArea` is LOCAL, so the rect has to be the canvas seen through the
+// inverse of the shot. Without this an artwork-scope effect at 200% covers a
+// quarter of the frame.
+assert.deepEqual(sceneCameraFilterRect(cam(), 810, 1080), { x: -405, y: -540, width: 810, height: 1080 });
+assert.deepEqual(sceneCameraFilterRect(cam({ zoom: 2 }), 810, 1080),
+  { x: -202.5, y: -270, width: 405, height: 540 });
+{
+  // A panned scene: the rect slides against the pan, so it keeps covering the
+  // canvas and not the place the artwork used to be.
+  const r = sceneCameraFilterRect(cam({ panX: 0.5 }), 810, 1080);
+  assert.deepEqual(r, { x: -810, y: -540, width: 810, height: 1080 });
+  // The rect, mapped back out through the shot, is the canvas again — the
+  // property that actually matters, checked over a sweep.
+  for (const zoom of [0.25, 1, 1.5, 3]) {
+    for (const panX of [-1, -0.3, 0, 0.5, 1]) {
+      for (const panY of [-0.5, 0, 0.75]) {
+        const c = cam({ zoom, panX, panY });
+        const rc = sceneCameraFilterRect(c, 810, 1080);
+        const p = sceneCameraPlanar(c, 810, 1080);
+        near(p.x + rc.x * p.scale, 0, 1e-9, 'rect maps back to the canvas left');
+        near(p.y + rc.y * p.scale, 0, 1e-9, 'rect maps back to the canvas top');
+        near(rc.width * p.scale, 810, 1e-9, 'rect still spans the canvas width');
+        near(rc.height * p.scale, 1080, 1e-9, 'rect still spans the canvas height');
+        cases++;
+      }
+    }
+  }
+}
+
+// ---- orbit is offered only where there is perspective ----
+{
+  const flat = { controls: [], meta: { engine: 'pixi' } };
+  const spatial = { controls: [], meta: { engine: 'webgl' } };
+  const flatKeys = sceneCameraControlsFor([flat]).map((d) => d.key);
+  assert.deepEqual(flatKeys, ['_camZoom', '_camPanX', '_camPanY'], '2D gets no orbit');
+  assert.equal(sceneCameraControlsFor([spatial]).length, 5);
+  assert.equal(sceneCameraControlsFor([flat, spatial]).length, 5, 'one 3D layer brings the orbit back');
+  // And the values follow: an orbit stored while a webgl layer was visible goes
+  // inert in a scene that has none.
+  const loud = { zoom: 2, panX: 0.5, panY: 0, orbitX: 40, orbitY: 60 };
+  assert.deepEqual(gateSceneCamera(loud, [flat]), { zoom: 2, panX: 0.5, panY: 0, orbitX: 0, orbitY: 0 });
+  assert.deepEqual(gateSceneCamera(loud, [flat, spatial]), loud);
+  // A template with no controls at all still gets no orbit when it is 2D, which
+  // is the case that would otherwise slip through on a default `meta`.
+  assert.deepEqual(sceneCameraControlsFor([{ controls: [] }]).map((d) => d.key), ['_camZoom', '_camPanX', '_camPanY']);
+  cases += 7;
+}
+
 // ---- the duplicate gate, against the REAL catalogue ----
 // The rule chosen for this feature: never two knobs for one move. So a house
 // control may only appear where no visible layer declares the same move. This
@@ -230,7 +294,11 @@ for (const t of webgl) {
 }
 
 // 4. No layers at all: nothing on offer, and every value inert.
-assert.deepEqual(sceneCameraControlsFor([]), SCENE_CAMERA_CONTROLS, 'with no template nothing is duplicated');
+// No layers at all: nothing duplicates anything, and there is no perspective
+// either, so what comes back is the planar three. Moot in practice — the panel
+// does not ask when the scene is empty, and an empty scene draws nothing — but
+// pinned here so the empty case can never silently become 'everything'.
+assert.deepEqual(sceneCameraControlsFor([]).map((d) => d.key), ['_camZoom', '_camPanX', '_camPanY']);
 // 5. Stacked layers: one layer offering a move is enough to hide it, because
 //    there is one camera for the scene.
 {

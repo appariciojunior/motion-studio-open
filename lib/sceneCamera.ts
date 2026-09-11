@@ -70,6 +70,8 @@ export const NEUTRAL_SCENE_CAMERA: SceneCameraValues = { zoom: 1, panX: 0, panY:
 //   Zoom     duplicated in 67 (`zoom` 35, `distance` 32)   -> new in 15
 //   Pan X/Y  duplicated in 61 (`offset` xypad 50, `offsetX/Y` 11) -> new in 21
 //   Orbit Y  duplicated in 31 (`ringYaw` 20, `rotationY` 11)
+//   Orbit X  duplicated in 31 (`tiltX` 20, `rotationX` 11, plus the 9 coil
+//            presets whose `cameraView` pills ARE the elevation: side/down)
 //
 // `tilt` is NOT on that list, and the reason is worth keeping: it looked like a
 // duplicate because ONE preset (ticker-02) labels it "Rotation Y". In the other
@@ -77,8 +79,6 @@ export const NEUTRAL_SCENE_CAMERA: SceneCameraValues = { zoom: 1, panX: 0, panY:
 // a lean (box.ts: "rolls the whole prism in the view plane"; deck.ts applies it
 // as `rotation`). Gating on the label hid a control nobody duplicated and zeroed
 // a value the person had set. Read what a key DOES, not how it is labelled.
-//   Orbit X  duplicated in 31 (`tiltX` 20, `rotationX` 11, plus the 9 coil
-//            presets whose `cameraView` pills ARE the elevation: side/down)
 //
 // So the house camera shows a control only where no visible layer already
 // offers that move. Nine presets — the six Poster and three Stickers — declare
@@ -100,16 +100,25 @@ export const SCENE_CAMERA_DUPLICATES: Record<string, string[]> = {
   _camOrbitY: ['rotationY', 'ringYaw'],
 };
 
-interface HasControls { controls: ControlDef[] }
+// Just enough of a Template to decide: its controls and which engine draws it.
+interface HasControls { controls: ControlDef[]; meta?: { engine?: 'pixi' | 'webgl' } }
+
+// Which moves a scene of these layers can actually make. Orbit needs
+// perspective, so it is offered only when some layer is drawn in 3D: the 2D
+// compositor has no depth to swing around, and turning a flat track would
+// squash it rather than show another side of it.
+const ORBIT_KEYS = ['_camOrbitX', '_camOrbitY'];
 
 // The controls to show for a given set of layers. Empty means the whole
 // section goes away — every move on offer is already on the panel.
 export function sceneCameraControlsFor(templates: HasControls[]): ControlDef[] {
   const declared = new Set<string>();
   for (const t of templates) for (const c of t.controls) declared.add(c.key);
-  return SCENE_CAMERA_CONTROLS.filter(
-    (def) => !(SCENE_CAMERA_DUPLICATES[def.key] ?? []).some((key) => declared.has(key)),
-  );
+  const spatial = templates.some((t) => t.meta?.engine === 'webgl');
+  return SCENE_CAMERA_CONTROLS.filter((def) => {
+    if (!spatial && ORBIT_KEYS.includes(def.key)) return false;
+    return !(SCENE_CAMERA_DUPLICATES[def.key] ?? []).some((key) => declared.has(key));
+  });
 }
 
 // The same decision, applied to the VALUES the renderer reads. A control that
@@ -220,6 +229,45 @@ export function frameSceneCamera(
   return {
     position: { x: target.x + vx, y: target.y + vy, z: target.z + vz },
     target: { x: target.x, y: target.y, z: target.z },
+  };
+}
+
+// The same shot for the 2D compositor, where there is no projection to shift
+// and no distance to travel: a dolly is a scale about the canvas centre and a
+// pan is a translation. The numbers come out identical to what the webgl path
+// produces on the z=0 plane, which is the point — one control, one meaning, two
+// engines.
+//
+// `x`/`y` are in canvas pixels and already include the centre, so the caller
+// assigns them straight to the artwork container that sits at that centre.
+export function sceneCameraPlanar(
+  cam: SceneCameraValues,
+  width: number,
+  height: number,
+): { scale: number; x: number; y: number } {
+  return {
+    scale: cam.zoom,
+    x: width / 2 + cam.panX * width,
+    y: height / 2 + cam.panY * height,
+  };
+}
+
+// The canvas rectangle, expressed in the artwork container's OWN coordinates
+// after the shot moved it. Pixi wants `filterArea` in local space, so a scene
+// that has been zoomed or panned needs the inverse of the shot applied to the
+// rect — without this, an artwork-scope effect at 200% covers a quarter of the
+// frame and the person reads it as the effect being broken.
+export function sceneCameraFilterRect(
+  cam: SceneCameraValues,
+  width: number,
+  height: number,
+): { x: number; y: number; width: number; height: number } {
+  const z = Math.max(0.05, cam.zoom);
+  return {
+    x: (-width / 2 - cam.panX * width) / z,
+    y: (-height / 2 - cam.panY * height) / z,
+    width: width / z,
+    height: height / z,
   };
 }
 
