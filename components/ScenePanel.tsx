@@ -7,8 +7,9 @@ import { ControlRow, controlVisible } from './Controls';
 import EasingPanel from './EasingPanel';
 import TrackInspector from './TrackInspector';
 import {
-  MAX_CAMERA_STOPS, SCENE_CAMERA_HOLD, SCENE_CAMERA_STOP_ZOOM,
-  cameraStopKeys, readSceneCameraPath, sceneCameraControlsFor,
+  MAX_CAMERA_STOPS, SCENE_CAMERA_STOP_ZOOM,
+  cameraStopKeys, isNeutralSceneCamera, readSceneCamera, readSceneCameraPath,
+  sceneCameraControlsFor,
 } from '@/lib/sceneCamera';
 import CameraPathPad from './CameraPathPad';
 import type { ControlDef } from '@/lib/types';
@@ -38,9 +39,19 @@ export default function ScenePanel() {
   // Only the moves no visible layer already offers: a second knob for the same
   // move makes the panel fiddlier, not more capable. See lib/sceneCamera.
   const patchSceneCamera = useSceneStore((s) => s.patchSceneCamera);
-  // The path: the Shot is stop 1, and each of these is another one. Hold only
-  // means something once there is a second stop to sit at.
+  // The path: the Shot is stop 1, and each of these is another one.
   const path = readSceneCameraPath(sceneCamera);
+  // Does this scene HAVE a camera? A template that has never been given one
+  // shows no camera controls at all — the section collapses to the one row
+  // that offers to add it. Standard presets are finished work: growing a block
+  // of camera controls under every one of them changes how they read, and the
+  // camera is something you reach for when you are building a compose, not
+  // something every scene is carrying.
+  const hasCamera = !isNeutralSceneCamera(readSceneCamera(sceneCamera)) || path.stops.length > 0;
+  // Adding one starts it where the shot already is, so the picture does not
+  // jump the moment you ask for a camera. The first stop is what makes it move,
+  // and that is a click on the pad.
+  const addCamera = () => patchSceneCamera({ _camZoom: 100, _camPanX: 0, _camPanY: 0 });
   // Which stop the row under the pad edits. -1 is the Shot, which the pad
   // draws as an anchor: where the camera starts is said in Shot above.
   const [selectedStop, setSelectedStop] = useState(-1);
@@ -156,9 +167,16 @@ export default function ScenePanel() {
       <>
           <div className="section-head">
             <span className="eyebrow">Camera</span>
-            <button type="button" className="badge" onClick={resetSceneCamera}>Reset</button>
+            <button type="button" className="badge" onClick={hasCamera ? resetSceneCamera : addCamera}>
+              {hasCamera ? "Remove" : "Add"}
+            </button>
           </div>
-          {cameraControls.length > 0 && (
+          {!hasCamera && (
+            <div className="section-body">
+              <div className="ctl-hint">No camera on this scene. Add one to film it from somewhere else, or to travel across it.</div>
+            </div>
+          )}
+          {hasCamera && cameraControls.length > 0 && (
           <div className="section-body">
             <div className="ctl-section-title">Shot</div>
             <div className="ctl-hint">Moves the camera, not the cards — the same motion seen from somewhere else.</div>
@@ -175,9 +193,10 @@ export default function ScenePanel() {
           {/* Where it GOES. Separate block because it is a different question
               from where it stands, and because it is the half that makes this a
               camera rather than a crop. */}
+          {hasCamera && (
           <div className="section-body">
             <div className="ctl-section-title">Move</div>
-            <div className="ctl-hint">The camera sits at each stop, then travels to the next.</div>
+            <div className="ctl-hint">The camera travels from stop to stop, slowing into each one and leaving again.</div>
             <CameraPathPad
               shot={{
                 x: Number(sceneCamera._camPanX) || 0,
@@ -209,14 +228,8 @@ export default function ScenePanel() {
                 )}
               </>
             )}
-            {path.stops.length > 0 && (
-              <ControlRow
-                def={SCENE_CAMERA_HOLD}
-                value={sceneCamera[SCENE_CAMERA_HOLD.key] ?? SCENE_CAMERA_HOLD.default}
-                onChange={(val) => setSceneCameraValue(SCENE_CAMERA_HOLD.key, Number(val))}
-              />
-            )}
           </div>
+          )}
           <div className="hairline" />
       </>
 

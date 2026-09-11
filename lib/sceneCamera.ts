@@ -98,18 +98,21 @@ export const SCENE_CAMERA_STOP_ZOOM: ControlDef = {
   key: '_camStopZoom', label: 'Zoom', type: 'slider', min: 25, max: 300, step: 1, default: 100, unit: '%',
   description: 'How close the camera is at this stop. This is where a push in or a pull back gets said.',
 };
-export const SCENE_CAMERA_HOLD: ControlDef = {
-  key: '_camHold', label: 'Settle', type: 'slider', min: 0, max: 90, step: 1, default: 50, unit: '%',
-  // Not called Hold: the Frames wall already has a control by that name, and
-  // two rows labelled Hold in one panel is a puzzle rather than a control.
-  description: 'Share of each leg the camera spends settled at the stop before travelling to the next one.',
-};
+// There is no Settle control, and that is a measured decision rather than an
+// omission. It used to exist: a share of each leg, taken off the front, that
+// the camera spent parked at the stop, defaulting to half. Tracking the
+// reference clip frame by frame says a camera does not do that. Across its 209
+// frames NOT ONE sits still: the slowest is 0.58 px/frame against a peak of
+// 12.77, so the camera decelerates to a crawl and leaves again, and the "stop"
+// is a minimum of speed rather than a pause. A flat half-leg of frozen frames
+// is the one thing in that clip that never happens, and it is what made ours
+// read as stuttering instead of gliding.
 
-// At most this many stops after the first. Not a technical ceiling: past four
-// legs a clip of a few seconds gives each one under a second, and what you get
-// is a camera that never settles anywhere. A tour of a dozen is a different
-// tool than this one.
-export const MAX_CAMERA_STOPS = 4;
+// At most this many stops after the first. Measured, not guessed: the 7-second
+// reference clip settles at six, so a ceiling of four could not have expressed
+// it. Eight leaves that much room again and still keeps a short clip from being
+// chopped into legs too brief to read.
+export const MAX_CAMERA_STOPS = 8;
 
 export interface CameraStop {
   x: number;      // where the frame sits, per-cent of a frame (the unit panX uses)
@@ -119,10 +122,9 @@ export interface CameraStop {
 
 export interface SceneCameraPath {
   stops: CameraStop[];  // AFTER the first: the Shot itself is stop 1
-  hold: number;         // 0..0.9 of each leg
 }
 
-export const NO_SCENE_CAMERA_PATH: SceneCameraPath = { stops: [], hold: 0 };
+export const NO_SCENE_CAMERA_PATH: SceneCameraPath = { stops: [] };
 
 const stopKey = (i: number) => `_camStop${i + 2}`;          // stop 2 is the first one stored
 const stopZoomKey = (i: number) => `_camStop${i + 2}Zoom`;
@@ -142,20 +144,34 @@ export function readSceneCameraPath(values: Record<string, any> | undefined): Sc
       zoom: Number.isFinite(z) && z > 0 ? z : 100,
     });
   }
-  return { stops, hold: Math.min(0.9, Math.max(0, (Number(values._camHold) || 0) / 100)) };
+  return { stops };
 }
 
 export function sceneCameraTravels(path: SceneCameraPath): boolean {
   return path.stops.length > 0;
 }
 
-// Where a leg is at this point of it. `hold` is taken off the FRONT of each leg,
-// so the camera arrives, sits, and only then leaves for the next stop — the
-// rhythm a camera has when it is looking at something rather than sweeping past
-// it. The travel itself is eased, so no leg starts or stops with a jerk.
-export function cameraLegProgress(u: number, hold: number): number {
-  const h = Math.min(0.9, Math.max(0, hold));
-  return smooth(Math.min(1, Math.max(0, (u - h) / (1 - h))));
+// How much of the leg is easing rather than steady travel. Pure smoothstep is
+// 1, and it is WRONG at a stop the camera passes through: smoothstep has zero
+// slope at both ends, so a path of three legs comes to a dead halt twice in the
+// middle. Measured, ours did — the slowest frame of a three-leg clip was 1/88th
+// of the fastest, against 1/22 (0.58 against 12.77 px/frame) on the reference,
+// which slows into a stop and keeps going. Backing the ease off by this much
+// leaves the ends moving at 1/21st of the peak, which is the reference's own
+// ratio: (1 + k/2) / (1 - k) = 22 at k = 0.93.
+const LEG_EASE = 0.93;
+
+// Where a leg is at this point of it: the whole leg is the move, eased at both
+// ends, with no dead stretch and no dead halt anywhere in it.
+//
+// Symmetric is not a guess either. Measuring the reference clip between its own
+// six stops puts the fastest moment of a leg at 50% of that leg on average, and
+// fitting the curves against the real per-frame travel ranks smoothstep first
+// at 0.079 RMS — ahead of linear (0.090), ease-out quad (0.198) and ease-out
+// cubic (0.290). The camera leaves and arrives at the same rate.
+export function cameraLegProgress(u: number): number {
+  const t = Math.min(1, Math.max(0, u));
+  return t + (smooth(t) - t) * LEG_EASE;
 }
 
 // How far a leg travels, in the pad's own units. Zoom counts: a leg that only
@@ -201,7 +217,7 @@ export function sceneCameraAt(
     leg += 1;
   }
   const u = share[leg] > 0 ? p / share[leg] : 1;
-  const t = cameraLegProgress(u, path.hold);
+  const t = cameraLegProgress(u);
   const from = points[leg];
   const to = path.stops[leg];
   const mix = (a: number, b: number) => a + (b - a) * t;
@@ -298,13 +314,12 @@ export function gateSceneCamera(cam: SceneCameraValues, templates: HasControls[]
 // The xypad stores a pair, so this is no longer a bag of numbers.
 export type SceneCameraState = Record<string, number | { x: number; y: number }>;
 
-// Every key the camera can hold: the Shot, the Hold, and one pad plus one zoom
-// per possible stop. A stop that does not exist is ABSENT rather than zeroed —
+// Every key the camera can hold: the Shot, and one pad plus one zoom per
+// possible stop. A stop that does not exist is ABSENT rather than zeroed —
 // `readSceneCameraPath` stops at the first gap — so the defaults carry no stop
 // at all and a fresh scene has a camera that stands still.
 export const SCENE_CAMERA_DEFAULTS: SceneCameraState = {
   ...Object.fromEntries(SCENE_CAMERA_CONTROLS.map((def) => [def.key, Number(def.default)])),
-  [SCENE_CAMERA_HOLD.key]: Number(SCENE_CAMERA_HOLD.default),
 };
 
 // A saved scene may carry no camera at all (saved before the shot existed), a
@@ -318,7 +333,7 @@ export function sanitizeSceneCamera(raw: unknown): SceneCameraState {
   }
   if (!raw || typeof raw !== 'object') return out;
   const bag = raw as Record<string, unknown>;
-  for (const def of [...SCENE_CAMERA_CONTROLS, SCENE_CAMERA_HOLD]) {
+  for (const def of SCENE_CAMERA_CONTROLS) {
     const v = Number(bag[def.key]);
     if (!Number.isFinite(v)) continue;
     const min = def.min ?? -Infinity;

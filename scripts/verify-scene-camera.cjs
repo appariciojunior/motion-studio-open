@@ -24,7 +24,7 @@ const {
   SCENE_CAMERA_DEFAULTS, sanitizeSceneCamera, sceneLensShift,
   SCENE_CAMERA_DUPLICATES, sceneCameraControlsFor, gateSceneCamera,
   sceneCameraPlanar, sceneCameraFilterRect,
-  SCENE_CAMERA_STOP_PAD, SCENE_CAMERA_STOP_ZOOM, SCENE_CAMERA_HOLD, MAX_CAMERA_STOPS,
+  SCENE_CAMERA_STOP_PAD, SCENE_CAMERA_STOP_ZOOM, MAX_CAMERA_STOPS,
   readSceneCameraPath, sceneCameraTravels, cameraLegProgress, sceneCameraAt,
   NO_SCENE_CAMERA_PATH, cameraStopKeys,
 } = require('../lib/sceneCamera');
@@ -68,7 +68,7 @@ assert.deepEqual(sanitizeSceneCamera({ _camZoom: 140, lixo: 7 }), { ...SCENE_CAM
 // A fresh camera carries the Shot and the Hold, and NO stop: a stop that does
 // not exist is absent rather than zeroed, which is what lets the path end.
 assert.deepEqual(Object.keys(sanitizeSceneCamera({ lixo: 7 })),
-  [...SCENE_CAMERA_CONTROLS.map((d) => d.key), SCENE_CAMERA_HOLD.key]);
+  SCENE_CAMERA_CONTROLS.map((d) => d.key));
 
 // ---- the poses a template can hand us ----
 const POSES = [
@@ -262,13 +262,15 @@ assert.deepEqual(sceneCameraFilterRect(cam({ zoom: 2 }), 810, 1080),
 // happen. A camera with no stops has to stay bit-identical; one with stops has
 // to arrive exactly, never overshoot, and actually SIT at each one.
 // `path` is taken by node: this is the camera one.
-const rota = (stops, hold = 0) => ({ stops, hold });
+const rota = (stops) => ({ stops });
 
 assert.deepEqual(readSceneCameraPath(undefined), NO_SCENE_CAMERA_PATH);
 assert.deepEqual(readSceneCameraPath({}), NO_SCENE_CAMERA_PATH);
-assert.deepEqual(readSceneCameraPath({ _camHold: 50 }), { stops: [], hold: 0.5 });
+// A leftover Settle from a scene saved before it was removed reads as nothing:
+// the key is gone from the model, not merely ignored by the panel.
+assert.deepEqual(readSceneCameraPath({ _camHold: 50 }), NO_SCENE_CAMERA_PATH);
 assert.deepEqual(readSceneCameraPath({ _camStop2: { x: 40, y: -10 }, _camStop2Zoom: 150, _camHold: 60 }),
-  { stops: [{ x: 40, y: -10, zoom: 150 }], hold: 0.6 });
+  { stops: [{ x: 40, y: -10, zoom: 150 }] });
 // Stops are contiguous: a gap ENDS the path rather than leaving a hole the
 // renderer would have to guess about.
 assert.equal(readSceneCameraPath({ _camStop3: { x: 10, y: 0 } }).stops.length, 0,
@@ -280,11 +282,10 @@ assert.equal(readSceneCameraPath({ _camStop2: { x: 1, y: 0 } }).stops[0].zoom, 1
 // Junk reads as no path, never as NaN.
 assert.deepEqual(readSceneCameraPath({ _camStop2: 'x' }), NO_SCENE_CAMERA_PATH);
 assert.equal(readSceneCameraPath({ _camStop2: { x: NaN, y: 2 } }).stops[0].x, 0);
-assert.equal(readSceneCameraPath({ _camHold: 999 }).hold, 0.9, "hold is capped short of the whole leg");
 assert.equal(sceneCameraTravels(rota([])), false);
 assert.equal(sceneCameraTravels(rota([{ x: 0, y: 0, zoom: 100 }])), true,
   "a stop that happens to sit where the shot does is still a stop");
-cases += 11;
+cases += 10;
 
 {
   // No stops: the pose, untouched, at every point of the clip — same object,
@@ -398,26 +399,61 @@ cases += 11;
 }
 
 {
-  // Hold buys real stillness at the FRONT of each leg: with 50%, the first
-  // half of every leg is parked and the travel happens in its second half.
-  near(cameraLegProgress(0, 0.5), 0, 1e-12);
-  near(cameraLegProgress(0.49, 0.5), 0, 1e-12, "still parked just before it leaves");
-  near(cameraLegProgress(1, 0.5), 1, 1e-12, "and arrived by the end of the leg");
-  near(cameraLegProgress(0.75, 0.5), 0.5, 1e-9, "half of what is left is half the travel");
-  // Without hold it is moving immediately.
-  assert.ok(cameraLegProgress(0.05, 0) > 0);
-  // Monotonic and bounded for every hold, which is what keeps a leg from
-  // stuttering or overshooting.
-  for (const hold of [0, 0.25, 0.5, 0.9, 5]) {
-    let ant = -Infinity;
-    for (let u = 0; u <= 1.0001; u += 0.01) {
-      const t = cameraLegProgress(u, hold);
-      assert.ok(t >= ant - 1e-12 && t >= -1e-12 && t <= 1 + 1e-12, `hold ${hold} at ${u}: ${t}`);
-      ant = t;
-      cases++;
-    }
+  // A leg is all travel: it starts where it starts, ends where it ends, and is
+  // symmetric about its middle.
+  near(cameraLegProgress(0), 0, 1e-12);
+  near(cameraLegProgress(1), 1, 1e-12);
+  near(cameraLegProgress(0.5), 0.5, 1e-12, "the middle of the leg is half the travel");
+  near(cameraLegProgress(0.25) + cameraLegProgress(0.75), 1, 1e-12, "and it is symmetric about that middle");
+  // Moving immediately, in both directions from the ends: this is the property
+  // the old Settle broke. It parked the first half of every leg, so a camera
+  // built here held still for frames at a time.
+  assert.ok(cameraLegProgress(0.02) > 0, "a leg is under way from its first moment");
+  assert.ok(cameraLegProgress(0.98) < 1, "and has not arrived before its last");
+  // Monotonic, bounded, and clamped outside 0..1.
+  let ant = -Infinity;
+  for (let u = -0.2; u <= 1.2001; u += 0.01) {
+    const t = cameraLegProgress(u);
+    assert.ok(t >= ant - 1e-12 && t >= -1e-12 && t <= 1 + 1e-12, `at ${u}: ${t}`);
+    ant = t;
+    cases++;
   }
-  cases += 5;
+  cases += 6;
+}
+
+{
+  // THE defect this replaced, asserted on the finished camera rather than on
+  // the curve: walk a real path frame by frame and no frame may be a freeze.
+  //
+  // Measured on the reference clip — 209 frames, six stops — not one frame sits
+  // still: the slowest moment is 0.58 px/frame against a peak of 12.77, a ratio
+  // of 22. Ours used to produce EXACT zeroes for half of every leg. The bar
+  // here is the reference's own: the slowest frame of a clip must stay above a
+  // fiftieth of its fastest.
+  const from = cam();
+  const trajeto = rota([
+    { x: 60, y: 0, zoom: 150 },
+    { x: 85, y: -40, zoom: 110 },
+    { x: -20, y: 30, zoom: 200 },
+  ]);
+  const QUADROS = 210;
+  let ant = sceneCameraAt(from, trajeto, 0);
+  const vels = [];
+  for (let i = 1; i <= QUADROS; i++) {
+    const at = sceneCameraAt(from, trajeto, i / QUADROS);
+    vels.push(Math.hypot((at.panX - ant.panX) * 100, (at.panY - ant.panY) * 100)
+      + Math.abs(at.zoom - ant.zoom) * 100);
+    ant = at;
+  }
+  const rapido = Math.max(...vels), lento = Math.min(...vels);
+  const razao = rapido / lento;
+  assert.ok(lento > 0, "no frame of a camera move may be a freeze");
+  // Bracketed on both sides. Too high and the stops are freezes again; too low
+  // and there is no easing left, which is a camera on rails that changes
+  // direction at a corner.
+  assert.ok(razao < 35, `the slowest frame should stay within 35x of the fastest, got ${razao.toFixed(0)}x`);
+  assert.ok(razao > 8, `and a leg must still ease into its stop, got only ${razao.toFixed(0)}x`);
+  cases += 3;
 }
 
 {
@@ -428,7 +464,7 @@ cases += 11;
   const saved = sanitizeSceneCamera({ [keys.pad]: { x: 5000, y: -5000 }, [keys.zoom]: 9000, _camHold: 200 });
   assert.deepEqual(saved[keys.pad], { x: 100, y: -100 }, "a stop clamps to the pad range");
   assert.equal(saved[keys.zoom], 300, "and to the zoom range");
-  assert.equal(saved._camHold, 90);
+  assert.ok(!('_camHold' in saved), 'a scene saved with the old Settle does not carry it forward');
   // More stops than the ceiling are dropped rather than kept and ignored.
   const demais = {};
   for (let i = 0; i < MAX_CAMERA_STOPS + 3; i++) {
