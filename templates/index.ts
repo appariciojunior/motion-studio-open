@@ -188,7 +188,7 @@ export function easingFor(id: string): EasingSpec {
 export function layerCountFor(
   id: string,
   values: Record<string, any>,
-  ctx: { width: number; height: number; cardAspect?: number },
+  ctx: { width: number; height: number; cardAspect?: number; coverage?: number },
 ): number {
   const t = getTemplate(id);
   const derived = t.layerCount?.(values, ctx);

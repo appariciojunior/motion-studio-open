@@ -8,6 +8,7 @@ import TemplateThumb from './TemplateThumb';
 import { ControlRow } from './Controls';
 import { useMobileInteractions } from './MobileInteractions';
 import { ChevronRightIcon, CloseIcon, HeartIcon, SearchIcon } from './EditorIcons';
+import { isShippedCompose } from '@/lib/composes';
 
 const Chevron = ({ dir = 'right' }: { dir?: 'right' | 'left' }) => (
   <ChevronRightIcon size={12} style={dir === 'left' ? { transform: 'rotate(180deg)' } : undefined}/>
@@ -202,13 +203,15 @@ export default function TemplatesCard({
                   >
                     {base && <TemplateThumb template={base} />}
                     <span className="tpl-card-label">{p.name}</span>
-                    <button
-                      className="icon-btn tpl-del"
-                      title="Delete preset"
-                      onClick={(e) => { e.stopPropagation(); deleteCustomPreset(p.id); }}
-                    >
-                      <CloseIcon size={10}/>
-                    </button>
+                    {!isShippedCompose(p.id) && (
+                      <button
+                        className="icon-btn tpl-del"
+                        title="Delete compose"
+                        onClick={(e) => { e.stopPropagation(); deleteCustomPreset(p.id); }}
+                      >
+                        <CloseIcon size={10}/>
+                      </button>
+                    )}
                   </div>
                 );
               })}

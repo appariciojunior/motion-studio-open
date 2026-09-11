@@ -456,6 +456,32 @@ export function frameSceneCamera(
 //
 // `x`/`y` are in canvas pixels and already include the centre, so the caller
 // assigns them straight to the artwork container that sits at that centre.
+// How much MORE scene a template has to build because of the camera.
+//
+// A wall that covers the canvas exactly is the right wall until something pulls
+// back from it, and then its edge is in shot. Measured on the reference compose
+// before this existed: 105 of 105 frames showed background in the outer frame,
+// up to 85% of it, because the path drops to 70% zoom and pans a third of a
+// frame. No suite saw it — the camera was doing exactly what it was asked.
+//
+// The view reaches width*(0.5 + |pan|)/zoom from the centre, so it needs
+// (1 + 2|pan|)/zoom times the default extent. Taken at its worst over the shot
+// and every stop, because the wall is built once and has to survive the whole
+// clip. Capped: past a point this is asking for thousands of cards, and a
+// camera that wants more scene than that wants a different scene.
+export const MAX_CAMERA_COVERAGE = 4;
+
+export function sceneCameraCoverage(cam: SceneCameraValues, path: SceneCameraPath): number {
+  const shotAsStop: CameraStop = { x: cam.panX * 100, y: cam.panY * 100, zoom: cam.zoom * 100 };
+  let cover = 1;
+  for (const s of [shotAsStop, ...path.stops]) {
+    const z = Math.max(0.05, s.zoom / 100);
+    const px = Math.abs(s.x) / 100, py = Math.abs(s.y) / 100;
+    cover = Math.max(cover, (1 + 2 * px) / z, (1 + 2 * py) / z);
+  }
+  return Math.min(MAX_CAMERA_COVERAGE, cover);
+}
+
 export function sceneCameraPlanar(
   cam: SceneCameraValues,
   width: number,

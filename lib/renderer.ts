@@ -8,7 +8,7 @@ import { resolveEasing } from '@/lib/easing';
 import { assetIndexForSlot, clamp } from '@/lib/motion';
 import { resolveTrackTime, trackAssetIndices, type MotionTrack } from '@/lib/tracks';
 import { cardAspectFor, coverCrop, cropKey, type CropFocus } from '@/lib/crop';
-import { gateSceneCamera, readSceneCamera, readSceneCameraPath, sceneCameraAt, sceneCameraFilterRect, sceneCameraPlanar } from '@/lib/sceneCamera';
+import { gateSceneCamera, readSceneCamera, readSceneCameraPath, sceneCameraAt, sceneCameraCoverage, sceneCameraFilterRect, sceneCameraPlanar } from '@/lib/sceneCamera';
 import { advanceVideoForExport, createCardVideo, isVideoSource, prepareVideoForSequentialExport, useVideoProxies, whenVideoReady } from '@/lib/videoTexture';
 import { BASE_PATH, IS_STATIC_EXPORT } from '@/lib/paths';
 import { advancedRasterSize, gradientRasterMaxEdge, gradientSignature, normalizeGradientSpec, paintGradientCanvas } from '@/lib/gradient';
@@ -287,7 +287,7 @@ export class SceneRenderer {
     // canvas. `countSig` below already keys the rebuild on this number, so a
     // resize or a card-size change re-pools on its own.
     const count = layerCountFor(track.templateId, track.values,
-      { width: s.width, height: s.height, cardAspect: aspect });
+      { width: s.width, height: s.height, cardAspect: aspect, coverage: this.coverageFor(s) });
     // Which scene assets feed this track, in track order.
     const indices = trackAssetIndices(track, s.assets);
     const pool = indices.map((i) => s.assets[i]).filter(Boolean);
@@ -327,7 +327,7 @@ export class SceneRenderer {
     // repeating); slots past the list cycle the set; hidden → placeholder
     rt.slots.forEach((slot, i) => {
       const mediaIndex = getTemplate(track.templateId).mediaIndex?.(i, count, track.values,
-        { width: s.width, height: s.height, cardAspect: aspect }) ?? i;
+        { width: s.width, height: s.height, cardAspect: aspect, coverage: this.coverageFor(s) }) ?? i;
       let asset = pool[assetIndexForSlot(mediaIndex, pool.length, repeat)];
       if (!asset && pool.length > 0) asset = pool[mediaIndex % pool.length];
       const binding = asset
@@ -532,6 +532,13 @@ export class SceneRenderer {
   // that is all the gate depends on.
   private camGateKey = '';
   private camGateTemplates: ReturnType<typeof getTemplate>[] = [];
+  // The extra scene the camera needs, for the templates that build a lattice.
+  // Read from the path rather than from the current frame: the wall is built
+  // once and has to hold up at every moment of the clip, not just this one.
+  private coverageFor(s: SceneState): number {
+    return sceneCameraCoverage(readSceneCamera(s.sceneCamera), readSceneCameraPath(s.sceneCamera));
+  }
+
   private sceneCameraFor(s: SceneState, frame: number) {
     const visible = s.tracks.filter((t) => t.visible);
     const key = visible.map((t) => t.templateId).join(',');
@@ -808,6 +815,7 @@ export class SceneRenderer {
       // ctx.totalFrames, so each track loops seamlessly inside its own window.
       const ctx = {
         fps: s.fps, width: s.width, height: s.height,
+        coverage: this.coverageFor(s),
         duration: time.localTotal / Math.max(1, s.fps),
         totalFrames: time.localTotal,
         ease, easedPhase,

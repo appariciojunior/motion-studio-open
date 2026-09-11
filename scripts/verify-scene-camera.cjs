@@ -25,7 +25,7 @@ const {
   SCENE_CAMERA_DUPLICATES, sceneCameraControlsFor, gateSceneCamera,
   sceneCameraPlanar, sceneCameraFilterRect,
   SCENE_CAMERA_STOP_PAD, SCENE_CAMERA_STOP_ZOOM, MAX_CAMERA_STOPS,
-  SCENE_CAMERA_ON, sceneHasCamera,
+  SCENE_CAMERA_ON, sceneHasCamera, sceneCameraCoverage, MAX_CAMERA_COVERAGE,
   readSceneCameraPath, sceneCameraTravels, cameraLegProgress, sceneCameraAt,
   NO_SCENE_CAMERA_PATH, cameraStopKeys,
 } = require('../lib/sceneCamera');
@@ -302,6 +302,25 @@ assert.equal(readSceneCameraPath({ _camStop2: { x: NaN, y: 2 } }).stops[0].x, 0)
   assert.equal(sceneHasCamera({ _camZoom: 140 }), true, "a shot is a camera");
   assert.equal(sceneHasCamera({ _camStop2: { x: 10, y: 0 } }), true, "so is a stop");
   cases += 7;
+}
+
+{
+  // How much more scene a camera makes a template build. The view reaches
+  // width*(0.5 + |pan|)/zoom from the centre, so it needs (1 + 2|pan|)/zoom of
+  // the default extent, at the WORST moment of the path -- the wall is built
+  // once and has to survive the whole clip.
+  const parado = { zoom: 1, panX: 0, panY: 0, orbitX: 0, orbitY: 0 };
+  near(sceneCameraCoverage(parado, rota([])), 1, 1e-12, "a camera that stands still asks for nothing extra");
+  near(sceneCameraCoverage({ ...parado, zoom: 0.5 }, rota([])), 2, 1e-12, "half the zoom is twice the scene");
+  near(sceneCameraCoverage({ ...parado, panX: 0.25 }, rota([])), 1.5, 1e-12, "a pan of a quarter frame reaches half a frame further, both ways");
+  // Pushing IN never needs more scene than standing still.
+  near(sceneCameraCoverage({ ...parado, zoom: 3 }, rota([])), 1, 1e-12);
+  // The worst stop decides, not the shot.
+  near(sceneCameraCoverage(parado, rota([{ x: 0, y: 0, zoom: 40 }])), 2.5, 1e-12,
+    "a stop that pulls back is what the wall has to survive");
+  // Capped: past a point this asks for thousands of cards.
+  assert.equal(sceneCameraCoverage({ ...parado, zoom: 0.05 }, rota([])), MAX_CAMERA_COVERAGE);
+  cases += 6;
 }
 
 assert.equal(sceneCameraTravels(rota([])), false);

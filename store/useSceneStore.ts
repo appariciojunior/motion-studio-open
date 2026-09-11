@@ -8,6 +8,7 @@ import { DEMO_ASSETS, demoSourceForSlot, isDemoAssetSource } from '@/lib/demoAss
 import { idbPut, idbGet, idbDelete } from '@/lib/assetDb';
 import { DEFAULT_TRACK_TRANSFORM, TRACK_END, type BlendMode, type MotionTrack } from '@/lib/tracks';
 import { SCENE_CAMERA_DEFAULTS, sanitizeSceneCamera, type SceneCameraState } from '@/lib/sceneCamera';
+import { SHIPPED_COMPOSES, isShippedCompose } from '@/lib/composes';
 import { createGradientSpec, legacyColorsForGradient, normalizeGradientSpec, type GradientSpec } from '@/lib/gradient';
 
 // ---------- canvas dimension helpers ----------
@@ -903,13 +904,17 @@ export const useSceneStore = create<SceneState>((set, get) => ({
 
   // Loaded lazily on the client (localStorage isn't available during SSR,
   // and seeding it at create() time would cause a hydration mismatch).
+  // The shipped composes are always in the list and are never in storage: only
+  // what the user saved is persisted, so editing the set in the repo changes
+  // what everyone sees instead of racing whatever a browser saved months ago.
   loadCustomPresets: () =>
     set(() => {
-      if (typeof window === 'undefined') return {};
+      if (typeof window === 'undefined') return { customPresets: SHIPPED_COMPOSES };
       try {
         const raw = localStorage.getItem(PRESETS_KEY);
-        return raw ? { customPresets: JSON.parse(raw) as CustomPreset[] } : {};
-      } catch { return {}; }
+        const salvos = raw ? (JSON.parse(raw) as CustomPreset[]).filter((p) => !isShippedCompose(p.id)) : [];
+        return { customPresets: [...SHIPPED_COMPOSES, ...salvos] };
+      } catch { return { customPresets: SHIPPED_COMPOSES }; }
     }),
   saveCustomPreset: (name) =>
     set((s) => {
@@ -923,7 +928,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         sceneCamera: { ...s.sceneCamera },
       };
       const next = [...s.customPresets, preset];
-      persistPresets(next);
+      persistPresets(next.filter((p) => !isShippedCompose(p.id)));
       return { customPresets: next };
     }),
   // A preset lands on the ACTIVE track, like picking a template does — the
@@ -947,8 +952,11 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     }),
   deleteCustomPreset: (id) =>
     set((s) => {
+      // A shipped compose would come straight back on the next load, and a
+      // delete that does not delete is worse than no delete at all.
+      if (isShippedCompose(id)) return {};
       const next = s.customPresets.filter((c) => c.id !== id);
-      persistPresets(next);
+      persistPresets(next.filter((p) => !isShippedCompose(p.id)));
       return { customPresets: next };
     }),
 

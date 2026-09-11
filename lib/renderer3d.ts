@@ -12,7 +12,7 @@ import { advanceVideoForExport, createCardVideo, isVideoSource, prepareVideoForS
 import { BASE_PATH, IS_STATIC_EXPORT } from '@/lib/paths';
 import type { IRenderer } from '@/lib/rendererTypes';
 import type { CameraPose, LayerTransform3D, Template } from '@/lib/types';
-import { frameSceneCamera, gateSceneCamera, isNeutralSceneCamera, readSceneCamera, readSceneCameraPath, sceneCameraAt, sceneLensShift, type SceneCameraValues } from '@/lib/sceneCamera';
+import { frameSceneCamera, gateSceneCamera, isNeutralSceneCamera, readSceneCamera, readSceneCameraPath, sceneCameraAt, sceneCameraCoverage, sceneLensShift, type SceneCameraValues } from '@/lib/sceneCamera';
 import { resolveTrackTime, trackAssetIndices, type MotionTrack } from '@/lib/tracks';
 import type { SceneState } from '@/store/useSceneStore';
 import { advancedRasterSize, gradientRasterMaxEdge, gradientSignature, normalizeGradientSpec, paintGradientCanvas } from '@/lib/gradient';
@@ -267,6 +267,12 @@ export class SceneRenderer3D implements IRenderer {
   // hidden in the panel while still steering the camera here.
   private camGateKey = '';
   private camGateTemplates: Template[] = [];
+  // See the Pixi renderer: the wall is built once, so the coverage is the
+  // worst the path ever asks for and not what this frame happens to need.
+  private coverageFor(s: SceneState): number {
+    return sceneCameraCoverage(readSceneCamera(s.sceneCamera), readSceneCameraPath(s.sceneCamera));
+  }
+
   private sceneCameraFor(s: SceneState, frame: number, totalFrames: number): SceneCameraValues {
     const visible = s.tracks.filter((t) => t.visible);
     const key = visible.map((t) => t.templateId).join(',');
@@ -511,7 +517,7 @@ export class SceneRenderer3D implements IRenderer {
     const aspect = cardAspectFor(meta, s.width, s.height, s.cardShape);
     // Asked of the template — see the same call in lib/renderer.ts.
     const count = layerCountFor(track.templateId, track.values,
-      { width: s.width, height: s.height, cardAspect: aspect });
+      { width: s.width, height: s.height, cardAspect: aspect, coverage: this.coverageFor(s) });
     const pool = trackAssetIndices(track, s.assets).map((i) => s.assets[i]).filter(Boolean);
     const assetSig = (getTemplate(track.templateId).mediaIndex ? JSON.stringify([s.width, s.height, track.values]) : '') + (repeat ? 'R|' : '') + 'A' + aspect.toFixed(4) + '|' +
       pool.map((a) => a.id + ':' + a.url + ':' + a.visible + ':' + cropKey(a.url, aspect, a.crop)).join('|');
@@ -617,7 +623,7 @@ export class SceneRenderer3D implements IRenderer {
 
     rt.slots.forEach((slot, i) => {
       const mediaIndex = getTemplate(track.templateId).mediaIndex?.(i, count, track.values,
-        { width: s.width, height: s.height, cardAspect: aspect }) ?? i;
+        { width: s.width, height: s.height, cardAspect: aspect, coverage: this.coverageFor(s) }) ?? i;
       let asset = pool[assetIndexForSlot(mediaIndex, pool.length, repeat)];
       if (!asset && pool.length > 0) asset = pool[mediaIndex % pool.length];
       const binding = asset
@@ -901,7 +907,7 @@ export class SceneRenderer3D implements IRenderer {
       return base + ease(phase - base);
     };
     const ctx = {
-      fps: s.fps, width: s.width, height: s.height,
+      fps: s.fps, width: s.width, height: s.height, coverage: this.coverageFor(s),
       duration: s.duration,
       totalFrames: Math.max(1, Math.round(s.duration * s.fps)),
       ease, easedPhase,
@@ -1124,7 +1130,7 @@ export class SceneRenderer3D implements IRenderer {
       return base + ease(phase - base);
     };
     const ctx = {
-      fps: s.fps, width: s.width, height: s.height,
+      fps: s.fps, width: s.width, height: s.height, coverage: this.coverageFor(s),
       duration: time.localTotal / Math.max(1, s.fps),
       totalFrames: time.localTotal,
       ease, easedPhase,
