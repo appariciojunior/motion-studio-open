@@ -8,8 +8,8 @@ import EasingPanel from './EasingPanel';
 import TrackInspector from './TrackInspector';
 import {
   MAX_CAMERA_STOPS, SCENE_CAMERA_STOP_ZOOM,
-  cameraStopKeys, isNeutralSceneCamera, readSceneCamera, readSceneCameraPath,
-  sceneCameraControlsFor,
+  SCENE_CAMERA_ON, cameraStopKeys, readSceneCameraPath, sceneCameraControlsFor,
+  sceneHasCamera,
 } from '@/lib/sceneCamera';
 import CameraPathPad from './CameraPathPad';
 import type { ControlDef } from '@/lib/types';
@@ -47,11 +47,11 @@ export default function ScenePanel() {
   // of camera controls under every one of them changes how they read, and the
   // camera is something you reach for when you are building a compose, not
   // something every scene is carrying.
-  const hasCamera = !isNeutralSceneCamera(readSceneCamera(sceneCamera)) || path.stops.length > 0;
+  const hasCamera = sceneHasCamera(sceneCamera);
   // Adding one starts it where the shot already is, so the picture does not
   // jump the moment you ask for a camera. The first stop is what makes it move,
   // and that is a click on the pad.
-  const addCamera = () => patchSceneCamera({ _camZoom: 100, _camPanX: 0, _camPanY: 0 });
+  const addCamera = () => patchSceneCamera({ [SCENE_CAMERA_ON]: 1 });
   // Which stop the row under the pad edits. -1 is the Shot, which the pad
   // draws as an anchor: where the camera starts is said in Shot above.
   const [selectedStop, setSelectedStop] = useState(-1);

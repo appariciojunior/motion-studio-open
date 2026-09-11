@@ -25,6 +25,7 @@ const {
   SCENE_CAMERA_DUPLICATES, sceneCameraControlsFor, gateSceneCamera,
   sceneCameraPlanar, sceneCameraFilterRect,
   SCENE_CAMERA_STOP_PAD, SCENE_CAMERA_STOP_ZOOM, MAX_CAMERA_STOPS,
+  SCENE_CAMERA_ON, sceneHasCamera,
   readSceneCameraPath, sceneCameraTravels, cameraLegProgress, sceneCameraAt,
   NO_SCENE_CAMERA_PATH, cameraStopKeys,
 } = require('../lib/sceneCamera');
@@ -282,6 +283,27 @@ assert.equal(readSceneCameraPath({ _camStop2: { x: 1, y: 0 } }).stops[0].zoom, 1
 // Junk reads as no path, never as NaN.
 assert.deepEqual(readSceneCameraPath({ _camStop2: 'x' }), NO_SCENE_CAMERA_PATH);
 assert.equal(readSceneCameraPath({ _camStop2: { x: NaN, y: 2 } }).stops[0].x, 0);
+{
+  // HAVING a camera and the camera DOING something are different questions,
+  // and conflating them broke the Add button: a camera just added sits exactly
+  // where the default one does, so "is it neutral?" answered no-camera and the
+  // button appeared to do nothing at all.
+  assert.equal(sceneHasCamera(undefined), false);
+  assert.equal(sceneHasCamera({}), false, "a scene nobody has filmed has no camera");
+  assert.equal(sceneHasCamera(SCENE_CAMERA_DEFAULTS), false,
+    "and neither does one carrying only the defaults");
+  assert.equal(sceneHasCamera({ [SCENE_CAMERA_ON]: 1 }), true,
+    "asking for a camera gives you one, even though it has not moved yet");
+  // The flag survives a save. It is not a control, so the sanitiser has to
+  // carry it by hand, and forgetting to would lose the camera silently.
+  assert.equal(sceneHasCamera(sanitizeSceneCamera({ [SCENE_CAMERA_ON]: 1 })), true,
+    "and still has one after a round trip through the sanitiser");
+  // Scenes saved before the flag existed are read by what they carry.
+  assert.equal(sceneHasCamera({ _camZoom: 140 }), true, "a shot is a camera");
+  assert.equal(sceneHasCamera({ _camStop2: { x: 10, y: 0 } }), true, "so is a stop");
+  cases += 7;
+}
+
 assert.equal(sceneCameraTravels(rota([])), false);
 assert.equal(sceneCameraTravels(rota([{ x: 0, y: 0, zoom: 100 }])), true,
   "a stop that happens to sit where the shot does is still a stop");

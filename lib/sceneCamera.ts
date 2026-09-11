@@ -314,6 +314,22 @@ export function gateSceneCamera(cam: SceneCameraValues, templates: HasControls[]
 // The xypad stores a pair, so this is no longer a bag of numbers.
 export type SceneCameraState = Record<string, number | { x: number; y: number }>;
 
+// Whether this scene HAS a camera at all, which is not the same question as
+// whether the camera is currently doing anything. A camera just added sits
+// exactly where the default one does — that is the point, the picture must not
+// jump when you ask for one — so asking "is it neutral?" cannot tell the two
+// apart, and a panel that inferred it that way had an Add button that did
+// nothing. It is a stored fact, so it is a stored key.
+export const SCENE_CAMERA_ON = '_camOn';
+
+// A scene saved before this key existed still counts as having a camera if it
+// carries one: a non-neutral shot, or any stop at all.
+export function sceneHasCamera(values: SceneCameraState | undefined): boolean {
+  if (!values) return false;
+  if (values[SCENE_CAMERA_ON]) return true;
+  return !isNeutralSceneCamera(readSceneCamera(values)) || readSceneCameraPath(values).stops.length > 0;
+}
+
 // Every key the camera can hold: the Shot, and one pad plus one zoom per
 // possible stop. A stop that does not exist is ABSENT rather than zeroed —
 // `readSceneCameraPath` stops at the first gap — so the defaults carry no stop
@@ -355,6 +371,9 @@ export function sanitizeSceneCamera(raw: unknown): SceneCameraState {
     const z = Number(bag[stopZoomKey(i)]);
     out[stopZoomKey(i)] = Number.isFinite(z) ? Math.min(zMax, Math.max(zMin, z)) : 100;
   }
+  // Carried by hand: this one is not a control, so the loop above never sees
+  // it, and without this line a scene would lose its camera on the next save.
+  if (bag[SCENE_CAMERA_ON]) out[SCENE_CAMERA_ON] = 1;
   return out;
 }
 
