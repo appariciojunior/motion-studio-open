@@ -58,7 +58,7 @@ export default function CameraPathPad({
   };
 
   // A stop's dot grows with its zoom, between roughly half and double the base.
-  const dotSize = (zoom: number) => 10 + Math.max(-5, Math.min(10, (zoom - 100) / 20));
+  const dotSize = (zoom: number) => 14 + Math.max(-6, Math.min(12, (zoom - 100) / 16));
 
   const points = [
     { x: shot.x, y: shot.y, zoom: shot.zoom, index: -1 },

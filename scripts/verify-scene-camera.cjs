@@ -321,18 +321,80 @@ cases += 11;
 }
 
 {
-  // Two stops: the clip is split equally between the legs, and the camera is
-  // AT stop 2 when the first leg ends.
+  // Two stops, and a leg gets time in proportion to how FAR it goes.
+  //
+  // Equal slices was the first version, and a real path showed why it is
+  // wrong: on a two-leg path of 60 units and 25, both took 4s, so the short
+  // leg crawled at 42% of the long one. A camera that changes pace for no
+  // reason reads as a mistake.
   const from = cam();
   const two = rota([{ x: 50, y: 0, zoom: 100 }, { x: -50, y: 0, zoom: 200 }]);
+  // leg 1 travels 50 across and no zoom; leg 2 travels 100 across and 100 of
+  // zoom. 50 and 200 of a 250 total, so stop 2 arrives a FIFTH of the way in.
+  const arrivesAt = 50 / 250;
   near(sceneCameraAt(from, two, 0).panX, 0, 1e-9);
-  near(sceneCameraAt(from, two, 0.5).panX, 0.5, 1e-9, "half way through the clip is stop 2");
+  near(sceneCameraAt(from, two, arrivesAt).panX, 0.5, 1e-9, "stop 2 arrives when its share of the distance is done");
   near(sceneCameraAt(from, two, 1).panX, -0.5, 1e-9, "the end of the clip is the last stop");
   near(sceneCameraAt(from, two, 1).zoom, 2, 1e-9);
   // The zoom only starts changing on the leg that changes it.
-  near(sceneCameraAt(from, two, 0.25).zoom, 1, 1e-9, "the first leg holds its zoom");
+  near(sceneCameraAt(from, two, arrivesAt / 2).zoom, 1, 1e-9, "the first leg holds its zoom");
   assert.ok(sceneCameraAt(from, two, 0.75).zoom > 1, "the second leg is the one that pushes in");
   cases += 6;
+}
+
+{
+  // The property that fix is FOR: every leg travels at the same average speed.
+  // Measured by walking the clip densely and totting up the distance covered
+  // inside each leg — no easing to confuse it, so speed is the flat thing it
+  // should be.
+  const from = cam();
+  const legs = [
+    { x: 60, y: 0, zoom: 100 },     // 60 across
+    { x: 85, y: 0, zoom: 100 },     // 25 across — the short leg that used to crawl
+    { x: 85, y: -60, zoom: 100 },   // 60 down
+  ];
+  const uneven = rota(legs, 0);
+  const pontos = [{ x: 0, y: 0 }, ...legs];
+  const comprimentos = legs.map((to, i) => Math.hypot(to.x - pontos[i].x, to.y - pontos[i].y));
+  const total = comprimentos.reduce((a, b) => a + b, 0);
+  // Where each stop is reached, and how far the camera had gone by then.
+  let acumulado = 0;
+  for (let i = 0; i < legs.length; i++) {
+    acumulado += comprimentos[i];
+    const quando = acumulado / total;
+    const onde = sceneCameraAt(from, uneven, quando);
+    near(onde.panX * 100, legs[i].x, 1e-6, `stop ${i + 2} arrives at its share of the distance`);
+    near(onde.panY * 100, legs[i].y, 1e-6);
+    cases += 2;
+  }
+  // And the speed itself: distance covered per unit of clip, leg by leg.
+  const velocidades = [];
+  let inicio = 0;
+  for (let i = 0; i < legs.length; i++) {
+    const fim = inicio + comprimentos[i] / total;
+    const a = sceneCameraAt(from, uneven, inicio + (fim - inicio) * 0.25);
+    const b = sceneCameraAt(from, uneven, inicio + (fim - inicio) * 0.75);
+    const andou = Math.hypot((b.panX - a.panX) * 100, (b.panY - a.panY) * 100);
+    velocidades.push(andou / ((fim - inicio) * 0.5));
+    inicio = fim;
+  }
+  const maior = Math.max(...velocidades);
+  const menor = Math.min(...velocidades);
+  assert.ok((maior - menor) / maior < 0.02,
+    `every leg should travel at the same speed, got ${velocidades.map((v) => v.toFixed(1)).join(", ")}`);
+  cases += 1;
+}
+
+{
+  // A path whose stops all sit on top of each other has nowhere to go. It must
+  // still produce a clip rather than dividing by zero.
+  const from = cam();
+  const parado = rota([{ x: 0, y: 0, zoom: 100 }, { x: 0, y: 0, zoom: 100 }]);
+  for (const p of [0, 0.5, 1]) {
+    const out = sceneCameraAt(from, parado, p);
+    assert.ok(Number.isFinite(out.panX) && Number.isFinite(out.zoom), "a path with no distance stays finite");
+    cases++;
+  }
 }
 
 {

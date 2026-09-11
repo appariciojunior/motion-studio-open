@@ -69,8 +69,9 @@ export const NEUTRAL_SCENE_CAMERA: SceneCameraValues = { zoom: 1, panX: 0, panY:
 // closer or further away — which is how you say WHERE a push in happens rather
 // than only that one does.
 //
-// The Shot is stop 1. Everything below is stop 2 onward, and the clip is split
-// equally between the legs.
+// The Shot is stop 1. Everything below is stop 2 onward, and each leg gets time
+// in proportion to how FAR it goes, so the camera holds one speed across the
+// whole path.
 //
 // Two shapes were tried and thrown away first, and both failed the same way:
 //
@@ -157,23 +158,51 @@ export function cameraLegProgress(u: number, hold: number): number {
   return smooth(Math.min(1, Math.max(0, (u - h) / (1 - h))));
 }
 
+// How far a leg travels, in the pad's own units. Zoom counts: a leg that only
+// pushes in has no distance across the frame and still takes time to happen,
+// and without this it would be given none.
+function legLength(from: CameraStop, to: CameraStop): number {
+  return Math.hypot(to.x - from.x, to.y - from.y) + Math.abs(to.zoom - from.zoom);
+}
+
 // The camera at one point of the clip. The Shot is stop 1, every entry in the
-// path is another stop, and the clip is split equally between the legs.
+// path is another stop.
+//
+// Each leg gets time in proportion to how FAR it goes, not an equal slice of
+// the clip. Equal slices was the first version and it is wrong in a way that
+// is easy to miss until you build a real path with it: measured on a two-leg
+// path of 60 units and 25, both legs took 4s, so the short one crawled at 42%
+// of the long one's speed. A camera that changes pace for no reason reads as a
+// mistake, and the fix is the obvious one — it travels at one speed and the
+// long leg simply takes longer.
+//
+// `Settle` is then taken off the FRONT of each leg, which is what makes the
+// camera arrive, sit, and only then leave.
 export function sceneCameraAt(
   cam: SceneCameraValues,
   path: SceneCameraPath,
   progress: number,
 ): SceneCameraValues {
   if (!sceneCameraTravels(path)) return cam;
-  const legs = path.stops.length;
-  const p = Math.min(1, Math.max(0, progress)) * legs;
-  // The last frame lands on the END of the last leg, not on the start of a leg
-  // that does not exist.
-  const leg = Math.min(legs - 1, Math.floor(p));
-  const t = cameraLegProgress(p - leg, path.hold);
-  const from = leg === 0
-    ? { x: cam.panX * 100, y: cam.panY * 100, zoom: cam.zoom * 100 }
-    : path.stops[leg - 1];
+  const shotAsStop: CameraStop = { x: cam.panX * 100, y: cam.panY * 100, zoom: cam.zoom * 100 };
+  const points = [shotAsStop, ...path.stops];
+  const lengths = path.stops.map((to, i) => legLength(points[i], to));
+  const total = lengths.reduce((a, b) => a + b, 0);
+  // A path whose stops all sit on top of each other has nowhere to go; splitting
+  // it equally at least keeps the clip well-defined instead of dividing by zero.
+  const share = total > 0 ? lengths.map((l) => l / total) : lengths.map(() => 1 / lengths.length);
+
+  let p = Math.min(1, Math.max(0, progress));
+  let leg = 0;
+  // Walk the legs until the one this moment belongs to. The last frame lands on
+  // the END of the last leg, not on the start of a leg that does not exist.
+  while (leg < share.length - 1 && p > share[leg]) {
+    p -= share[leg];
+    leg += 1;
+  }
+  const u = share[leg] > 0 ? p / share[leg] : 1;
+  const t = cameraLegProgress(u, path.hold);
+  const from = points[leg];
   const to = path.stops[leg];
   const mix = (a: number, b: number) => a + (b - a) * t;
   return {

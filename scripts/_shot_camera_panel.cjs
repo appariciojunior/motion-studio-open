@@ -7,8 +7,7 @@ const semear=function(){
   const s={activeTemplateId:'wall-01',tracks:[{id:'t0',templateId:'wall-01',values:{speed:0.2}}],
     width:810,height:1080,fps:30,duration:8,
     background:{source:'color',color:'#1a1a1a',gradient:false,color2:'#1a1a1a',imageUrl:null,blur:28},effects:[],
-    sceneCamera:{_camZoom:110,_camPanX:-25,_camPanY:0,_camOrbitY:0,_camOrbitX:0,_camHold:50,
-      _camStop2:{x:35,y:-10},_camStop2Zoom:150,_camStop3:{x:60,y:40},_camStop3Zoom:100}};
+    sceneCamera:{_camZoom:100,_camPanX:-45,_camPanY:0,_camOrbitY:0,_camOrbitX:0,_camHold:45,_camStop2:{x:20,y:0},_camStop2Zoom:150,_camStop3:{x:55,y:-35},_camStop3Zoom:110}};
   localStorage.setItem('motion-welcome-seen','1');localStorage.setItem('motion-tour-seen','1');
   localStorage.setItem('motion-scene-v1',JSON.stringify(s));
   localStorage.setItem('motion-project-shotcam',JSON.stringify(s));
