@@ -24,6 +24,7 @@ const {
   SCENE_CAMERA_DEFAULTS, sanitizeSceneCamera, sceneLensShift,
   SCENE_CAMERA_DUPLICATES, sceneCameraControlsFor, gateSceneCamera,
   sceneCameraPlanar, sceneCameraFilterRect,
+  SCENE_CAMERA_MOVE_CONTROLS, readSceneCameraMove, sceneCameraTravels, cameraMoveProgress, sceneCameraAt, NO_SCENE_CAMERA_MOVE,
 } = require('../lib/sceneCamera');
 
 const near = (a, b, tol = 1e-7, what = '') => assert.ok(Math.abs(a - b) < tol, `${what} ${a} != ${b}`);
@@ -62,7 +63,10 @@ assert.deepEqual(sanitizeSceneCamera({ _camZoom: 5000, _camOrbitX: -999, _camPan
   { ...SCENE_CAMERA_DEFAULTS, _camZoom: 300, _camOrbitX: -80, _camPanX: 100 });
 assert.deepEqual(sanitizeSceneCamera({ _camZoom: NaN, _camPanY: 'x', _camOrbitY: null }), SCENE_CAMERA_DEFAULTS);
 assert.deepEqual(sanitizeSceneCamera({ _camZoom: 140, lixo: 7 }), { ...SCENE_CAMERA_DEFAULTS, _camZoom: 140 });
-assert.deepEqual(Object.keys(sanitizeSceneCamera({ lixo: 7 })), SCENE_CAMERA_CONTROLS.map((d) => d.key));
+// Every declared key, static half and move half — a saved scene carries the
+// whole camera or none of it.
+assert.deepEqual(Object.keys(sanitizeSceneCamera({ lixo: 7 })),
+  [...SCENE_CAMERA_CONTROLS, ...SCENE_CAMERA_MOVE_CONTROLS].map((d) => d.key));
 
 // ---- the poses a template can hand us ----
 const POSES = [
@@ -247,6 +251,98 @@ assert.deepEqual(sceneCameraFilterRect(cam({ zoom: 2 }), 810, 1080),
   // is the case that would otherwise slip through on a default `meta`.
   assert.deepEqual(sceneCameraControlsFor([{ controls: [] }]).map((d) => d.key), ['_camZoom', '_camPanX', '_camPanY']);
   cases += 7;
+}
+
+
+// ---- the shot MOVES ----
+// A still camera has to stay bit-identical, a travelling one has to arrive
+// exactly where it was sent, and Hold has to buy real stillness at both ends —
+// not a slower version of the same drift.
+const mv = (over = {}) => ({ ...NO_SCENE_CAMERA_MOVE, ...over });
+
+assert.deepEqual(readSceneCameraMove(undefined), NO_SCENE_CAMERA_MOVE);
+assert.deepEqual(readSceneCameraMove({}), NO_SCENE_CAMERA_MOVE);
+assert.deepEqual(readSceneCameraMove({ _camTravel: { x: 50, y: -25 }, _camHold: 60 }),
+  { travelX: 0.5, travelY: -0.25, hold: 0.6 });
+// Junk in a saved scene reads as no move, never as NaN.
+assert.deepEqual(readSceneCameraMove({ _camTravel: 'nope', _camHold: 'x' }), NO_SCENE_CAMERA_MOVE);
+assert.deepEqual(readSceneCameraMove({ _camTravel: { x: NaN, y: 1 } }).travelX, 0);
+assert.equal(readSceneCameraMove({ _camHold: 999 }).hold, 0.9, "hold is capped short of the whole clip");
+assert.equal(sceneCameraTravels(mv()), false);
+assert.equal(sceneCameraTravels(mv({ travelX: 0.1 })), true);
+assert.equal(sceneCameraTravels(mv({ travelY: -0.1 })), true);
+cases += 8;
+
+{
+  // A camera that does not travel is the pose, untouched, at every point of
+  // the clip — the same object identity, so a still scene pays nothing.
+  const still = cam({ zoom: 2, panX: 0.3 });
+  for (const p of [0, 0.25, 0.5, 0.99, 1]) {
+    assert.equal(sceneCameraAt(still, mv(), p), still, "a still camera must not even allocate");
+    cases++;
+  }
+}
+
+{
+  // With no hold, it starts at the start and arrives at the end.
+  const from = cam();
+  const move = mv({ travelX: 0.5, travelY: -0.25 });
+  near(sceneCameraAt(from, move, 0).panX, 0, 1e-9, "starts where it stands");
+  near(sceneCameraAt(from, move, 1).panX, 0.5, 1e-9, "arrives at the travel");
+  near(sceneCameraAt(from, move, 1).panY, -0.25, 1e-9);
+  // It only ever moves forward, and never past the destination.
+  let anterior = -Infinity;
+  for (let p = 0; p <= 1.0001; p += 0.02) {
+    const x = sceneCameraAt(from, move, p).panX;
+    assert.ok(x >= anterior - 1e-12, "the travel may not go backwards");
+    assert.ok(x >= -1e-12 && x <= 0.5 + 1e-12, "the travel may not overshoot");
+    anterior = x;
+    cases++;
+  }
+  // Travel composes with where the camera already stands.
+  near(sceneCameraAt(cam({ panX: 0.2 }), move, 1).panX, 0.7, 1e-9, "it travels FROM the shot");
+  // and it touches nothing else.
+  const out = sceneCameraAt(cam({ zoom: 1.5, orbitY: 30 }), move, 0.5);
+  assert.equal(out.zoom, 1.5);
+  assert.equal(out.orbitY, 30);
+  cases += 4;
+}
+
+{
+  // Hold is real stillness at BOTH ends: with 60%, nothing moves through the
+  // first 30% or the last 30%, and the whole travel happens in the middle 40%.
+  const h = 0.6;
+  near(cameraMoveProgress(0, h), 0, 1e-12);
+  near(cameraMoveProgress(0.29, h), 0, 1e-12, "still parked just before it leaves");
+  near(cameraMoveProgress(0.71, h), 1, 1e-12, "already arrived just after it lands");
+  near(cameraMoveProgress(1, h), 1, 1e-12);
+  near(cameraMoveProgress(0.5, h), 0.5, 1e-9, "halfway through the clip is halfway through the move");
+  // No hold: it is travelling everywhere except the very ends.
+  assert.ok(cameraMoveProgress(0.1, 0) > 0, "without hold it is already moving at 10%");
+  assert.ok(cameraMoveProgress(0.9, 0) < 1, "and still moving at 90%");
+  // Monotonic for every hold, which is what keeps a move from stuttering.
+  for (const hold of [0, 0.2, 0.5, 0.9, 1.5]) {
+    let ant = -Infinity;
+    for (let p = 0; p <= 1.0001; p += 0.01) {
+      const t = cameraMoveProgress(p, hold);
+      assert.ok(t >= ant - 1e-12 && t >= -1e-12 && t <= 1 + 1e-12, `hold ${hold} at ${p}: ${t}`);
+      ant = t;
+      cases++;
+    }
+  }
+  cases += 7;
+}
+
+{
+  // The pad is stored as a pair and survives a save, clamped to its own range.
+  const saved = sanitizeSceneCamera({ _camTravel: { x: 5000, y: -5000 }, _camHold: 200 });
+  assert.deepEqual(saved._camTravel, { x: 100, y: -100 }, 'the pad clamps to its range');
+  assert.equal(saved._camHold, 90);
+  assert.deepEqual(sanitizeSceneCamera({})._camTravel, { x: 0, y: 0 }, 'and defaults to no travel');
+  assert.notEqual(sanitizeSceneCamera({})._camTravel, SCENE_CAMERA_DEFAULTS._camTravel,
+    'the pair must be a fresh object, or two scenes would share one pad');
+  assert.equal(SCENE_CAMERA_MOVE_CONTROLS.length, 2);
+  cases += 5;
 }
 
 // ---- the duplicate gate, against the REAL catalogue ----

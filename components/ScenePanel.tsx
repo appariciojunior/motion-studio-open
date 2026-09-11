@@ -6,7 +6,7 @@ import { catalogTemplateList, getTemplate } from '@/templates';
 import { ControlRow, controlVisible } from './Controls';
 import EasingPanel from './EasingPanel';
 import TrackInspector from './TrackInspector';
-import { sceneCameraControlsFor } from '@/lib/sceneCamera';
+import { SCENE_CAMERA_MOVE_CONTROLS, readSceneCameraMove, sceneCameraControlsFor, sceneCameraTravels } from '@/lib/sceneCamera';
 import type { ControlDef } from '@/lib/types';
 
 // Renders the SCENE + TIMING sections (no card wrapper — the page composes cards).
@@ -33,6 +33,12 @@ export default function ScenePanel() {
     .join(','));
   // Only the moves no visible layer already offers: a second knob for the same
   // move makes the panel fiddlier, not more capable. See lib/sceneCamera.
+  // Hold means nothing until the camera actually travels, so it appears with
+  // the travel rather than sitting there doing nothing.
+  const travels = sceneCameraTravels(readSceneCameraMove(sceneCamera));
+  const moveControls = travels
+    ? SCENE_CAMERA_MOVE_CONTROLS
+    : SCENE_CAMERA_MOVE_CONTROLS.filter((def) => def.key !== '_camHold');
   const cameraControls = useMemo(
     () => (visibleTemplateIds
       ? sceneCameraControlsFor(visibleTemplateIds.split(',').map((id) => getTemplate(id)))
@@ -112,19 +118,23 @@ export default function ScenePanel() {
           per-layer block above — two layers composited from two camera
           positions are not one picture.
 
-          What shows up here is only what is NOT already on the panel: 67 of the
-          82 webgl presets declare their own zoom, 61 their own offset, 31 their
-          own yaw, and a 2D scene is offered no orbit because there is no
-          perspective to swing. A second knob for the same move is what makes a
-          panel feel fiddly instead of capable, so the section can come out
-          empty and disappear. */}
-      {cameraControls.length > 0 && (
+          What shows up under Shot is only what is NOT already on the panel: 67
+          of the 82 webgl presets declare their own zoom, 61 their own offset,
+          31 their own yaw, and a 2D scene is offered no orbit because there is
+          no perspective to swing. A second knob for the same move is what makes
+          a panel feel fiddly instead of capable, so that half can come out
+          empty and only Move is left — which is the case for a preset that
+          already frames itself. Nothing in the catalogue moves the frame over
+          time, so Move is never a duplicate of anything. */}
+      {(cameraControls.length > 0 || moveControls.length > 0) && (
         <>
           <div className="section-head">
             <span className="eyebrow">Camera</span>
             <button type="button" className="badge" onClick={resetSceneCamera}>Reset</button>
           </div>
+          {cameraControls.length > 0 && (
           <div className="section-body">
+            <div className="ctl-section-title">Shot</div>
             <div className="ctl-hint">Moves the camera, not the cards — the same motion seen from somewhere else.</div>
             {cameraControls.map((def) => (
               <ControlRow
@@ -132,6 +142,22 @@ export default function ScenePanel() {
                 def={def}
                 value={sceneCamera[def.key] ?? def.default}
                 onChange={(val) => setSceneCameraValue(def.key, Number(val))}
+              />
+            ))}
+          </div>
+          )}
+          {/* Where it GOES. Separate block because it is a different question
+              from where it stands, and because it is the half that makes this a
+              camera rather than a crop. */}
+          <div className="section-body">
+            <div className="ctl-section-title">Move</div>
+            <div className="ctl-hint">Drag the pad and the frame travels there over the clip.</div>
+            {moveControls.map((def) => (
+              <ControlRow
+                key={def.key}
+                def={def}
+                value={sceneCamera[def.key] ?? def.default}
+                onChange={(val) => setSceneCameraValue(def.key, val)}
               />
             ))}
           </div>

@@ -12,7 +12,7 @@ import { advanceVideoForExport, createCardVideo, isVideoSource, prepareVideoForS
 import { BASE_PATH, IS_STATIC_EXPORT } from '@/lib/paths';
 import type { IRenderer } from '@/lib/rendererTypes';
 import type { CameraPose, LayerTransform3D, Template } from '@/lib/types';
-import { frameSceneCamera, gateSceneCamera, isNeutralSceneCamera, readSceneCamera, sceneLensShift, type SceneCameraValues } from '@/lib/sceneCamera';
+import { frameSceneCamera, gateSceneCamera, isNeutralSceneCamera, readSceneCamera, readSceneCameraMove, sceneCameraAt, sceneLensShift, type SceneCameraValues } from '@/lib/sceneCamera';
 import { resolveTrackTime, trackAssetIndices, type MotionTrack } from '@/lib/tracks';
 import type { SceneState } from '@/store/useSceneStore';
 import { advancedRasterSize, gradientRasterMaxEdge, gradientSignature, normalizeGradientSpec, paintGradientCanvas } from '@/lib/gradient';
@@ -267,14 +267,18 @@ export class SceneRenderer3D implements IRenderer {
   // hidden in the panel while still steering the camera here.
   private camGateKey = '';
   private camGateTemplates: Template[] = [];
-  private sceneCameraFor(s: SceneState): SceneCameraValues {
+  private sceneCameraFor(s: SceneState, frame: number, totalFrames: number): SceneCameraValues {
     const visible = s.tracks.filter((t) => t.visible);
     const key = visible.map((t) => t.templateId).join(',');
     if (key !== this.camGateKey) {
       this.camGateKey = key;
       this.camGateTemplates = visible.map((t) => getTemplate(t.templateId));
     }
-    return gateSceneCamera(readSceneCamera(s.sceneCamera), this.camGateTemplates);
+    const cam = gateSceneCamera(readSceneCamera(s.sceneCamera), this.camGateTemplates);
+    // Where the shot is at THIS point of the clip. The scene's own clock, not
+    // the track's: one camera for the whole picture means one timeline for it,
+    // or two layers on different windows would be filmed from two places.
+    return sceneCameraAt(cam, readSceneCameraMove(s.sceneCamera), frame / Math.max(1, totalFrames));
   }
 
   // Alvos que so existem quando alguem usa escopo fora de 'scene'. Uma cena sem
@@ -1137,7 +1141,7 @@ export class SceneRenderer3D implements IRenderer {
       // same camera position, or the stack is not one picture. Gated by the same
       // rule the panel uses, so a value stored while a control was on offer can
       // never steer the camera from behind a panel that no longer shows it.
-      this.sceneCameraFor(s),
+      this.sceneCameraFor(s, frame, sceneTotal),
     );
     rt.group.position.set(track.transform.x, -track.transform.y, 0);
     rt.group.scale.setScalar(track.transform.scale);

@@ -5,8 +5,8 @@
 //   node scripts/genExportSources.mjs
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-import { buildSync } from 'esbuild';
+import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 
 // `new URL(import.meta.url).pathname` yields "/C:/Users/..." on Windows — the
 // leading slash makes path.resolve prepend the cwd's drive, so ROOT came out as
@@ -45,57 +45,44 @@ for (const f of tmplFiles) files[f] = rel(read('templates/' + f));
 // ---- manifest: per template file, which ids + template export names ----
 const safe = (n) => n.replace(/[^a-zA-Z0-9_$]/g, '_');
 const entry = tmplFiles.map((f) => `export * as ${safe(f.replace('.ts', ''))} from '../templates/${f}';`).join('\n');
-const tmpDir = fs.mkdtempSync(path.join(ROOT, '.exp-'));
-fs.writeFileSync(path.join(tmpDir, 'entry.ts'), entry);
 // Calling `npx esbuild <absolute path>` through cmd.exe breaks Windows paths
 // into pieces and may even interpret `C:\...` as a package-like specifier.
 // The JS API keeps every path as a real argument and is portable unchanged.
 let manifest = {}; // file.ts -> { exports: string[], ids: string[] }
-if (process.platform === 'win32') {
-  // esbuild's alias resolver can walk above the drive-scoped sandbox on
-  // Windows and fail before it reaches the entry file. Preserve the verified
-  // manifest and update the split Sticker modules explicitly; the source map
-  // itself is still regenerated from every live TypeScript file above.
-  const previous = read('lib/exportSources.ts');
-  const match = previous.match(/export const TEMPLATE_MANIFEST[^=]*= ([\s\S]*);\s*$/);
-  if (!match) throw new Error('Could not recover the existing template manifest');
-  manifest = JSON.parse(match[1]);
-  manifest['stickers.ts'] = {
-    exports: ['stickerVariants'],
-    ids: ['poster-01', 'poster-02', 'poster-03', 'poster-04', 'poster-05', 'poster-06'],
+// Read the ids from the live modules, through sucrase rather than a bundle.
+//
+// This used to bundle with esbuild and, on Windows, fall back to PRESERVING the
+// manifest that was already in the file, because esbuild's alias resolver walks
+// above the drive-scoped sandbox and fails before it reaches the entry. The
+// fallback was worse than the failure it covered: on the platform this whole
+// team works on, a NEW preset never entered the manifest, and the only symptom
+// was `npm test` telling you to run this script — which you had just run. Two
+// families were already special-cased by hand for exactly that reason.
+//
+// sucrase compiles the same TypeScript in-process, needs no bundle and no
+// temporary entry, and behaves the same on every platform.
+const require_ = createRequire(import.meta.url);
+require_('sucrase/register');
+{
+  const Module = require_('module');
+  const originalResolve = Module._resolveFilename;
+  Module._resolveFilename = function (request, parent, isMain, options) {
+    if (request.startsWith('@/')) request = path.join(ROOT, request.slice(2));
+    return originalResolve.call(this, request, parent, isMain, options);
   };
-  manifest['stickersExact.ts'] = {
-    exports: ['exactStickerVariants'],
-    ids: ['stickers-01', 'stickers-02', 'stickers-03'],
-  };
-} else {
-  buildSync({
-    absWorkingDir: ROOT,
-    entryPoints: [path.relative(ROOT, path.join(tmpDir, 'entry.ts')).replace(/\\/g, '/')],
-    bundle: true,
-    platform: 'node',
-    format: 'esm',
-    alias: { '@': ROOT.replace(/\\/g, '/') },
-    outfile: path.relative(ROOT, path.join(tmpDir, 'bundle.mjs')).replace(/\\/g, '/'),
-    logLevel: 'error',
-  });
-  // A bare Windows path ("C:\...") is not a legal ESM specifier — dynamic
-  // import needs a file:// URL. Kept here for parity on non-Windows hosts.
-  const mod = await import(pathToFileURL(path.join(tmpDir, 'bundle.mjs')).href);
-  for (const f of tmplFiles) {
-    const ns = mod[safe(f.replace('.ts', ''))];
-    const exps = [], ids = [];
-    for (const [name, val] of Object.entries(ns || {})) {
-      if (Array.isArray(val) && val[0] && val[0].meta && val[0].meta.id) {
-        exps.push(name); for (const t of val) if (t && t.meta && t.meta.id) ids.push(t.meta.id);
-      } else if (val && val.meta && val.meta.id && typeof val.transform === 'function') {
-        exps.push(name); ids.push(val.meta.id);
-      }
-    }
-    if (exps.length) manifest[f] = { exports: exps, ids };
-  }
 }
-fs.rmSync(tmpDir, { recursive: true, force: true });
+for (const f of tmplFiles) {
+  const ns = require_(path.join(ROOT, 'templates', f));
+  const exps = [], ids = [];
+  for (const [name, val] of Object.entries(ns || {})) {
+    if (Array.isArray(val) && val[0] && val[0].meta && val[0].meta.id) {
+      exps.push(name); for (const t of val) if (t && t.meta && t.meta.id) ids.push(t.meta.id);
+    } else if (val && val.meta && val.meta.id && typeof val.transform === 'function') {
+      exps.push(name); ids.push(val.meta.id);
+    }
+  }
+  if (exps.length) manifest[f] = { exports: exps, ids };
+}
 
 // ---- write ----
 const out =

@@ -183,7 +183,8 @@ export interface SceneState {
   setAssetCrop: (id: string, crop: CropFocus) => void;
   setAllAssetCrops: (crop: CropFocus) => void;
   setCardShape: (shape: string) => void;
-  setSceneCameraValue: (key: string, value: number) => void;
+  // `value` is a number for a slider and a pair for the travel pad.
+  setSceneCameraValue: (key: string, value: number | { x: number; y: number }) => void;
   resetSceneCamera: () => void;
   setVideoEnd: (mode: 'loop' | 'hold') => void;
 
@@ -533,6 +534,14 @@ export const useSceneStore = create<SceneState>((set, get) => ({
           background: { ...s.background, source: 'color' as const, color: '#FFFFFF', gradient: false },
         } : {}),
         ...(referenceCanvas && referenceAspect ? { aspect: referenceAspect, ...referenceCanvas } : {}),
+        // A preset that declares a shot brings it, the same way it brings its
+        // values — for a preset whose whole idea is the camera move, arriving
+        // without it would be arriving without the motion. Picking any other
+        // preset leaves the camera alone, so a shot someone set survives
+        // browsing the catalogue.
+        ...(templates[id]?.meta.sceneCamera
+          ? { sceneCamera: sanitizeSceneCamera(templates[id].meta.sceneCamera) }
+          : {}),
         frame: 0,
       };
     }),

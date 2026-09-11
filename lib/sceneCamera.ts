@@ -1,4 +1,5 @@
 import type { ControlDef } from './types';
+import { smooth } from './motion';
 
 // ----- The house camera: a SHOT, on top of whatever the template poses -----
 //
@@ -60,6 +61,79 @@ export const SCENE_CAMERA_CONTROLS: ControlDef[] = [
 ];
 
 export const NEUTRAL_SCENE_CAMERA: SceneCameraValues = { zoom: 1, panX: 0, panY: 0, orbitX: 0, orbitY: 0 };
+
+// ----- The shot MOVES -----
+//
+// Until here the camera stood somewhere. This is the half that makes it a
+// camera at all: over the clip it travels, and where it ends up is expressed
+// as a DELTA from where it started, not as a second pose.
+//
+// That is a deliberate choice against the obvious alternative. A second full
+// pose means ten sliders where there were five, and a panel of ten knobs is
+// what reads as fiddly rather than capable. A delta reads as a sentence: half
+// a frame to the left, over this clip, sitting still for the first and last
+// third of it.
+//
+// And it is deliberately NOT a path editor. A grid of numbered pins the camera
+// tours is a fine way to do this and it is not OUR way: nothing else in this
+// app is a map you drop markers on. Every family here says its motion as a
+// named move plus an amount plus a rhythm — `weave`/`sweep`/`hold` on the
+// wall, direction and speed on the ticker — and the camera says it the same
+// way. The cost is honest: two stops, not six. A tour of six needs a path, and
+// a path is a different tool than this one.
+export const SCENE_CAMERA_MOVE_CONTROLS: ControlDef[] = [
+  { key: '_camTravel', label: 'Travel', type: 'xypad', max: 100, default: { x: 0, y: 0 },
+    description: 'Where the frame ends up by the end of the clip. Like Pan, the control moves the image: 100 is one whole frame.' },
+  { key: '_camHold', label: 'Hold', type: 'slider', min: 0, max: 90, step: 1, default: 0, unit: '%',
+    description: 'Share of the clip spent parked, split between the two ends — the difference between a drift and a move that sits, goes, and sits again.' },
+];
+
+export interface SceneCameraMove {
+  travelX: number;   // fractions of the frame, same unit as panX
+  travelY: number;
+  hold: number;      // 0..0.9 of the clip, split between the two ends
+}
+
+export const NO_SCENE_CAMERA_MOVE: SceneCameraMove = { travelX: 0, travelY: 0, hold: 0 };
+
+export function readSceneCameraMove(values: Record<string, any> | undefined): SceneCameraMove {
+  if (!values) return NO_SCENE_CAMERA_MOVE;
+  const pad = values._camTravel;
+  const x = pad && typeof pad === 'object' ? Number(pad.x) : 0;
+  const y = pad && typeof pad === 'object' ? Number(pad.y) : 0;
+  return {
+    travelX: Number.isFinite(x) ? x / 100 : 0,
+    travelY: Number.isFinite(y) ? y / 100 : 0,
+    hold: Math.min(0.9, Math.max(0, (Number(values._camHold) || 0) / 100)),
+  };
+}
+
+export function sceneCameraTravels(move: SceneCameraMove): boolean {
+  return move.travelX !== 0 || move.travelY !== 0;
+}
+
+// Where the move is at this point of the clip. `hold` is taken off BOTH ends,
+// so 60% parks for 30%, travels through the middle 40%, and parks again — the
+// rhythm a camera has when it settles on something, leaves, and settles again.
+// The travel itself is eased, so it never starts or stops with a jerk.
+export function cameraMoveProgress(progress: number, hold: number): number {
+  const h = Math.min(0.9, Math.max(0, hold));
+  const u = (progress - h / 2) / (1 - h);
+  return smooth(Math.min(1, Math.max(0, u)));
+}
+
+// The camera at one point of the clip: where it stands, plus how far along the
+// move it is. A camera that does not travel returns the pose untouched, so a
+// still shot costs nothing and stays bit-identical.
+export function sceneCameraAt(
+  cam: SceneCameraValues,
+  move: SceneCameraMove,
+  progress: number,
+): SceneCameraValues {
+  if (!sceneCameraTravels(move)) return cam;
+  const t = cameraMoveProgress(progress, move.hold);
+  return { ...cam, panX: cam.panX + move.travelX * t, panY: cam.panY + move.travelY * t };
+}
 
 // ----- Where each house control is allowed to appear -----
 //
@@ -144,10 +218,14 @@ export function gateSceneCamera(cam: SceneCameraValues, templates: HasControls[]
 // one. Measured before this moved: with the values on the track, Zoom 200% grew
 // the active layer's silhouette from 105x182 to 136x363 and left the other
 // layer byte-identical at 104x182.
-export type SceneCameraState = Record<string, number>;
+// The xypad stores a pair, so this is no longer a bag of numbers.
+export type SceneCameraState = Record<string, number | { x: number; y: number }>;
 
 export const SCENE_CAMERA_DEFAULTS: SceneCameraState = Object.fromEntries(
-  SCENE_CAMERA_CONTROLS.map((def) => [def.key, Number(def.default)]),
+  [...SCENE_CAMERA_CONTROLS, ...SCENE_CAMERA_MOVE_CONTROLS].map((def) => [
+    def.key,
+    typeof def.default === 'object' ? { ...(def.default as { x: number; y: number }) } : Number(def.default),
+  ]),
 );
 
 // A saved scene may carry no camera at all (saved before the shot existed), a
@@ -155,13 +233,27 @@ export const SCENE_CAMERA_DEFAULTS: SceneCameraState = Object.fromEntries(
 // clamp to each control's own range: an out-of-range value is not hypothetical
 // here — a slider in this app once stored 3405 on a control whose max was 360.
 export function sanitizeSceneCamera(raw: unknown): SceneCameraState {
-  const out: SceneCameraState = { ...SCENE_CAMERA_DEFAULTS };
+  const out: SceneCameraState = {};
+  for (const [k, v] of Object.entries(SCENE_CAMERA_DEFAULTS)) {
+    out[k] = typeof v === 'object' ? { ...v } : v;
+  }
   if (!raw || typeof raw !== 'object') return out;
-  for (const def of SCENE_CAMERA_CONTROLS) {
-    const v = Number((raw as Record<string, unknown>)[def.key]);
+  for (const def of [...SCENE_CAMERA_CONTROLS, ...SCENE_CAMERA_MOVE_CONTROLS]) {
+    const got = (raw as Record<string, unknown>)[def.key];
+    const max = def.max ?? Infinity;
+    if (typeof def.default === 'object') {
+      // The pad: both axes clamped to the pad's own range, and a pair that is
+      // not a pair reads as the default rather than as half a pair.
+      if (!got || typeof got !== 'object') continue;
+      const x = Number((got as { x?: unknown }).x);
+      const y = Number((got as { y?: unknown }).y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      out[def.key] = { x: Math.min(max, Math.max(-max, x)), y: Math.min(max, Math.max(-max, y)) };
+      continue;
+    }
+    const v = Number(got);
     if (!Number.isFinite(v)) continue;
     const min = def.min ?? -Infinity;
-    const max = def.max ?? Infinity;
     out[def.key] = Math.min(max, Math.max(min, v));
   }
   return out;
