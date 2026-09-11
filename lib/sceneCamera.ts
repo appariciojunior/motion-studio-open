@@ -61,6 +61,66 @@ export const SCENE_CAMERA_CONTROLS: ControlDef[] = [
 
 export const NEUTRAL_SCENE_CAMERA: SceneCameraValues = { zoom: 1, panX: 0, panY: 0, orbitX: 0, orbitY: 0 };
 
+// ----- Where each house control is allowed to appear -----
+//
+// Most of these moves already exist as a control the TEMPLATE declares, and a
+// second knob for the same move makes the panel fiddlier instead of more
+// capable. Measured over the 82 webgl presets in the catalogue:
+//
+//   Zoom     duplicated in 67 (`zoom` 35, `distance` 32)   -> new in 15
+//   Pan X/Y  duplicated in 61 (`offset` xypad 50, `offsetX/Y` 11) -> new in 21
+//   Orbit Y  duplicated in 47 (`ringYaw` 20, `tilt` 16, `rotationY` 11)
+//   Orbit X  duplicated in 31 (`tiltX` 20, `rotationX` 11, plus the 9 coil
+//            presets whose `cameraView` pills ARE the elevation: side/down)
+//
+// So the house camera shows a control only where no visible layer already
+// offers that move. Nine presets — the six Poster and three Stickers — declare
+// no camera control at all and get the whole set.
+//
+// What is deliberately NOT treated as a duplicate: `cardRotation`, `cardTilt`,
+// `fanRotation`, `dragRotation`, `motionRotation`. Those turn the CARDS, which
+// is a different move from turning the camera — the cards keep facing wherever
+// the template aimed them.
+//
+// The consequence in a stacked scene is explicit: one layer offering its own
+// zoom hides the house Zoom for the whole scene, because the camera is one
+// camera. Never two knobs for one move is the rule that was chosen.
+export const SCENE_CAMERA_DUPLICATES: Record<string, string[]> = {
+  _camZoom: ['zoom', 'distance'],
+  _camPanX: ['offset', 'offsetX'],
+  _camPanY: ['offset', 'offsetY'],
+  _camOrbitX: ['rotationX', 'tiltX', 'cameraView'],
+  _camOrbitY: ['rotationY', 'ringYaw', 'tilt'],
+};
+
+interface HasControls { controls: ControlDef[] }
+
+// The controls to show for a given set of layers. Empty means the whole
+// section goes away — every move on offer is already on the panel.
+export function sceneCameraControlsFor(templates: HasControls[]): ControlDef[] {
+  const declared = new Set<string>();
+  for (const t of templates) for (const c of t.controls) declared.add(c.key);
+  return SCENE_CAMERA_CONTROLS.filter(
+    (def) => !(SCENE_CAMERA_DUPLICATES[def.key] ?? []).some((key) => declared.has(key)),
+  );
+}
+
+// The same decision, applied to the VALUES the renderer reads. A control that
+// the panel hides has to be inert, not merely invisible: a scene saved while a
+// control was on offer must not keep steering the camera from behind a panel
+// that no longer shows it.
+export function gateSceneCamera(cam: SceneCameraValues, templates: HasControls[]): SceneCameraValues {
+  const allowed = new Set(sceneCameraControlsFor(templates).map((def) => def.key));
+  if (allowed.size === SCENE_CAMERA_CONTROLS.length) return cam;
+  return {
+    zoom: allowed.has('_camZoom') ? cam.zoom : NEUTRAL_SCENE_CAMERA.zoom,
+    panX: allowed.has('_camPanX') ? cam.panX : NEUTRAL_SCENE_CAMERA.panX,
+    panY: allowed.has('_camPanY') ? cam.panY : NEUTRAL_SCENE_CAMERA.panY,
+    orbitX: allowed.has('_camOrbitX') ? cam.orbitX : NEUTRAL_SCENE_CAMERA.orbitX,
+    orbitY: allowed.has('_camOrbitY') ? cam.orbitY : NEUTRAL_SCENE_CAMERA.orbitY,
+  };
+}
+
 // How the shot is STORED: the raw control values, keyed by control key, so the
 // panel is a straight map and the declared defaults stay the single source of
 // truth. It lives on the scene, not on a track — a camera is a property of the

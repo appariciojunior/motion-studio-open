@@ -21,6 +21,16 @@ const CASOS = [
 ];
 const NEUTRO = { Zoom: '100', 'Pan X': '0', 'Pan Y': '0', 'Orbit Y': '0', 'Orbit X': '0' };
 
+// SWEEP="Orbit X:0,20,40,60,80" varre UM controle, para decidir se ele tem
+// alcance suficiente para ler como movimento de camera e nao como ajuste.
+if (process.env.SWEEP) {
+  const [rotulo, lista] = process.env.SWEEP.split(':');
+  CASOS.length = 0;
+  for (const v of lista.split(',')) {
+    CASOS.push({ arq: rotulo.replace(/[^A-Za-z0-9]/g, '') + '-' + v, vals: { [rotulo]: v } });
+  }
+}
+
 const semear = function (templateId) {
   const scene = {
     activeTemplateId: templateId,

@@ -11,8 +11,8 @@ import { cardAspectFor, coverCrop, cropKey, type CropFocus } from '@/lib/crop';
 import { advanceVideoForExport, createCardVideo, isVideoSource, prepareVideoForSequentialExport, useVideoProxies } from '@/lib/videoTexture';
 import { BASE_PATH, IS_STATIC_EXPORT } from '@/lib/paths';
 import type { IRenderer } from '@/lib/rendererTypes';
-import type { CameraPose, LayerTransform3D } from '@/lib/types';
-import { frameSceneCamera, isNeutralSceneCamera, readSceneCamera, sceneLensShift, type SceneCameraValues } from '@/lib/sceneCamera';
+import type { CameraPose, LayerTransform3D, Template } from '@/lib/types';
+import { frameSceneCamera, gateSceneCamera, isNeutralSceneCamera, readSceneCamera, sceneLensShift, type SceneCameraValues } from '@/lib/sceneCamera';
 import { resolveTrackTime, trackAssetIndices, type MotionTrack } from '@/lib/tracks';
 import type { SceneState } from '@/store/useSceneStore';
 import { advancedRasterSize, gradientRasterMaxEdge, gradientSignature, normalizeGradientSpec, paintGradientCanvas } from '@/lib/gradient';
@@ -236,6 +236,22 @@ export class SceneRenderer3D implements IRenderer {
       camera.clearViewOffset();
     }
     camera.updateProjectionMatrix();
+  }
+
+  // The gate depends only on WHICH templates are visible, so it is recomputed
+  // when that set changes and not once per track per frame.
+  private camGateKey = '';
+  private camGateTemplates: Template[] = [];
+  private sceneCameraFor(s: SceneState): SceneCameraValues {
+    const key = s.tracks
+      .filter((t) => t.visible && getTemplate(t.templateId).meta.engine === 'webgl')
+      .map((t) => t.templateId)
+      .join(',');
+    if (key !== this.camGateKey) {
+      this.camGateKey = key;
+      this.camGateTemplates = key ? key.split(',').map((id) => getTemplate(id)) : [];
+    }
+    return gateSceneCamera(readSceneCamera(s.sceneCamera), this.camGateTemplates);
   }
 
   // Alvos que so existem quando alguem usa escopo fora de 'scene'. Uma cena sem
@@ -1095,8 +1111,10 @@ export class SceneRenderer3D implements IRenderer {
       Number(track.values.perspective ?? 100),
       template.camera?.(track.values, ctx),
       // The scene's shot, not the track's: every layer is composited from the
-      // same camera position, or the stack is not one picture.
-      readSceneCamera(s.sceneCamera),
+      // same camera position, or the stack is not one picture. Gated by the same
+      // rule the panel uses, so a value stored while a control was on offer can
+      // never steer the camera from behind a panel that no longer shows it.
+      this.sceneCameraFor(s),
     );
     rt.group.position.set(track.transform.x, -track.transform.y, 0);
     rt.group.scale.setScalar(track.transform.scale);

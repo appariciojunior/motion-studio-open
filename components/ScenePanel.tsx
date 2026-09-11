@@ -1,12 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useSceneStore } from '@/store/useSceneStore';
 import { catalogTemplateList, getTemplate } from '@/templates';
 import { ControlRow, controlVisible } from './Controls';
 import EasingPanel from './EasingPanel';
 import TrackInspector from './TrackInspector';
-import { SCENE_CAMERA_CONTROLS } from '@/lib/sceneCamera';
+import { sceneCameraControlsFor } from '@/lib/sceneCamera';
 import type { ControlDef } from '@/lib/types';
 
 // Renders the SCENE + TIMING sections (no card wrapper — the page composes cards).
@@ -27,8 +27,17 @@ export default function ScenePanel() {
   const resetSceneCamera = useSceneStore((s) => s.resetSceneCamera);
   // The renderer picks the webgl engine when ANY visible track is webgl, so the
   // camera is live under exactly that condition — not under the active layer.
-  const sceneHasWebgl = useSceneStore((s) =>
-    s.tracks.some((t) => t.visible && getTemplate(t.templateId).meta.engine === 'webgl'),
+  const webglTemplateIds = useSceneStore((s) => s.tracks
+    .filter((t) => t.visible && getTemplate(t.templateId).meta.engine === 'webgl')
+    .map((t) => t.templateId)
+    .join(','));
+  // Only the moves no visible layer already offers: a second knob for the same
+  // move makes the panel fiddlier, not more capable. See lib/sceneCamera.
+  const cameraControls = useMemo(
+    () => (webglTemplateIds
+      ? sceneCameraControlsFor(webglTemplateIds.split(',').map((id) => getTemplate(id)))
+      : []),
+    [webglTemplateIds],
   );
 
   const template = getTemplate(activeTemplateId);
@@ -101,11 +110,14 @@ export default function ScenePanel() {
 
       {/* The shot: where the camera stands. Scene-level, so it sits OUTSIDE the
           per-layer block above — two layers composited from two camera
-          positions are not one picture. Shown only when some visible layer is
-          webgl: a 2D track is composited through an orthographic view where
-          none of these moves would do anything, and a control that does
-          nothing is worse than a missing one. */}
-      {sceneHasWebgl && (
+          positions are not one picture.
+
+          What shows up here is only what is NOT already on the panel: a 2D
+          track has no camera to move, and 67 of the 82 webgl presets declare
+          their own zoom, 61 their own offset, 47 their own yaw. A second knob
+          for the same move is what makes a panel feel fiddly instead of
+          capable, so the section can come out empty and disappear. */}
+      {cameraControls.length > 0 && (
         <>
           <div className="section-head">
             <span className="eyebrow">Camera</span>
@@ -113,7 +125,7 @@ export default function ScenePanel() {
           </div>
           <div className="section-body">
             <div className="ctl-hint">Moves the camera, not the cards — the same motion seen from somewhere else.</div>
-            {SCENE_CAMERA_CONTROLS.map((def) => (
+            {cameraControls.map((def) => (
               <ControlRow
                 key={def.key}
                 def={def}

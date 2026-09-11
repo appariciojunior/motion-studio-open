@@ -1,13 +1,28 @@
-// The house camera must re-frame a shot without ever moving it by accident.
-// Neutral has to be neutral to the bit, a dolly may not change where the camera
-// LOOKS, an orbit may not change the distance, and a pan may not move the camera
-// at all — it is a shift of the lens, not a move in space. Each of those is a way the control could feel right in one
-// preset and wrong in the next.
+// The house camera must re-frame a shot without ever moving it by accident, and
+// it must never offer a move the panel already offers.
+//
+// Neutral has to be neutral to the bit. A dolly may not change where the camera
+// LOOKS, an orbit may not change its distance, and a pan may not move it at all
+// — a pan is a shift of the lens, not a move in space. Each of those is a way a
+// control could feel right in one preset and wrong in the next.
+//
+// The second half sweeps the REAL catalogue: for every webgl preset, a house
+// control is shown exactly when the template does not already declare that
+// move, and a hidden one is proven inert rather than merely invisible.
+const path = require('path');
+const Module = require('module');
 require('sucrase/register');
+const root = path.resolve(__dirname, '..');
+const originalResolve = Module._resolveFilename;
+Module._resolveFilename = function (request, parent, isMain, options) {
+  if (request.startsWith('@/')) request = path.join(root, request.slice(2));
+  return originalResolve.call(this, request, parent, isMain, options);
+};
 const assert = require('node:assert/strict');
 const {
   readSceneCamera, isNeutralSceneCamera, frameSceneCamera, NEUTRAL_SCENE_CAMERA, SCENE_CAMERA_CONTROLS,
   SCENE_CAMERA_DEFAULTS, sanitizeSceneCamera, sceneLensShift,
+  SCENE_CAMERA_DUPLICATES, sceneCameraControlsFor, gateSceneCamera,
 } = require('../lib/sceneCamera');
 
 const near = (a, b, tol = 1e-7, what = '') => assert.ok(Math.abs(a - b) < tol, `${what} ${a} != ${b}`);
@@ -150,5 +165,69 @@ const P = { x: 0, y: 0, z: 1000 }, T = { x: 0, y: 0, z: 0 };
   }
   near(pole.position.y, 1000, 1e-6, 'a top-down pan stays at its height');
 }
+
+
+// ---- the duplicate gate, against the REAL catalogue ----
+// The rule chosen for this feature: never two knobs for one move. So a house
+// control may only appear where no visible layer declares the same move. This
+// half of the suite exists because the list of duplicate keys is the kind of
+// thing that rots silently — a template renames `zoom` and the gate quietly
+// stops gating.
+const { catalogTemplateList } = require('../templates');
+const webgl = catalogTemplateList.filter((t) => t.meta.engine === 'webgl');
+assert.ok(webgl.length > 50, `expected a webgl catalogue, got ${webgl.length}`);
+
+// 1. Every key the gate names still exists on some webgl preset.
+const declaredKeys = new Set();
+for (const t of webgl) for (const c of t.controls) declaredKeys.add(c.key);
+for (const [house, keys] of Object.entries(SCENE_CAMERA_DUPLICATES)) {
+  assert.ok(SCENE_CAMERA_CONTROLS.some((d) => d.key === house), `${house} is not a house control`);
+  for (const key of keys) {
+    assert.ok(declaredKeys.has(key), `${house} guards against '${key}', which no webgl preset declares any more`);
+  }
+}
+
+// 2. The invariant, swept over the whole catalogue: a preset never gets a house
+//    control whose move it already offers, and never loses one it does not.
+let gated = 0, offered = 0;
+for (const t of webgl) {
+  const keys = new Set(t.controls.map((c) => c.key));
+  const shown = new Set(sceneCameraControlsFor([t]).map((d) => d.key));
+  for (const def of SCENE_CAMERA_CONTROLS) {
+    const duplicates = (SCENE_CAMERA_DUPLICATES[def.key] ?? []).some((k) => keys.has(k));
+    assert.equal(shown.has(def.key), !duplicates,
+      `${t.meta.id}: ${def.key} ${shown.has(def.key) ? 'shown' : 'hidden'} but duplicate=${duplicates}`);
+    if (duplicates) gated++; else offered++;
+    cases++;
+  }
+  // 3. A hidden control must be INERT, not merely invisible.
+  const loud = { zoom: 2, panX: 0.5, panY: -0.5, orbitX: 40, orbitY: 60 };
+  const g = gateSceneCamera(loud, [t]);
+  assert.equal(g.zoom, shown.has('_camZoom') ? 2 : 1);
+  assert.equal(g.panX, shown.has('_camPanX') ? 0.5 : 0);
+  assert.equal(g.panY, shown.has('_camPanY') ? -0.5 : 0);
+  assert.equal(g.orbitX, shown.has('_camOrbitX') ? 40 : 0);
+  assert.equal(g.orbitY, shown.has('_camOrbitY') ? 60 : 0);
+  cases++;
+}
+
+// 4. No layers at all: nothing on offer, and every value inert.
+assert.deepEqual(sceneCameraControlsFor([]), SCENE_CAMERA_CONTROLS, 'with no template nothing is duplicated');
+// 5. Stacked layers: one layer offering a move is enough to hide it, because
+//    there is one camera for the scene.
+{
+  const comZoom = webgl.find((t) => t.controls.some((c) => c.key === 'zoom' || c.key === 'distance'));
+  const semNada = webgl.find((t) => {
+    const keys = new Set(t.controls.map((c) => c.key));
+    return !Object.values(SCENE_CAMERA_DUPLICATES).some((l) => l.some((k) => keys.has(k)));
+  });
+  assert.ok(comZoom && semNada, 'catalogue should hold both kinds');
+  assert.equal(sceneCameraControlsFor([semNada]).length, SCENE_CAMERA_CONTROLS.length);
+  assert.ok(!sceneCameraControlsFor([semNada, comZoom]).some((d) => d.key === '_camZoom'),
+    'a layer with its own zoom hides the house zoom for the scene');
+  assert.equal(gateSceneCamera({ ...NEUTRAL_SCENE_CAMERA, zoom: 3 }, [semNada, comZoom]).zoom, 1);
+  cases += 4;
+}
+console.log(`  gate: ${gated} control/preset pairs hidden as duplicates, ${offered} offered, over ${webgl.length} webgl presets.`);
 
 console.log(`Scene camera: ${cases} framing cases passed; neutral is exact, dolly keeps aim, orbit keeps radius, and a pan never moves the camera — it shifts the lens.`);
