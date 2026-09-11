@@ -81,60 +81,98 @@ export const NEUTRAL_SCENE_CAMERA: SceneCameraValues = { zoom: 1, panX: 0, panY:
 // wall, direction and speed on the ticker — and the camera says it the same
 // way. The cost is honest: two stops, not six. A tour of six needs a path, and
 // a path is a different tool than this one.
-export const SCENE_CAMERA_MOVE_CONTROLS: ControlDef[] = [
-  { key: '_camTravel', label: 'Travel', type: 'xypad', max: 100, default: { x: 0, y: 0 },
-    description: 'Where the frame ends up by the end of the clip. Like Pan, the control moves the image: 100 is one whole frame.' },
-  { key: '_camHold', label: 'Hold', type: 'slider', min: 0, max: 90, step: 1, default: 0, unit: '%',
-    description: 'Share of the clip spent parked, split between the two ends — the difference between a drift and a move that sits, goes, and sits again.' },
-];
+export const SCENE_CAMERA_STOP_PAD: ControlDef = {
+  key: '_camStop', label: 'Stop', type: 'xypad', max: 100, default: { x: 0, y: 0 },
+  description: 'Where the frame sits at this stop. Like Pan, the control moves the image: 100 is one whole frame.',
+};
+export const SCENE_CAMERA_STOP_ZOOM: ControlDef = {
+  key: '_camStopZoom', label: 'Zoom', type: 'slider', min: 25, max: 300, step: 1, default: 100, unit: '%',
+  description: 'How close the camera is at this stop. This is where a push in or a pull back gets said.',
+};
+export const SCENE_CAMERA_HOLD: ControlDef = {
+  key: '_camHold', label: 'Hold', type: 'slider', min: 0, max: 90, step: 1, default: 50, unit: '%',
+  description: 'Share of each leg spent parked at the stop before travelling to the next one.',
+};
 
-export interface SceneCameraMove {
-  travelX: number;   // fractions of the frame, same unit as panX
-  travelY: number;
-  hold: number;      // 0..0.9 of the clip, split between the two ends
+// At most this many stops after the first. Not a technical ceiling: past four
+// legs a clip of a few seconds gives each one under a second, and what you get
+// is a camera that never settles anywhere. A tour of a dozen is a different
+// tool than this one.
+export const MAX_CAMERA_STOPS = 4;
+
+export interface CameraStop {
+  x: number;      // where the frame sits, per-cent of a frame (the unit panX uses)
+  y: number;
+  zoom: number;   // per-cent, the unit the Shot's own zoom uses
 }
 
-export const NO_SCENE_CAMERA_MOVE: SceneCameraMove = { travelX: 0, travelY: 0, hold: 0 };
-
-export function readSceneCameraMove(values: Record<string, any> | undefined): SceneCameraMove {
-  if (!values) return NO_SCENE_CAMERA_MOVE;
-  const pad = values._camTravel;
-  const x = pad && typeof pad === 'object' ? Number(pad.x) : 0;
-  const y = pad && typeof pad === 'object' ? Number(pad.y) : 0;
-  return {
-    travelX: Number.isFinite(x) ? x / 100 : 0,
-    travelY: Number.isFinite(y) ? y / 100 : 0,
-    hold: Math.min(0.9, Math.max(0, (Number(values._camHold) || 0) / 100)),
-  };
+export interface SceneCameraPath {
+  stops: CameraStop[];  // AFTER the first: the Shot itself is stop 1
+  hold: number;         // 0..0.9 of each leg
 }
 
-export function sceneCameraTravels(move: SceneCameraMove): boolean {
-  return move.travelX !== 0 || move.travelY !== 0;
+export const NO_SCENE_CAMERA_PATH: SceneCameraPath = { stops: [], hold: 0 };
+
+const stopKey = (i: number) => `_camStop${i + 2}`;          // stop 2 is the first one stored
+const stopZoomKey = (i: number) => `_camStop${i + 2}Zoom`;
+
+export function readSceneCameraPath(values: Record<string, any> | undefined): SceneCameraPath {
+  if (!values) return NO_SCENE_CAMERA_PATH;
+  const stops: CameraStop[] = [];
+  for (let i = 0; i < MAX_CAMERA_STOPS; i++) {
+    const pad = values[stopKey(i)];
+    if (!pad || typeof pad !== 'object') break;   // contiguous: a gap ends the path
+    const x = Number(pad.x);
+    const y = Number(pad.y);
+    const z = Number(values[stopZoomKey(i)]);
+    stops.push({
+      x: Number.isFinite(x) ? x : 0,
+      y: Number.isFinite(y) ? y : 0,
+      zoom: Number.isFinite(z) && z > 0 ? z : 100,
+    });
+  }
+  return { stops, hold: Math.min(0.9, Math.max(0, (Number(values._camHold) || 0) / 100)) };
 }
 
-// Where the move is at this point of the clip. `hold` is taken off BOTH ends,
-// so 60% parks for 30%, travels through the middle 40%, and parks again — the
-// rhythm a camera has when it settles on something, leaves, and settles again.
-// The travel itself is eased, so it never starts or stops with a jerk.
-export function cameraMoveProgress(progress: number, hold: number): number {
+export function sceneCameraTravels(path: SceneCameraPath): boolean {
+  return path.stops.length > 0;
+}
+
+// Where a leg is at this point of it. `hold` is taken off the FRONT of each leg,
+// so the camera arrives, sits, and only then leaves for the next stop — the
+// rhythm a camera has when it is looking at something rather than sweeping past
+// it. The travel itself is eased, so no leg starts or stops with a jerk.
+export function cameraLegProgress(u: number, hold: number): number {
   const h = Math.min(0.9, Math.max(0, hold));
-  const u = (progress - h / 2) / (1 - h);
-  return smooth(Math.min(1, Math.max(0, u)));
+  return smooth(Math.min(1, Math.max(0, (u - h) / (1 - h))));
 }
 
-// The camera at one point of the clip: where it stands, plus how far along the
-// move it is. A camera that does not travel returns the pose untouched, so a
-// still shot costs nothing and stays bit-identical.
+// The camera at one point of the clip. The Shot is stop 1, every entry in the
+// path is another stop, and the clip is split equally between the legs.
 export function sceneCameraAt(
   cam: SceneCameraValues,
-  move: SceneCameraMove,
+  path: SceneCameraPath,
   progress: number,
 ): SceneCameraValues {
-  if (!sceneCameraTravels(move)) return cam;
-  const t = cameraMoveProgress(progress, move.hold);
-  return { ...cam, panX: cam.panX + move.travelX * t, panY: cam.panY + move.travelY * t };
+  if (!sceneCameraTravels(path)) return cam;
+  const legs = path.stops.length;
+  const p = Math.min(1, Math.max(0, progress)) * legs;
+  // The last frame lands on the END of the last leg, not on the start of a leg
+  // that does not exist.
+  const leg = Math.min(legs - 1, Math.floor(p));
+  const t = cameraLegProgress(p - leg, path.hold);
+  const from = leg === 0
+    ? { x: cam.panX * 100, y: cam.panY * 100, zoom: cam.zoom * 100 }
+    : path.stops[leg - 1];
+  const to = path.stops[leg];
+  const mix = (a: number, b: number) => a + (b - a) * t;
+  return {
+    ...cam,
+    panX: mix(from.x, to.x) / 100,
+    panY: mix(from.y, to.y) / 100,
+    zoom: Math.max(0.05, mix(from.zoom, to.zoom) / 100),
+  };
 }
-
 // ----- Where each house control is allowed to appear -----
 //
 // Most of these moves already exist as a control the TEMPLATE declares, and a
@@ -221,12 +259,14 @@ export function gateSceneCamera(cam: SceneCameraValues, templates: HasControls[]
 // The xypad stores a pair, so this is no longer a bag of numbers.
 export type SceneCameraState = Record<string, number | { x: number; y: number }>;
 
-export const SCENE_CAMERA_DEFAULTS: SceneCameraState = Object.fromEntries(
-  [...SCENE_CAMERA_CONTROLS, ...SCENE_CAMERA_MOVE_CONTROLS].map((def) => [
-    def.key,
-    typeof def.default === 'object' ? { ...(def.default as { x: number; y: number }) } : Number(def.default),
-  ]),
-);
+// Every key the camera can hold: the Shot, the Hold, and one pad plus one zoom
+// per possible stop. A stop that does not exist is ABSENT rather than zeroed —
+// `readSceneCameraPath` stops at the first gap — so the defaults carry no stop
+// at all and a fresh scene has a camera that stands still.
+export const SCENE_CAMERA_DEFAULTS: SceneCameraState = {
+  ...Object.fromEntries(SCENE_CAMERA_CONTROLS.map((def) => [def.key, Number(def.default)])),
+  [SCENE_CAMERA_HOLD.key]: Number(SCENE_CAMERA_HOLD.default),
+};
 
 // A saved scene may carry no camera at all (saved before the shot existed), a
 // stale key, or garbage. Rebuild it from the declared controls every time and
@@ -238,25 +278,36 @@ export function sanitizeSceneCamera(raw: unknown): SceneCameraState {
     out[k] = typeof v === 'object' ? { ...v } : v;
   }
   if (!raw || typeof raw !== 'object') return out;
-  for (const def of [...SCENE_CAMERA_CONTROLS, ...SCENE_CAMERA_MOVE_CONTROLS]) {
-    const got = (raw as Record<string, unknown>)[def.key];
-    const max = def.max ?? Infinity;
-    if (typeof def.default === 'object') {
-      // The pad: both axes clamped to the pad's own range, and a pair that is
-      // not a pair reads as the default rather than as half a pair.
-      if (!got || typeof got !== 'object') continue;
-      const x = Number((got as { x?: unknown }).x);
-      const y = Number((got as { y?: unknown }).y);
-      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-      out[def.key] = { x: Math.min(max, Math.max(-max, x)), y: Math.min(max, Math.max(-max, y)) };
-      continue;
-    }
-    const v = Number(got);
+  const bag = raw as Record<string, unknown>;
+  for (const def of [...SCENE_CAMERA_CONTROLS, SCENE_CAMERA_HOLD]) {
+    const v = Number(bag[def.key]);
     if (!Number.isFinite(v)) continue;
     const min = def.min ?? -Infinity;
+    const max = def.max ?? Infinity;
     out[def.key] = Math.min(max, Math.max(min, v));
   }
+  // The stops, in order and contiguous: anything that is not a pair ends the
+  // path rather than leaving a hole the renderer would have to guess about.
+  const padMax = SCENE_CAMERA_STOP_PAD.max ?? 100;
+  const zMin = SCENE_CAMERA_STOP_ZOOM.min ?? 25;
+  const zMax = SCENE_CAMERA_STOP_ZOOM.max ?? 300;
+  for (let i = 0; i < MAX_CAMERA_STOPS; i++) {
+    const pad = bag[stopKey(i)] as { x?: unknown; y?: unknown } | undefined;
+    if (!pad || typeof pad !== 'object') break;
+    const x = Number(pad.x);
+    const y = Number(pad.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) break;
+    out[stopKey(i)] = { x: Math.min(padMax, Math.max(-padMax, x)), y: Math.min(padMax, Math.max(-padMax, y)) };
+    const z = Number(bag[stopZoomKey(i)]);
+    out[stopZoomKey(i)] = Number.isFinite(z) ? Math.min(zMax, Math.max(zMin, z)) : 100;
+  }
   return out;
+}
+
+// The keys one stop occupies, so the panel can add and remove a whole stop
+// without knowing how a stop is stored.
+export function cameraStopKeys(index: number): { pad: string; zoom: string } {
+  return { pad: stopKey(index), zoom: stopZoomKey(index) };
 }
 
 const num = (v: unknown, fallback: number) => (Number.isFinite(Number(v)) ? Number(v) : fallback);

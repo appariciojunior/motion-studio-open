@@ -8,7 +8,7 @@ import { resolveEasing } from '@/lib/easing';
 import { assetIndexForSlot, clamp } from '@/lib/motion';
 import { resolveTrackTime, trackAssetIndices, type MotionTrack } from '@/lib/tracks';
 import { cardAspectFor, coverCrop, cropKey, type CropFocus } from '@/lib/crop';
-import { gateSceneCamera, readSceneCamera, readSceneCameraMove, sceneCameraAt, sceneCameraFilterRect, sceneCameraPlanar } from '@/lib/sceneCamera';
+import { gateSceneCamera, readSceneCamera, readSceneCameraPath, sceneCameraAt, sceneCameraFilterRect, sceneCameraPlanar } from '@/lib/sceneCamera';
 import { advanceVideoForExport, createCardVideo, isVideoSource, prepareVideoForSequentialExport, useVideoProxies, whenVideoReady } from '@/lib/videoTexture';
 import { BASE_PATH, IS_STATIC_EXPORT } from '@/lib/paths';
 import { advancedRasterSize, gradientRasterMaxEdge, gradientSignature, normalizeGradientSpec, paintGradientCanvas } from '@/lib/gradient';
@@ -542,7 +542,7 @@ export class SceneRenderer {
     const cam = gateSceneCamera(readSceneCamera(s.sceneCamera), this.camGateTemplates);
     // The scene's own clock: one camera for the picture, one timeline for it.
     const total = Math.max(1, Math.round(s.duration * s.fps));
-    return sceneCameraAt(cam, readSceneCameraMove(s.sceneCamera), frame / total);
+    return sceneCameraAt(cam, readSceneCameraPath(s.sceneCamera), frame / total);
   }
 
   private syncEffects(frame: number) {

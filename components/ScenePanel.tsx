@@ -6,7 +6,10 @@ import { catalogTemplateList, getTemplate } from '@/templates';
 import { ControlRow, controlVisible } from './Controls';
 import EasingPanel from './EasingPanel';
 import TrackInspector from './TrackInspector';
-import { SCENE_CAMERA_MOVE_CONTROLS, readSceneCameraMove, sceneCameraControlsFor, sceneCameraTravels } from '@/lib/sceneCamera';
+import {
+  MAX_CAMERA_STOPS, SCENE_CAMERA_HOLD, SCENE_CAMERA_STOP_PAD, SCENE_CAMERA_STOP_ZOOM,
+  cameraStopKeys, readSceneCameraPath, sceneCameraControlsFor,
+} from '@/lib/sceneCamera';
 import type { ControlDef } from '@/lib/types';
 
 // Renders the SCENE + TIMING sections (no card wrapper — the page composes cards).
@@ -33,12 +36,23 @@ export default function ScenePanel() {
     .join(','));
   // Only the moves no visible layer already offers: a second knob for the same
   // move makes the panel fiddlier, not more capable. See lib/sceneCamera.
-  // Hold means nothing until the camera actually travels, so it appears with
-  // the travel rather than sitting there doing nothing.
-  const travels = sceneCameraTravels(readSceneCameraMove(sceneCamera));
-  const moveControls = travels
-    ? SCENE_CAMERA_MOVE_CONTROLS
-    : SCENE_CAMERA_MOVE_CONTROLS.filter((def) => def.key !== '_camHold');
+  const patchSceneCamera = useSceneStore((s) => s.patchSceneCamera);
+  // The path: the Shot is stop 1, and each of these is another one. Hold only
+  // means something once there is a second stop to sit at.
+  const path = readSceneCameraPath(sceneCamera);
+  const addStop = () => {
+    const keys = cameraStopKeys(path.stops.length);
+    // A new stop starts where the shot already is, so adding one changes
+    // nothing until it is dragged — the same courtesy a new layer gets.
+    patchSceneCamera({
+      [keys.pad]: { x: Number(sceneCamera._camPanX) || 0, y: Number(sceneCamera._camPanY) || 0 },
+      [keys.zoom]: Number(sceneCamera._camZoom) || 100,
+    });
+  };
+  const removeStop = () => {
+    const keys = cameraStopKeys(path.stops.length - 1);
+    patchSceneCamera({ [keys.pad]: null, [keys.zoom]: null });
+  };
   const cameraControls = useMemo(
     () => (visibleTemplateIds
       ? sceneCameraControlsFor(visibleTemplateIds.split(',').map((id) => getTemplate(id)))
@@ -126,8 +140,7 @@ export default function ScenePanel() {
           empty and only Move is left — which is the case for a preset that
           already frames itself. Nothing in the catalogue moves the frame over
           time, so Move is never a duplicate of anything. */}
-      {(cameraControls.length > 0 || moveControls.length > 0) && (
-        <>
+      <>
           <div className="section-head">
             <span className="eyebrow">Camera</span>
             <button type="button" className="badge" onClick={resetSceneCamera}>Reset</button>
@@ -151,19 +164,48 @@ export default function ScenePanel() {
               camera rather than a crop. */}
           <div className="section-body">
             <div className="ctl-section-title">Move</div>
-            <div className="ctl-hint">Drag the pad and the frame travels there over the clip.</div>
-            {moveControls.map((def) => (
+            <div className="ctl-hint">
+              {path.stops.length === 0
+                ? 'Add a stop and the camera travels there over the clip.'
+                : 'The camera sits at each stop, then travels to the next one.'}
+            </div>
+            {path.stops.map((stop, i) => {
+              const keys = cameraStopKeys(i);
+              return (
+                <div className="cam-stop" key={keys.pad}>
+                  <ControlRow
+                    def={{ ...SCENE_CAMERA_STOP_PAD, key: keys.pad, label: `Stop ${i + 2}` }}
+                    value={{ x: stop.x, y: stop.y }}
+                    onChange={(val) => setSceneCameraValue(keys.pad, val as { x: number; y: number })}
+                  />
+                  <ControlRow
+                    def={{ ...SCENE_CAMERA_STOP_ZOOM, key: keys.zoom }}
+                    value={stop.zoom}
+                    onChange={(val) => setSceneCameraValue(keys.zoom, Number(val))}
+                  />
+                </div>
+              );
+            })}
+            <div className="ctl-row">
+              <div className="ctl-input cam-stop-actions">
+                {path.stops.length < MAX_CAMERA_STOPS && (
+                  <button type="button" className="badge" onClick={addStop}>+ Stop</button>
+                )}
+                {path.stops.length > 0 && (
+                  <button type="button" className="badge" onClick={removeStop}>− Stop</button>
+                )}
+              </div>
+            </div>
+            {path.stops.length > 0 && (
               <ControlRow
-                key={def.key}
-                def={def}
-                value={sceneCamera[def.key] ?? def.default}
-                onChange={(val) => setSceneCameraValue(def.key, val)}
+                def={SCENE_CAMERA_HOLD}
+                value={sceneCamera[SCENE_CAMERA_HOLD.key] ?? SCENE_CAMERA_HOLD.default}
+                onChange={(val) => setSceneCameraValue(SCENE_CAMERA_HOLD.key, Number(val))}
               />
-            ))}
+            )}
           </div>
           <div className="hairline" />
-        </>
-      )}
+      </>
 
       {/* layer compositing: opacity, blend, retiming, asset split. Only
           meaningful once a second layer exists. */}

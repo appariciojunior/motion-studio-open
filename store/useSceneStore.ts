@@ -70,13 +70,20 @@ export interface LogoSettings {
   size: number; // px
 }
 
-// A named snapshot of a template's tweaked values + easing ("Save as custom").
+// A named snapshot of a composition: the template, its values, its easing —
+// and the SHOT. A saved look whose camera did not come with it would replay
+// from wherever the camera happened to be standing, which for a composition
+// built around a camera move is not the same composition at all.
+//
+// `sceneCamera` is optional because everything saved before this field existed
+// is still a valid preset; it simply leaves the camera alone when applied.
 export interface CustomPreset {
   id: string;
   name: string;
   templateId: string;
   values: Record<string, any>;
   easing: EasingSpec;
+  sceneCamera?: SceneCameraState;
 }
 
 const PRESETS_KEY = 'motion-custom-presets';
@@ -183,8 +190,12 @@ export interface SceneState {
   setAssetCrop: (id: string, crop: CropFocus) => void;
   setAllAssetCrops: (crop: CropFocus) => void;
   setCardShape: (shape: string) => void;
-  // `value` is a number for a slider and a pair for the travel pad.
+  // `value` is a number for a slider and a pair for a stop pad.
   setSceneCameraValue: (key: string, value: number | { x: number; y: number }) => void;
+  // Several keys at once, and `null` REMOVES one — adding or dropping a stop
+  // is two keys moving together, and a half-written stop would be a hole the
+  // renderer has to guess about.
+  patchSceneCamera: (patch: Record<string, number | { x: number; y: number } | null>) => void;
   resetSceneCamera: () => void;
   setVideoEnd: (mode: 'loop' | 'hold') => void;
 
@@ -771,6 +782,14 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   // A new object every time: the autosave compares document fields by identity.
   setSceneCameraValue: (key, value) =>
     set((s) => ({ sceneCamera: sanitizeSceneCamera({ ...s.sceneCamera, [key]: value }) })),
+  patchSceneCamera: (patch) =>
+    set((s) => {
+      const next: Record<string, number | { x: number; y: number }> = { ...s.sceneCamera };
+      for (const [k, v] of Object.entries(patch)) {
+        if (v === null) delete next[k]; else next[k] = v;
+      }
+      return { sceneCamera: sanitizeSceneCamera(next) };
+    }),
   resetSceneCamera: () => set(() => ({ sceneCamera: { ...SCENE_CAMERA_DEFAULTS } })),
   setVideoEnd: (mode) => set(() => ({ videoEnd: mode })),
 
@@ -908,6 +927,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         templateId: s.activeTemplateId,
         values: { ...s.values },
         easing: s.easing,
+        // The shot travels with it — see CustomPreset.
+        sceneCamera: { ...s.sceneCamera },
       };
       const next = [...s.customPresets, preset];
       persistPresets(next);
@@ -926,6 +947,9 @@ export const useSceneStore = create<SceneState>((set, get) => ({
           values: { ...defaultsFor(p.templateId), ...p.values },
           easing: p.easing,
         }),
+        // A composition saved WITH a shot brings it back; one saved before the
+        // camera existed leaves it alone rather than resetting it to neutral.
+        ...(p.sceneCamera ? { sceneCamera: sanitizeSceneCamera(p.sceneCamera) } : {}),
         frame: 0,
       };
     }),

@@ -6912,3 +6912,17 @@ select.field {
     animation: none;
   }
 }
+
+/* Camera stops: the two buttons that add and drop one, and the pair of rows
+   one stop occupies. .ctl-input is a bare flex row, so the gap is all that
+   is missing. */
+.cam-stop-actions {
+  gap: var(--gap-tight);
+}
+
+.cam-stop {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-tight);
+  padding-bottom: var(--gap-tight);
+}

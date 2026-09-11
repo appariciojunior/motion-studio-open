@@ -184,14 +184,18 @@ export const framesVariants: Template[] = [
     cardSize: 610, gap: 30, rowsSkipped: 1, weave: 'varied', sweep: 0.25,
     hold: 40, tilt: -3, speed: 0.18,
   }, { id: 'smooth' }), {
-    // Sits on the left third, crosses most of a frame, sits again.
-    _camTravel: { x: 70, y: 0 }, _camHold: 55, _camPanX: -30, _camZoom: 115,
+    // Sits on the left third, crosses to the right, and pushes in on the way.
+    _camPanX: -30, _camZoom: 105, _camHold: 55,
+    _camStop2: { x: 40, y: 0 }, _camStop2Zoom: 135,
   }),
   // The same idea read vertically: a wall taller than the frame, climbed.
   shot(preset(framesBase, 'wall-12', 'Frames 12', {
     cardSize: 465, gap: 0, rowsSkipped: 2, weave: 'opposed', sweep: 0.15,
     hold: 55, tilt: 2, speed: 0.12,
   }, { id: 'smooth' }), {
-    _camTravel: { x: 0, y: 80 }, _camHold: 45, _camPanY: -35, _camZoom: 125,
+    // Starts low and wide, climbs, and pulls back at the top.
+    _camPanY: -35, _camZoom: 130, _camHold: 45,
+    _camStop2: { x: 0, y: 30 }, _camStop2Zoom: 130,
+    _camStop3: { x: 0, y: 70 }, _camStop3Zoom: 100,
   }),
 ];

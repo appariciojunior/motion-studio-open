@@ -12,7 +12,7 @@ import { advanceVideoForExport, createCardVideo, isVideoSource, prepareVideoForS
 import { BASE_PATH, IS_STATIC_EXPORT } from '@/lib/paths';
 import type { IRenderer } from '@/lib/rendererTypes';
 import type { CameraPose, LayerTransform3D, Template } from '@/lib/types';
-import { frameSceneCamera, gateSceneCamera, isNeutralSceneCamera, readSceneCamera, readSceneCameraMove, sceneCameraAt, sceneLensShift, type SceneCameraValues } from '@/lib/sceneCamera';
+import { frameSceneCamera, gateSceneCamera, isNeutralSceneCamera, readSceneCamera, readSceneCameraPath, sceneCameraAt, sceneLensShift, type SceneCameraValues } from '@/lib/sceneCamera';
 import { resolveTrackTime, trackAssetIndices, type MotionTrack } from '@/lib/tracks';
 import type { SceneState } from '@/store/useSceneStore';
 import { advancedRasterSize, gradientRasterMaxEdge, gradientSignature, normalizeGradientSpec, paintGradientCanvas } from '@/lib/gradient';
@@ -278,7 +278,7 @@ export class SceneRenderer3D implements IRenderer {
     // Where the shot is at THIS point of the clip. The scene's own clock, not
     // the track's: one camera for the whole picture means one timeline for it,
     // or two layers on different windows would be filmed from two places.
-    return sceneCameraAt(cam, readSceneCameraMove(s.sceneCamera), frame / Math.max(1, totalFrames));
+    return sceneCameraAt(cam, readSceneCameraPath(s.sceneCamera), frame / Math.max(1, totalFrames));
   }
 
   // Alvos que so existem quando alguem usa escopo fora de 'scene'. Uma cena sem

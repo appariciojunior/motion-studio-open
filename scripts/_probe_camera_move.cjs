@@ -30,7 +30,7 @@ const semear = function (templateId, travel, hold) {
     effects: [],
     // A camera semeada direto: prova de quebra o caminho de persistencia junto.
     sceneCamera: { _camZoom: 100, _camPanX: 0, _camPanY: 0, _camOrbitY: 0, _camOrbitX: 0,
-      _camTravel: { x: travel, y: 0 }, _camHold: hold },
+      _camStop2: { x: travel, y: 0 }, _camStop2Zoom: 100, _camHold: hold },
   };
   localStorage.setItem('motion-welcome-seen', '1');
   localStorage.setItem('motion-tour-seen', '1');
@@ -99,6 +99,13 @@ function lag(a, b, max) {
 
   console.log('  preset ' + TPL + ' com speed 0 (parede parada), Travel x=' + TRAVEL + '%, Hold ' + HOLD + '%');
   console.log('  a camera anda ' + TRAVEL + '% de 810px = ' + Math.round(TRAVEL / 100 * 810) + 'px esperados no fim\n');
+  // Espera o clipe voltar ao inicio antes da linha de base: comparar com uma
+  // amostra do meio do movimento faz todo numero sair relativo e a correlacao
+  // desabar.
+  await p.waitForFunction(() => {
+    const t = document.querySelector('.play-btn')?.parentElement?.textContent || '';
+    return t.replace(/s+/g, ' ').trim().startsWith('0:00');
+  }, { timeout: 30000, polling: 100 }).catch(() => {});
   const amostras = [];
   const t0 = Date.now();
   while (Date.now() - t0 < 9000) {
