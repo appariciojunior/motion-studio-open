@@ -62,25 +62,33 @@ export const SCENE_CAMERA_CONTROLS: ControlDef[] = [
 
 export const NEUTRAL_SCENE_CAMERA: SceneCameraValues = { zoom: 1, panX: 0, panY: 0, orbitX: 0, orbitY: 0 };
 
-// ----- The shot MOVES -----
+// ----- The shot MOVES, from stop to stop -----
 //
 // Until here the camera stood somewhere. This is the half that makes it a
-// camera at all: over the clip it travels, and where it ends up is expressed
-// as a DELTA from where it started, not as a second pose.
+// camera at all: over the clip it visits STOPS, and at each one it can be
+// closer or further away — which is how you say WHERE a push in happens rather
+// than only that one does.
 //
-// That is a deliberate choice against the obvious alternative. A second full
-// pose means ten sliders where there were five, and a panel of ten knobs is
-// what reads as fiddly rather than capable. A delta reads as a sentence: half
-// a frame to the left, over this clip, sitting still for the first and last
-// third of it.
+// The Shot is stop 1. Everything below is stop 2 onward, and the clip is split
+// equally between the legs.
 //
-// And it is deliberately NOT a path editor. A grid of numbered pins the camera
-// tours is a fine way to do this and it is not OUR way: nothing else in this
-// app is a map you drop markers on. Every family here says its motion as a
-// named move plus an amount plus a rhythm — `weave`/`sweep`/`hold` on the
-// wall, direction and speed on the ticker — and the camera says it the same
-// way. The cost is honest: two stops, not six. A tour of six needs a path, and
-// a path is a different tool than this one.
+// Two shapes were tried and thrown away first, and both failed the same way:
+//
+//   · A single destination (a Travel pad plus a Hold) cannot say a path. Two
+//     stops is not a camera move, it is a slide.
+//   · A row per stop can, and it grew the panel by two rows for each one. At
+//     four stops the camera was nine rows of panel, and asking for ten stops
+//     would be asking for pages. How many stops a path has must not decide how
+//     tall the panel is.
+//
+// So every stop lives inside ONE control (components/CameraPathPad): the pad is
+// the frame, each stop is a dot in it, a dot's size is its zoom, and a single
+// row under it edits whichever stop is selected. Three rows at one stop, three
+// rows at four.
+//
+// That is the same compactness a grid-of-pins gets, reached with a pad — a
+// control this app already has — instead of with a map you drop markers on,
+// which it does not.
 export const SCENE_CAMERA_STOP_PAD: ControlDef = {
   key: '_camStop', label: 'Stop', type: 'xypad', max: 100, default: { x: 0, y: 0 },
   description: 'Where the frame sits at this stop. Like Pan, the control moves the image: 100 is one whole frame.',
@@ -90,8 +98,10 @@ export const SCENE_CAMERA_STOP_ZOOM: ControlDef = {
   description: 'How close the camera is at this stop. This is where a push in or a pull back gets said.',
 };
 export const SCENE_CAMERA_HOLD: ControlDef = {
-  key: '_camHold', label: 'Hold', type: 'slider', min: 0, max: 90, step: 1, default: 50, unit: '%',
-  description: 'Share of each leg spent parked at the stop before travelling to the next one.',
+  key: '_camHold', label: 'Settle', type: 'slider', min: 0, max: 90, step: 1, default: 50, unit: '%',
+  // Not called Hold: the Frames wall already has a control by that name, and
+  // two rows labelled Hold in one panel is a puzzle rather than a control.
+  description: 'Share of each leg the camera spends settled at the stop before travelling to the next one.',
 };
 
 // At most this many stops after the first. Not a technical ceiling: past four

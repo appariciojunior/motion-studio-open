@@ -6913,16 +6913,85 @@ select.field {
   }
 }
 
-/* Camera stops: the two buttons that add and drop one, and the pair of rows
-   one stop occupies. .ctl-input is a bare flex row, so the gap is all that
-   is missing. */
-.cam-stop-actions {
-  gap: var(--gap-tight);
-}
 
-.cam-stop {
+/* The camera path, in ONE control: the frame as a pad, every stop a dot
+   inside it, and the dot size saying its zoom. Sized and coloured off the
+   xypad so the two read as the same family of control. */
+.campath-wrap {
   display: flex;
   flex-direction: column;
-  gap: var(--gap-tight);
-  padding-bottom: var(--gap-tight);
+  gap: 8px;
+  width: 100%;
+}
+
+.campath {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: var(--card-inset);
+  border-radius: var(--r-ctrl);
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.campath-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.campath-mid {
+  stroke: var(--handle);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.5;
+}
+
+/* The legs, dashed so a path reads as travel rather than as a drawn shape. */
+.campath-leg {
+  stroke: var(--fg-label);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.campath-dot {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  border: 0;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--fg);
+  color: var(--card-inset);
+  font-size: 9px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  cursor: grab;
+  touch-action: none;
+}
+
+/* Stop 1 is the Shot: an anchor, not a handle — it is set in Shot above. */
+.campath-dot.is-shot {
+  background: transparent;
+  border: 1px solid var(--fg-label);
+  color: var(--fg-label);
+  cursor: default;
+}
+
+.campath-dot.is-selected {
+  outline: 2px solid var(--fg);
+  outline-offset: 2px;
+}
+
+.campath-num {
+  pointer-events: none;
+}
+
+.campath-hint {
+  font-size: var(--fs-ui);
+  line-height: 1.4;
+  color: var(--fg-faint);
 }

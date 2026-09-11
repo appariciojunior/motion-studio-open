@@ -7,9 +7,10 @@ import { ControlRow, controlVisible } from './Controls';
 import EasingPanel from './EasingPanel';
 import TrackInspector from './TrackInspector';
 import {
-  MAX_CAMERA_STOPS, SCENE_CAMERA_HOLD, SCENE_CAMERA_STOP_PAD, SCENE_CAMERA_STOP_ZOOM,
+  MAX_CAMERA_STOPS, SCENE_CAMERA_HOLD, SCENE_CAMERA_STOP_ZOOM,
   cameraStopKeys, readSceneCameraPath, sceneCameraControlsFor,
 } from '@/lib/sceneCamera';
+import CameraPathPad from './CameraPathPad';
 import type { ControlDef } from '@/lib/types';
 
 // Renders the SCENE + TIMING sections (no card wrapper — the page composes cards).
@@ -40,18 +41,30 @@ export default function ScenePanel() {
   // The path: the Shot is stop 1, and each of these is another one. Hold only
   // means something once there is a second stop to sit at.
   const path = readSceneCameraPath(sceneCamera);
-  const addStop = () => {
+  // Which stop the row under the pad edits. -1 is the Shot, which the pad
+  // draws as an anchor: where the camera starts is said in Shot above.
+  const [selectedStop, setSelectedStop] = useState(-1);
+  const stopAt = path.stops[selectedStop];
+  // A stop added by clicking the pad lands where you pointed, at the zoom the
+  // camera already has — so the new leg is a move, not a move plus a surprise.
+  const addStop = (x: number, y: number) => {
     const keys = cameraStopKeys(path.stops.length);
-    // A new stop starts where the shot already is, so adding one changes
-    // nothing until it is dragged — the same courtesy a new layer gets.
     patchSceneCamera({
-      [keys.pad]: { x: Number(sceneCamera._camPanX) || 0, y: Number(sceneCamera._camPanY) || 0 },
+      [keys.pad]: { x, y },
       [keys.zoom]: Number(sceneCamera._camZoom) || 100,
     });
+    setSelectedStop(path.stops.length);
   };
+  const moveStop = (i: number, x: number, y: number) => {
+    patchSceneCamera({ [cameraStopKeys(i).pad]: { x, y } });
+  };
+  // Only the LAST stop can go: dropping one from the middle would renumber
+  // every stop after it, and a path whose stop 3 silently became stop 2 is a
+  // path nobody can keep track of.
   const removeStop = () => {
     const keys = cameraStopKeys(path.stops.length - 1);
     patchSceneCamera({ [keys.pad]: null, [keys.zoom]: null });
+    setSelectedStop((i) => (i >= path.stops.length - 1 ? -1 : i));
   };
   const cameraControls = useMemo(
     () => (visibleTemplateIds
@@ -164,38 +177,38 @@ export default function ScenePanel() {
               camera rather than a crop. */}
           <div className="section-body">
             <div className="ctl-section-title">Move</div>
-            <div className="ctl-hint">
-              {path.stops.length === 0
-                ? 'Add a stop and the camera travels there over the clip.'
-                : 'The camera sits at each stop, then travels to the next one.'}
-            </div>
-            {path.stops.map((stop, i) => {
-              const keys = cameraStopKeys(i);
-              return (
-                <div className="cam-stop" key={keys.pad}>
-                  <ControlRow
-                    def={{ ...SCENE_CAMERA_STOP_PAD, key: keys.pad, label: `Stop ${i + 2}` }}
-                    value={{ x: stop.x, y: stop.y }}
-                    onChange={(val) => setSceneCameraValue(keys.pad, val as { x: number; y: number })}
-                  />
-                  <ControlRow
-                    def={{ ...SCENE_CAMERA_STOP_ZOOM, key: keys.zoom }}
-                    value={stop.zoom}
-                    onChange={(val) => setSceneCameraValue(keys.zoom, Number(val))}
-                  />
-                </div>
-              );
-            })}
-            <div className="ctl-row">
-              <div className="ctl-input cam-stop-actions">
-                {path.stops.length < MAX_CAMERA_STOPS && (
-                  <button type="button" className="badge" onClick={addStop}>+ Stop</button>
+            <div className="ctl-hint">The camera sits at each stop, then travels to the next.</div>
+            <CameraPathPad
+              shot={{
+                x: Number(sceneCamera._camPanX) || 0,
+                y: Number(sceneCamera._camPanY) || 0,
+                zoom: Number(sceneCamera._camZoom) || 100,
+              }}
+              stops={path.stops}
+              selected={selectedStop}
+              max={MAX_CAMERA_STOPS}
+              onSelect={setSelectedStop}
+              onMoveStop={moveStop}
+              onAddStop={addStop}
+            />
+            {/* One row for whichever stop is selected, instead of a row per
+                stop: the panel stays the same height at one stop and at four. */}
+            {stopAt && (
+              <>
+                <ControlRow
+                  def={{ ...SCENE_CAMERA_STOP_ZOOM, label: `Stop ${selectedStop + 2} zoom` }}
+                  value={stopAt.zoom}
+                  onChange={(val) => setSceneCameraValue(cameraStopKeys(selectedStop).zoom, Number(val))}
+                />
+                {selectedStop === path.stops.length - 1 && (
+                  <div className="ctl-row">
+                    <div className="ctl-input cam-stop-actions">
+                      <button type="button" className="badge" onClick={removeStop}>Remove stop</button>
+                    </div>
+                  </div>
                 )}
-                {path.stops.length > 0 && (
-                  <button type="button" className="badge" onClick={removeStop}>− Stop</button>
-                )}
-              </div>
-            </div>
+              </>
+            )}
             {path.stops.length > 0 && (
               <ControlRow
                 def={SCENE_CAMERA_HOLD}

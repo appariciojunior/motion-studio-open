@@ -134,13 +134,6 @@ function preset(
   return easing ? { ...t, meta: { ...t.meta, defaultEasing: easing } } : t;
 }
 
-// A preset can bring a SHOT as well as values: `meta.sceneCamera` carries the
-// house camera (lib/sceneCamera), so a composition whose idea is the camera
-// move arrives with the move already in it.
-function shot(t: Template, camera: Record<string, number | { x: number; y: number }>): Template {
-  return { ...t, meta: { ...t.meta, sceneCamera: camera } };
-}
-
 export const framesVariants: Template[] = [
   framesBase,
   preset(framesBase, 'wall-02', 'Frames 02', {
@@ -167,35 +160,4 @@ export const framesVariants: Template[] = [
     cardSize: 465, gap: 0, hold: 0,
   }, { id: 'linear' }),
 
-  // ---- the wall, seen from a camera that moves ----
-  //
-  // Everything above animates the WALL and holds the frame still. These two do
-  // the opposite: the wall barely moves and the CAMERA travels across it,
-  // which is a different thing to watch — the picture stays put and your view
-  // of it changes.
-  //
-  // Measured off a reference clip rather than guessed: its rows drift in
-  // OPPOSITE directions at their own rates (over one 3,5s shot the top band
-  // went -74px, the middle +156, the bottom -66), so `weave: 'varied'` and a
-  // slow speed stay on — a wall frozen solid under a moving camera reads as a
-  // photograph being scanned, not as a wall. And its camera sits, crosses, and
-  // sits again, which is `hold`.
-  shot(preset(framesBase, 'wall-11', 'Frames 11', {
-    cardSize: 610, gap: 30, rowsSkipped: 1, weave: 'varied', sweep: 0.25,
-    hold: 40, tilt: -3, speed: 0.18,
-  }, { id: 'smooth' }), {
-    // Sits on the left third, crosses to the right, and pushes in on the way.
-    _camPanX: -30, _camZoom: 105, _camHold: 55,
-    _camStop2: { x: 40, y: 0 }, _camStop2Zoom: 135,
-  }),
-  // The same idea read vertically: a wall taller than the frame, climbed.
-  shot(preset(framesBase, 'wall-12', 'Frames 12', {
-    cardSize: 465, gap: 0, rowsSkipped: 2, weave: 'opposed', sweep: 0.15,
-    hold: 55, tilt: 2, speed: 0.12,
-  }, { id: 'smooth' }), {
-    // Starts low and wide, climbs, and pulls back at the top.
-    _camPanY: -35, _camZoom: 130, _camHold: 45,
-    _camStop2: { x: 0, y: 30 }, _camStop2Zoom: 130,
-    _camStop3: { x: 0, y: 70 }, _camStop3Zoom: 100,
-  }),
 ];

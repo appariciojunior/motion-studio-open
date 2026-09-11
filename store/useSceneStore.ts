@@ -545,14 +545,6 @@ export const useSceneStore = create<SceneState>((set, get) => ({
           background: { ...s.background, source: 'color' as const, color: '#FFFFFF', gradient: false },
         } : {}),
         ...(referenceCanvas && referenceAspect ? { aspect: referenceAspect, ...referenceCanvas } : {}),
-        // A preset that declares a shot brings it, the same way it brings its
-        // values — for a preset whose whole idea is the camera move, arriving
-        // without it would be arriving without the motion. Picking any other
-        // preset leaves the camera alone, so a shot someone set survives
-        // browsing the catalogue.
-        ...(templates[id]?.meta.sceneCamera
-          ? { sceneCamera: sanitizeSceneCamera(templates[id].meta.sceneCamera) }
-          : {}),
         frame: 0,
       };
     }),
