@@ -471,6 +471,38 @@ export function frameSceneCamera(
 // camera that wants more scene than that wants a different scene.
 export const MAX_CAMERA_COVERAGE = 4;
 
+// The rectangle of SCENE the camera can see, in the coordinates templates lay
+// cards out in. Centre and half-size, so a caller can ask "is this card in
+// shot?" without re-deriving the shot.
+//
+// This exists because the 2D renderer was asking the wrong question. It culls
+// the offscreen copies of a repeating motif, which is right -- they cost draw
+// calls and text rasterization -- but it compared each card against the CANVAS.
+// With a camera the frame stops being the canvas, so pulling back culled every
+// copy the camera had just moved to look at: at 50% zoom, 625 cards laid out
+// across 5282px with only the ones inside the 810px canvas painting. The wall
+// appeared to shrink instead of opening up.
+//
+// `sceneCameraPlanar` puts scene x on screen at x*zoom + (width/2 + panX*width),
+// so screen 0..width is scene (-width/2 - panX*width)/zoom .. (width/2 -
+// panX*width)/zoom. That is a box of width/zoom centred at -panX*width/zoom.
+export function sceneCameraFrameRect(
+  cam: SceneCameraValues,
+  width: number,
+  height: number,
+): { cx: number; cy: number; halfW: number; halfH: number } {
+  const z = Math.max(0.05, cam.zoom);
+  // `-0` again, the same trap `sceneLensShift` normalises: a plain negation of
+  // an untouched axis is not the same value as 0 to anything comparing rects.
+  const zero = (v: number) => (v === 0 ? 0 : v);
+  return {
+    cx: zero((-cam.panX * width) / z),
+    cy: zero((-cam.panY * height) / z),
+    halfW: width / (2 * z),
+    halfH: height / (2 * z),
+  };
+}
+
 export function sceneCameraCoverage(cam: SceneCameraValues, path: SceneCameraPath): number {
   const shotAsStop: CameraStop = { x: cam.panX * 100, y: cam.panY * 100, zoom: cam.zoom * 100 };
   let cover = 1;

@@ -26,6 +26,7 @@ const {
   sceneCameraPlanar, sceneCameraFilterRect,
   SCENE_CAMERA_STOP_PAD, SCENE_CAMERA_STOP_ZOOM, MAX_CAMERA_STOPS,
   SCENE_CAMERA_ON, sceneHasCamera, sceneCameraCoverage, MAX_CAMERA_COVERAGE,
+  sceneCameraFrameRect,
   readSceneCameraPath, sceneCameraTravels, cameraLegProgress, sceneCameraAt,
   NO_SCENE_CAMERA_PATH, cameraStopKeys,
 } = require('../lib/sceneCamera');
@@ -320,6 +321,48 @@ assert.equal(readSceneCameraPath({ _camStop2: { x: NaN, y: 2 } }).stops[0].x, 0)
     "a stop that pulls back is what the wall has to survive");
   // Capped: past a point this asks for thousands of cards.
   assert.equal(sceneCameraCoverage({ ...parado, zoom: 0.05 }, rota([])), MAX_CAMERA_COVERAGE);
+  cases += 6;
+}
+
+{
+  // The rectangle of scene the camera sees. The 2D renderer culls a repeating
+  // motif's offscreen copies against this, and it used to cull them against the
+  // CANVAS -- so pulling back hid every copy the camera had just moved to look
+  // at, and the wall shrank instead of opening up.
+  const parado = { zoom: 1, panX: 0, panY: 0, orbitX: 0, orbitY: 0 };
+  const W = 810, H = 1080;
+
+  // THE property that keeps this from changing anything that already shipped:
+  // with no camera the frame IS the canvas, to the last decimal.
+  const nada = sceneCameraFrameRect(parado, W, H);
+  assert.deepEqual(nada, { cx: 0, cy: 0, halfW: W / 2, halfH: H / 2 },
+    "a scene nobody is filming culls against the canvas, exactly as before");
+
+  // Half the zoom is twice the frame, both ways from the same centre.
+  const largo = sceneCameraFrameRect({ ...parado, zoom: 0.5 }, W, H);
+  near(largo.halfW, W, 1e-9, "pulling back to 50% doubles what is in shot");
+  near(largo.halfH, H, 1e-9);
+  near(largo.cx, 0, 1e-9, "and a pull-back on its own does not move the frame");
+
+  // A pan moves the frame OPPOSITE to the pad, because the pad moves the
+  // picture: shifting the image right is the camera looking left.
+  const pan = sceneCameraFrameRect({ ...parado, panX: 0.25 }, W, H);
+  near(pan.cx, -0.25 * W, 1e-9, "a pan of a quarter frame moves the frame the other way");
+  near(pan.halfW, W / 2, 1e-9, "and a pan alone does not change how much is in shot");
+
+  // The rect must agree with the transform that actually draws: a card at the
+  // frame's own edge lands on the canvas edge, at any zoom and pan.
+  for (const zoom of [0.25, 0.5, 1, 2.5]) {
+    for (const panX of [-0.4, 0, 0.3]) {
+      const c = { ...parado, zoom, panX };
+      const r = sceneCameraFrameRect(c, W, H);
+      const shot = sceneCameraPlanar(c, W, H);
+      const naTela = (x) => x * shot.scale + shot.x;
+      near(naTela(r.cx - r.halfW), 0, 1e-6, `zoom ${zoom} pan ${panX}: the left of the frame is the left of the canvas`);
+      near(naTela(r.cx + r.halfW), W, 1e-6, `zoom ${zoom} pan ${panX}: and the right is the right`);
+      cases += 2;
+    }
+  }
   cases += 6;
 }
 

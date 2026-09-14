@@ -8,7 +8,7 @@ import { resolveEasing } from '@/lib/easing';
 import { assetIndexForSlot, clamp } from '@/lib/motion';
 import { resolveTrackTime, trackAssetIndices, type MotionTrack } from '@/lib/tracks';
 import { cardAspectFor, coverCrop, cropKey, type CropFocus } from '@/lib/crop';
-import { gateSceneCamera, readSceneCamera, readSceneCameraPath, sceneCameraAt, sceneCameraCoverage, sceneCameraFilterRect, sceneCameraPlanar } from '@/lib/sceneCamera';
+import { gateSceneCamera, readSceneCamera, readSceneCameraPath, sceneCameraAt, sceneCameraCoverage, sceneCameraFilterRect, sceneCameraFrameRect, sceneCameraPlanar } from '@/lib/sceneCamera';
 import { advanceVideoForExport, createCardVideo, isVideoSource, prepareVideoForSequentialExport, useVideoProxies, whenVideoReady } from '@/lib/videoTexture';
 import { BASE_PATH, IS_STATIC_EXPORT } from '@/lib/paths';
 import { advancedRasterSize, gradientRasterMaxEdge, gradientSignature, normalizeGradientSpec, paintGradientCanvas } from '@/lib/gradient';
@@ -773,9 +773,13 @@ export class SceneRenderer {
      // The gate is the panel's gate, so a control the panel hides is inert here
     // too. Orbit never arrives in a 2D-only scene — `sceneCameraControlsFor`
     // drops it where there is no perspective to swing.
-    const shot = sceneCameraPlanar(this.sceneCameraFor(s, frame), s.width, s.height);
+    const cam = this.sceneCameraFor(s, frame);
+    const shot = sceneCameraPlanar(cam, s.width, s.height);
     this.motion.position.set(shot.x, shot.y);
     this.motion.scale.set(shot.scale);
+    // What the camera can actually SEE, in the coordinates templates lay cards
+    // out in. The offscreen-copy cull below asks this and not the canvas.
+    const vista = sceneCameraFrameRect(cam, s.width, s.height);
 
     // Track the featured (front-most) card so a 'card' background can reflect
     // it. Later tracks draw on top, so their cards win ties — the background
@@ -837,6 +841,14 @@ export class SceneRenderer {
         node.scale.set(norm * t.scale * (t.scaleX ?? 1), norm * t.scale * (t.scaleY ?? 1));
         // Repeated motifs need offscreen copies, but those copies must not spend
         // draw calls or text rasterization until their bounds enter the frame.
+        //
+        // THE FRAME, not the canvas. This read `s.width / 2` and was right for
+        // as long as nothing filmed the scene: with a camera it culled every
+        // copy outside the canvas while the camera was looking well past it, so
+        // pulling back shrank the wall instead of revealing more of it. Measured
+        // at 50% zoom: 625 cards laid out across 5282px, of which only the ones
+        // inside the 810px canvas painted -- five columns in a sea of background,
+        // with `renderable` false on every card beyond them.
         const long = SPRITE_BASE * t.scale;
         const cardW = long * Math.min(1, ctx.cardAspect), cardH = long * Math.min(1, 1 / ctx.cardAspect);
         // Match the sprite's affine transform, including projected ticker cards.
@@ -846,8 +858,8 @@ export class SceneRenderer {
         const bx = Math.abs(Math.sin(t.rotation - (t.skewX ?? 0))) * sy;
         const by = Math.abs(Math.cos(t.rotation - (t.skewX ?? 0))) * sy;
         node.renderable = !template.mediaIndex || (
-          Math.abs(t.x) <= s.width / 2 + (ax * cardW + bx * cardH) / 2 &&
-          Math.abs(t.y) <= s.height / 2 + (ay * cardW + by * cardH) / 2
+          Math.abs(t.x - vista.cx) <= vista.halfW + (ax * cardW + bx * cardH) / 2 &&
+          Math.abs(t.y - vista.cy) <= vista.halfH + (ay * cardW + by * cardH) / 2
         );
         node.rotation = t.rotation;
         node.alpha = t.alpha;
