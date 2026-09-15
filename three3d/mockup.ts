@@ -90,7 +90,9 @@ export function initMockup(
   // puts c1 at the BOTTOM, and the radial ends at 130% of the box.
   const bgCanvas = document.createElement('canvas');
   bgCanvas.width = bgCanvas.height = 2;
-  const bgTex = new THREE.CanvasTexture(bgCanvas);
+  let bgTexWidth = bgCanvas.width;
+  let bgTexHeight = bgCanvas.height;
+  let bgTex = new THREE.CanvasTexture(bgCanvas);
   bgTex.colorSpace = THREE.SRGBColorSpace;
   scene.background = bgTex;
   let bgKey = '';
@@ -112,6 +114,22 @@ export function initMockup(
       ctx.fillRect(0, 0, 2, 2);
     } else {
       paintGradientCanvas(bgCanvas, gradient, rw, rh, phase);
+    }
+    // The raster size is not constant: Basic linear/radial paint at 1080px, the
+    // procedural Advanced fields at 288px or less, and Solid at 2px. A
+    // CanvasTexture allocates immutable GL storage from the size it first saw,
+    // so a smaller canvas later can only reach the GPU as a SUB-image in one
+    // corner — which is what the stage showed: the new gradient inside a 27%
+    // box at the bottom-left, the previous one everywhere else. Recreate the
+    // texture whenever the source size changes, the way the Library renderer
+    // already does (lib/renderer3d.ts).
+    if (bgCanvas.width !== bgTexWidth || bgCanvas.height !== bgTexHeight) {
+      bgTexWidth = bgCanvas.width;
+      bgTexHeight = bgCanvas.height;
+      bgTex.dispose();
+      bgTex = new THREE.CanvasTexture(bgCanvas);
+      bgTex.colorSpace = THREE.SRGBColorSpace;
+      scene.background = bgTex;
     }
     bgTex.needsUpdate = true;
   }
