@@ -1,0 +1,58 @@
+# The gate the repository was missing.
+#
+# `npm test` and `npx tsc --noEmit` were already the house rule — README step 5
+# of "Contribute" asks for both — but nothing enforced them: the only workflow
+# here runs on `push: [main]`, which is AFTER a pull request is merged. The cost
+# of that gap was measured, not imagined: Next 16.3.2 sat in the lockfile with
+# two unauthenticated RCE advisories against it while every suite passed, because
+# no job ever asked npm whether the tree was safe.
+#
+# `audit-level: high` on production dependencies only. Dev-only advisories do not
+# ship to a user and would turn this into a job people learn to ignore.
+name: CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      # 13 suites, ~31 million assertions. They are the reason a template can be
+      # refactored at all; running them here is what makes them a contract.
+      - name: Verification suites
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      # This step FAILS the job, and that is the point: an advisory nobody has to
+      # act on is an advisory nobody acts on. It runs last so a contributor still
+      # gets typecheck, suites and build even when the failure is a fresh CVE in
+      # someone else's package rather than anything in their diff. Fixing it is
+      # `npm audit fix` locally, reviewed like any other lockfile change.
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
