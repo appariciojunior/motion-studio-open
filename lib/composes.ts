@@ -57,6 +57,11 @@ const CONTACT_SHEET: CustomPreset = {
     speed: 0.3, cornerRadius: 0,
   },
   easing: { id: 'linear' },
+  // Sampled from the clip rather than picked: over its 210 frames the two
+  // commonest colours are #f8f8f8 and #f0e8e8, 26% of every pixel between them.
+  // The gutter between pages IS the background, so a wall of documents on black
+  // is a different composition, not the same one in a different mood.
+  background: { source: 'color', color: '#f4efec', gradient: false, imageUrl: null },
   sceneCamera: {
     _camOn: 1,
     _camZoom: 100, _camPanX: 0, _camPanY: 0, _camOrbitX: 0, _camOrbitY: 0,
@@ -81,6 +86,7 @@ const PUSH_IN: CustomPreset = {
   templateId: 'wall-02',
   values: { cardSize: 420, gap: 30, mixSizes: 40, speed: 0.2, hold: 0 },
   easing: { id: 'linear' },
+  background: { source: 'color', color: '#f4efec', gradient: false, imageUrl: null },
   sceneCamera: {
     _camOn: 1,
     _camZoom: 80, _camPanX: 0, _camPanY: 0, _camOrbitX: 0, _camOrbitY: 0,
@@ -98,6 +104,7 @@ const PULL_BACK: CustomPreset = {
   templateId: 'wall-03',
   values: { cardSize: 400, gap: 28, mixSizes: 35, speed: 0.25, hold: 0 },
   easing: { id: 'linear' },
+  background: { source: 'color', color: '#f4efec', gradient: false, imageUrl: null },
   sceneCamera: {
     _camOn: 1,
     _camZoom: 190, _camPanX: -22, _camPanY: 14, _camOrbitX: 0, _camOrbitY: 0,

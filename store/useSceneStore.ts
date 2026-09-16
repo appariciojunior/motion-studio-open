@@ -85,6 +85,16 @@ export interface CustomPreset {
   values: Record<string, any>;
   easing: EasingSpec;
   sceneCamera?: SceneCameraState;
+  // What it was composed AGAINST. A wall of pages on white and the same wall on
+  // black are not the same composition: the gutter between the cards is the
+  // background, so the colour is part of the layout and not a preference laid
+  // over it. Measured on the reference clip, its two commonest colours are
+  // #f8f8f8 and #f0e8e8 and together they are 26% of every pixel in it.
+  //
+  // This is the SCENE background, which is content the user already sets. It is
+  // not the app palette, which stays where it is and belongs to its own work.
+  // Optional, so everything saved before this leaves the background alone.
+  background?: Partial<SceneState['background']>;
 }
 
 const PRESETS_KEY = 'motion-custom-presets';
@@ -926,6 +936,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         easing: s.easing,
         // The shot travels with it — see CustomPreset.
         sceneCamera: { ...s.sceneCamera },
+        background: { ...s.background },
       };
       const next = [...s.customPresets, preset];
       persistPresets(next.filter((p) => !isShippedCompose(p.id)));
@@ -947,6 +958,10 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         // A composition saved WITH a shot brings it back; one saved before the
         // camera existed leaves it alone rather than resetting it to neutral.
         ...(p.sceneCamera ? { sceneCamera: sanitizeSceneCamera(p.sceneCamera) } : {}),
+        // Same rule for the ground it was composed against: merged over the
+        // current one, so a compose that only names a colour does not silently
+        // drop the blur or an image the scene already had.
+        ...(p.background ? { background: { ...s.background, ...p.background } } : {}),
         frame: 0,
       };
     }),
