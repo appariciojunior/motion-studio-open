@@ -17,6 +17,29 @@ function cellNoise(col: number, row: number): number {
   return ((n ^ (n >> 16)) >>> 0) / 4294967296;
 }
 
+// Which cells of a motif row hang a landscape spread across two cells.
+//
+// Read off the reference wall rather than invented: its prints are not all the
+// same shape. Rows keep one height and the widths inside them vary, everything
+// flush against everything else with one thin gutter. That is the difference
+// between a wall of documents and a tiled texture, and a first attempt at it --
+// shrinking prints inside their own cell -- produced the opposite of what the
+// clip does: holes around every small print instead of a flush row.
+//
+// Greedy left to right so two spreads can never claim the same cell, and never
+// starting on the last column, because a spread that crossed the motif boundary
+// would be cut in half when the wall wraps.
+function wideCells(motifRow: number, motifCols: number, chance: number): Uint8Array {
+  // 0 = a normal print, 1 = the left half of a spread, 2 = swallowed by one.
+  const out = new Uint8Array(motifCols);
+  if (chance <= 0) return out;
+  for (let c = 0; c < motifCols - 1; c++) {
+    if (out[c] !== 0) continue;
+    if (cellNoise(c, motifRow) < chance) { out[c] = 1; out[c + 1] = 2; }
+  }
+  return out;
+}
+
 // The motif closes in time; offscreen copies provide continuous spatial coverage.
 const framesBase: Template = {
   meta: {
@@ -40,7 +63,7 @@ const framesBase: Template = {
     { key: 'gap',          label: 'Gap',           type: 'slider', min: 0, max: 300, step: 1,  default: 30 },
     { key: 'cornerRadius', label: 'Corner Radius', type: 'slider', min: 0, max: 100, step: 1,  default: 0 },
     { key: 'rowsSkipped',  label: 'Rows Skipped',  type: 'slider', min: 0, max: 2, step: 1,    default: 1, section: 'Layout', description: 'Masonry offset: 0 aligns columns, 1 shifts every other row, 2 steps in thirds.' },
-    { key: 'sizeVary',     label: 'Size Variation', type: 'slider', min: 0, max: 60, step: 1,   default: 0, section: 'Layout', unit: '%', description: 'How much the prints differ in size. 0 hangs them all the same; higher shrinks some of them inside their own cell, so the wall gets an uneven edge and the background shows through.' },
+    { key: 'mixSizes',     label: 'Mixed Sizes',   type: 'slider', min: 0, max: 100, step: 1,   default: 0, section: 'Layout', unit: '%', description: 'How often a print hangs as a landscape spread across two cells instead of a single portrait one. The wall stays flush either way — this changes the shape of the prints, not the spacing between them.' },
     { key: 'weave',        label: 'Weave',         type: 'pills',  options: ['same','opposed','varied'], default: 'varied', section: 'Motion', description: 'Whether rows share a sideways drift, alternate direction, or each take their own rate.' },
     { key: 'sweep',        label: 'Sweep',         type: 'slider', min: 0, max: 1, step: 0.1,  default: 0.4, section: 'Motion', description: 'How far rows drift sideways. 0 is a straight vertical lift.' },
     { key: 'hold',         label: 'Hold',          type: 'slider', min: 0, max: 90, step: 1,   default: 30, section: 'Motion', unit: '%', description: 'Share of each cell step spent stopped.' },
@@ -78,8 +101,17 @@ const framesBase: Template = {
     // on one card per cell. Shrinking keeps every one of those and produces what
     // the uneven wall actually looks like: an irregular edge with the background
     // showing through where the smaller prints are.
-    const vary = clamp(Number(v.sizeVary) || 0, 0, 60) / 100;
-    const sizeFactor = v.cardSize * scale / BASE * (vary > 0 ? 1 - vary * cellNoise(motifCol, motifRow) : 1);
+    const sizeFactor = v.cardSize * scale / BASE;
+    // A spread covers two cells and the gutter between them. It gets there by
+    // being drawn BIGGER and then clipped back to one cell of height, so the
+    // picture is cropped to a landscape the way a cover-crop would do it.
+    // Stretching it with scaleX instead would distort every face on the wall.
+    const mistura = clamp(Number(v.mixSizes) || 0, 0, 100) / 100;
+    const largos = mistura > 0 ? wideCells(motifRow, motifCols, mistura * 0.5) : null;
+    const papel = largos ? largos[motifCol] : 0;
+    const razao = Math.max(0.05, ctx.cardAspect ?? 3 / 4);
+    const larguraCard = v.cardSize * Math.min(1, razao);
+    const fatorLargo = larguraCard > 0 ? 2 + v.gap / larguraCard : 2;
 
     // Masonry: rowsSkipped 0 aligns columns, 1 shifts alternate rows half a
     // cell, 2 steps in thirds. The shift is fractional so it survives wrapping.
@@ -131,6 +163,23 @@ const framesBase: Template = {
     const x = px * Math.cos(roll) - py * Math.sin(roll) + v.offset.x * scale;
     const y = px * Math.sin(roll) + py * Math.cos(roll) + v.offset.y * scale;
 
+    // The swallowed cell is not drawn: its neighbour is standing in its place.
+    if (papel === 2) {
+      return { x, y, scale: sizeFactor, rotation: roll, alpha: 0,
+        depth: motifRow + (col % motifCols) * 0.01 };
+    }
+    if (papel === 1) {
+      const meia = 0.5 / fatorLargo;
+      return {
+        x: x + (pitchX / 2) * Math.cos(roll),
+        y: y + (pitchX / 2) * Math.sin(roll),
+        scale: sizeFactor * fatorLargo,
+        rotation: roll,
+        alpha: 1,
+        clip: { x0: 0, y0: 0.5 - meia, x1: 1, y1: 0.5 + meia },
+        depth: motifRow + (col % motifCols) * 0.01,
+      };
+    }
     return {
       x,
       y,

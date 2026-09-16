@@ -28,8 +28,8 @@ let cartoes = 0, casos = 0;
 for (const t of paredes) {
   for (const cena of CENAS) {
     const vals = { ...defaultsFor(t.meta.id) };
-    assert.equal(Number(vals.sizeVary ?? 0), 0,
-      `${t.meta.id}: um preset consolidado nao pode nascer com Size Variation ligada`);
+    assert.equal(Number(vals.mixSizes ?? 0), 0,
+      `${t.meta.id}: um preset consolidado nao pode nascer com Mixed Sizes ligada`);
     const n = layerCountFor(t.meta.id, vals, cena);
     const ctx = { fps: 30, ...cena, duration: 8, totalFrames: 240, ease: (x) => x, easedPhase: (p) => p };
     for (const f of QUADROS) {
@@ -57,20 +57,28 @@ for (const t of paredes) {
   const ctx = { fps: 30, ...cena, duration: 8, totalFrames: 240, ease: (x) => x, easedPhase: (p) => p };
   const vals = { ...defaultsFor(t.meta.id) };
   const n = layerCountFor(t.meta.id, vals, cena);
-  const escalas = (v) => {
+  const poses = (v) => {
     const out = [];
-    for (let i = 0; i < n; i++) out.push(t.transform(0, i, n, { ...vals, sizeVary: v }, ctx).scale);
+    for (let i = 0; i < n; i++) out.push(t.transform(0, i, n, { ...vals, mixSizes: v }, ctx));
     return out;
   };
-  const off = escalas(0), on = escalas(40);
-  assert.ok(new Set(off.map((x) => x.toFixed(6))).size === 1, 'desligado, toda impressao tem o mesmo tamanho');
-  assert.ok(new Set(on.map((x) => x.toFixed(6))).size > 3, 'ligado, a parede passa a ter tamanhos diferentes');
-  assert.ok(Math.max(...on) <= Math.max(...off) + 1e-9, 'e nenhuma impressao cresce alem da propria celula');
-  assert.ok(Math.min(...on) >= Math.max(...off) * 0.6 - 1e-9, 'nem encolhe mais do que o controle pede');
-  // Deterministico: a mesma celula tem sempre o mesmo tamanho, senao o loop
-  // mostraria o cartao mudando de tamanho ao dar a volta.
-  assert.deepEqual(escalas(40), on, 'o mesmo cenario produz a mesma parede');
-  casos += 5;
+  const off = poses(0), on = poses(70);
+  assert.ok(off.every((p) => (p.alpha ?? 1) === 1 && !p.clip), 'desligado, toda impressao e um retrato inteiro');
+  const espalhados = on.filter((p) => p.clip);
+  const engolidos = on.filter((p) => (p.alpha ?? 1) === 0);
+  assert.ok(espalhados.length > 0, 'ligado, a parede ganha paisagens');
+  assert.equal(espalhados.length, engolidos.length,
+    'cada paisagem ocupa exatamente uma celula vizinha — nem sobra nem falta');
+  // A paisagem e um RECORTE, nunca um esticao: a escala e a mesma nos dois eixos
+  // e o que muda e a janela.
+  assert.ok(espalhados.every((p) => p.scaleX === undefined && p.scaleY === undefined),
+    'uma paisagem se faz recortando, nao esticando');
+  assert.ok(espalhados.every((p) => p.clip.x0 === 0 && p.clip.x1 === 1 && p.clip.y0 > 0 && p.clip.y1 < 1),
+    'e o recorte e uma faixa horizontal da propria impressao');
+  // Deterministico, senao o cartao mudaria de forma ao dar a volta no loop.
+  assert.deepEqual(poses(70).map((p) => [p.x, p.scale, p.alpha]), on.map((p) => [p.x, p.scale, p.alpha]),
+    'o mesmo cenario produz a mesma parede');
+  casos += 7;
 }
 
-console.log(`Frames: ${cartoes} cartoes conferidos contra a linha de base em ${casos} casos; Size Variation no padrao nao move nada, e ligada varia o tamanho sem sair da celula.`);
+console.log(`Frames: ${cartoes} cartoes conferidos contra a linha de base em ${casos} casos; Mixed Sizes no padrao nao move nada, e ligada troca retratos por paisagens sem abrir vao.`);
