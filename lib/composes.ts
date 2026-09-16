@@ -41,10 +41,15 @@ const CONTACT_SHEET: CustomPreset = {
   id: `${SHIPPED_COMPOSE_PREFIX}contact_sheet`,
   name: 'Contact Sheet',
   templateId: 'wall-01',
+  // Card size is the difference between a wall of documents and a texture.
+  // Side by side with the clip, ours read as noise: the clip puts two to three
+  // cards across the frame, each one readable, and we had four to five. 320
+  // with a gap of 30 is a pitch of 270 on an 810 stage -- three across -- and
+  // the gap is 11% of the pitch, which is the breathing the clip has.
   values: {
-    cardSize: 250, gap: 24, rowsSkipped: 1,
-    weave: 'varied', sweep: 0.35, hold: 0,
-    speed: 0.35, cornerRadius: 0,
+    cardSize: 320, gap: 30, rowsSkipped: 1,
+    weave: 'varied', sweep: 0.3, hold: 0,
+    speed: 0.3, cornerRadius: 0,
   },
   easing: { id: 'linear' },
   sceneCamera: {
@@ -69,7 +74,7 @@ const PUSH_IN: CustomPreset = {
   id: `${SHIPPED_COMPOSE_PREFIX}push_in`,
   name: 'Push In',
   templateId: 'wall-02',
-  values: { cardSize: 300, gap: 20, speed: 0.25, hold: 0 },
+  values: { cardSize: 360, gap: 28, speed: 0.2, hold: 0 },
   easing: { id: 'linear' },
   sceneCamera: {
     _camOn: 1,
@@ -86,7 +91,7 @@ const PULL_BACK: CustomPreset = {
   id: `${SHIPPED_COMPOSE_PREFIX}pull_back`,
   name: 'Pull Back',
   templateId: 'wall-03',
-  values: { cardSize: 280, gap: 18, speed: 0.3, hold: 0 },
+  values: { cardSize: 340, gap: 26, speed: 0.25, hold: 0 },
   easing: { id: 'linear' },
   sceneCamera: {
     _camOn: 1,
