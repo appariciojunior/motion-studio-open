@@ -46,13 +46,13 @@ const CONTACT_SHEET: CustomPreset = {
   // cards across the frame, each one readable, and we had four to five. 320
   // with a gap of 30 is a pitch of 270 on an 810 stage -- three across -- and
   // the gap is 11% of the pitch, which is the breathing the clip has.
-  // `mixSizes` is what turns a lattice into a collage. Studied frame by frame,
-  // the clip hangs landscape spreads among portrait pages, everything flush
-  // against everything else -- so the shapes vary and the spacing does not. A
-  // wall where every print is the same shape reads as a texture however well it
-  // is filmed, and that was the last thing between ours and the clip.
+  // One size of print, and that is the reading that took longest to get right.
+  // The clip LOOKS like a collage of different sizes and is not: its wall is one
+  // size throughout, and the variety is what the camera does to it -- pushing in
+  // on one page and pulling back over six. I built two different controls trying
+  // to make the wall do what the move was already doing.
   values: {
-    cardSize: 380, gap: 32, rowsSkipped: 1, mixSizes: 55,
+    cardSize: 380, gap: 32, rowsSkipped: 1,
     weave: 'varied', sweep: 0.3, hold: 0,
     speed: 0.3, cornerRadius: 0,
   },
@@ -84,7 +84,7 @@ const PUSH_IN: CustomPreset = {
   id: `${SHIPPED_COMPOSE_PREFIX}push_in`,
   name: 'Push In',
   templateId: 'wall-02',
-  values: { cardSize: 420, gap: 30, mixSizes: 40, speed: 0.2, hold: 0 },
+  values: { cardSize: 420, gap: 30, speed: 0.2, hold: 0 },
   easing: { id: 'linear' },
   background: { source: 'color', color: '#f4efec', gradient: false, imageUrl: null },
   sceneCamera: {
@@ -102,7 +102,7 @@ const PULL_BACK: CustomPreset = {
   id: `${SHIPPED_COMPOSE_PREFIX}pull_back`,
   name: 'Pull Back',
   templateId: 'wall-03',
-  values: { cardSize: 400, gap: 28, mixSizes: 35, speed: 0.25, hold: 0 },
+  values: { cardSize: 400, gap: 28, speed: 0.25, hold: 0 },
   easing: { id: 'linear' },
   background: { source: 'color', color: '#f4efec', gradient: false, imageUrl: null },
   sceneCamera: {
