@@ -8,6 +8,15 @@ import { latticeCount, solveLattice, latticeAxis, latticeMediaIndex } from './la
 // `cardSize` reads directly in on-screen pixels.
 const BASE = 340;
 
+// A number in [0,1) that belongs to a cell of the motif and never changes.
+// Integer mixing rather than a sin-based hash so the wall is identical on
+// every machine -- the same scene has to export the same frames anywhere.
+function cellNoise(col: number, row: number): number {
+  let n = (col * 374761393 + row * 668265263) | 0;
+  n = Math.imul(n ^ (n >> 13), 1274126177) | 0;
+  return ((n ^ (n >> 16)) >>> 0) / 4294967296;
+}
+
 // The motif closes in time; offscreen copies provide continuous spatial coverage.
 const framesBase: Template = {
   meta: {
@@ -31,6 +40,7 @@ const framesBase: Template = {
     { key: 'gap',          label: 'Gap',           type: 'slider', min: 0, max: 300, step: 1,  default: 30 },
     { key: 'cornerRadius', label: 'Corner Radius', type: 'slider', min: 0, max: 100, step: 1,  default: 0 },
     { key: 'rowsSkipped',  label: 'Rows Skipped',  type: 'slider', min: 0, max: 2, step: 1,    default: 1, section: 'Layout', description: 'Masonry offset: 0 aligns columns, 1 shifts every other row, 2 steps in thirds.' },
+    { key: 'sizeVary',     label: 'Size Variation', type: 'slider', min: 0, max: 60, step: 1,   default: 0, section: 'Layout', unit: '%', description: 'How much the prints differ in size. 0 hangs them all the same; higher shrinks some of them inside their own cell, so the wall gets an uneven edge and the background shows through.' },
     { key: 'weave',        label: 'Weave',         type: 'pills',  options: ['same','opposed','varied'], default: 'varied', section: 'Motion', description: 'Whether rows share a sideways drift, alternate direction, or each take their own rate.' },
     { key: 'sweep',        label: 'Sweep',         type: 'slider', min: 0, max: 1, step: 0.1,  default: 0.4, section: 'Motion', description: 'How far rows drift sideways. 0 is a straight vertical lift.' },
     { key: 'hold',         label: 'Hold',          type: 'slider', min: 0, max: 90, step: 1,   default: 30, section: 'Motion', unit: '%', description: 'Share of each cell step spent stopped.' },
@@ -57,7 +67,19 @@ const framesBase: Template = {
     const col = index % cols;
     const row = Math.floor(index / cols);
     const motifRow = row % motifRows;
-    const sizeFactor = v.cardSize * scale / BASE;
+    const motifCol = col % motifCols;
+    // Not every print on a wall is the same size. The variation belongs to the
+    // MOTIF cell and not to the card index, because the wall is a torus: a card
+    // leaving one edge re-enters at the other, and if its size came from its
+    // copy it would change size as it wrapped.
+    //
+    // It only ever SHRINKS. Growing a print past its cell would overlap its
+    // neighbours, and the lattice, the loop and the media identity are all built
+    // on one card per cell. Shrinking keeps every one of those and produces what
+    // the uneven wall actually looks like: an irregular edge with the background
+    // showing through where the smaller prints are.
+    const vary = clamp(Number(v.sizeVary) || 0, 0, 60) / 100;
+    const sizeFactor = v.cardSize * scale / BASE * (vary > 0 ? 1 - vary * cellNoise(motifCol, motifRow) : 1);
 
     // Masonry: rowsSkipped 0 aligns columns, 1 shifts alternate rows half a
     // cell, 2 steps in thirds. The shift is fractional so it survives wrapping.
