@@ -66,6 +66,16 @@ export default function ScenePanel() {
     });
     setSelectedStop(path.stops.length);
   };
+  // Where the BUTTON puts a new stop, as opposed to a click on the pad, which
+  // puts it where you pointed. A third of a frame on from wherever the path
+  // currently ends: dropping it at the centre would bury it under Start and
+  // look like the button did nothing.
+  const addStopFromButton = () => {
+    const ultimo = path.stops[path.stops.length - 1]
+      ?? { x: Number(sceneCamera._camPanX) || 0, y: Number(sceneCamera._camPanY) || 0 };
+    const dentro = (n: number) => Math.max(-100, Math.min(100, n));
+    addStop(dentro(ultimo.x + 33), dentro(ultimo.y - 22));
+  };
   const moveStop = (i: number, x: number, y: number) => {
     patchSceneCamera({ [cameraStopKeys(i).pad]: { x, y } });
   };
@@ -173,7 +183,15 @@ export default function ScenePanel() {
           </div>
           {!hasCamera && (
             <div className="section-body">
-              <div className="ctl-hint">No camera on this scene. Add one to film it from somewhere else, or to travel across it.</div>
+              <div className="ctl-hint">Nothing is filming this scene. A camera lets you frame it from somewhere else, and travel across it while it plays.</div>
+              {/* A real button and not only the badge in the header: the badge
+                  is where you turn a camera OFF once you have one, and it is
+                  too quiet to be the way you discover you can have one. */}
+              <div className="ctl-row">
+                <div className="ctl-input cam-stop-actions">
+                  <button type="button" className="badge cam-cta" onClick={addCamera}>Add a camera</button>
+                </div>
+              </div>
             </div>
           )}
           {hasCamera && cameraControls.length > 0 && (
@@ -195,8 +213,22 @@ export default function ScenePanel() {
               camera rather than a crop. */}
           {hasCamera && (
           <div className="section-body">
-            <div className="ctl-section-title">Move</div>
-            <div className="ctl-hint">The camera travels from stop to stop, slowing into each one and leaving again.</div>
+            {/* The count and the button live on the title row: how many stops
+                you have and how to get another are the two questions the pad
+                cannot answer by itself. */}
+            <div className="ctl-section-title cam-move-head">
+              <span>Path</span>
+              <span className="cam-count">{path.stops.length} / {MAX_CAMERA_STOPS}</span>
+              <button
+                type="button"
+                className="badge"
+                disabled={path.stops.length >= MAX_CAMERA_STOPS}
+                onClick={addStopFromButton}
+              >
+                Add stop
+              </button>
+            </div>
+            <div className="ctl-hint">The camera starts at Start and travels to each stop in turn, slowing into it and leaving again.</div>
             <CameraPathPad
               shot={{
                 x: Number(sceneCamera._camPanX) || 0,
@@ -214,15 +246,19 @@ export default function ScenePanel() {
                 stop: the panel stays the same height at one stop and at four. */}
             {stopAt && (
               <>
+                {/* Named, so the row and the dot are visibly the same thing.
+                    Before this it said "Stop 2 zoom" next to a dot labelled 2
+                    that was the FIRST stop, because the Shot was counted as 1. */}
+                <div className="cam-stop-head">Selected · Stop {selectedStop + 1}</div>
                 <ControlRow
-                  def={{ ...SCENE_CAMERA_STOP_ZOOM, label: `Stop ${selectedStop + 2} zoom` }}
+                  def={{ ...SCENE_CAMERA_STOP_ZOOM, label: `Stop ${selectedStop + 1} zoom` }}
                   value={stopAt.zoom}
                   onChange={(val) => setSceneCameraValue(cameraStopKeys(selectedStop).zoom, Number(val))}
                 />
                 {selectedStop === path.stops.length - 1 && (
                   <div className="ctl-row">
                     <div className="ctl-input cam-stop-actions">
-                      <button type="button" className="badge" onClick={removeStop}>Remove stop</button>
+                      <button type="button" className="badge" onClick={removeStop}>Remove stop {selectedStop + 1}</button>
                     </div>
                   </div>
                 )}

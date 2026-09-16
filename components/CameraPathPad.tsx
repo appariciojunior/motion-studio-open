@@ -6,22 +6,28 @@ import type { CameraStop } from '@/lib/sceneCamera';
 /**
  * The whole camera path in ONE control.
  *
- * The first version of this spent two rows per stop — a pad and a zoom — and at
- * four stops the panel was nine rows of camera. That is the wrong shape: a path
- * is one thing, and the number of stops in it must not decide how tall the panel
- * is. So every stop lives inside this single pad, and the row under it edits
+ * The first version spent two rows per stop — a pad and a zoom — and at four
+ * stops the panel was nine rows of camera. That is the wrong shape: a path is
+ * one thing, and how many stops it has must not decide how tall the panel is.
+ * So every stop lives inside this single pad and the row under it edits
  * whichever one is selected.
  *
- * The pad is the FRAME, at ±100% of it on each axis, which is the same unit Pan
- * uses. Stop 1 is the Shot itself and is drawn as an anchor rather than a
- * handle: where the camera starts is said by the Shot block above, and giving it
- * a second handle here would be two controls for one value.
+ * The pad is the FRAME, at ±100% of it on each axis, which is the unit Pan
+ * already uses. A dot's SIZE is its zoom, so the path reads at a glance.
  *
- * A dot's SIZE is its zoom — a stop the camera pushes into is a bigger dot — so
- * the path reads at a glance without selecting anything.
+ * WHAT THIS VERSION FIXES, reported as "ficou confuso de como eu clicar":
  *
- * Deliberately not a grid of cells you drop numbered pins into. This app has no
- * canvas-with-markers control anywhere; it does have pads, and this is one.
+ *  - Nothing said the pad was clickable. The only instruction was a grey line
+ *    of text below it. An empty pad now says so in the middle of itself, and
+ *    there is an Add stop button as well, because a gesture nobody can see is
+ *    not a feature.
+ *  - Stop 1 was the Shot, drawn as a dot like the others and not draggable.
+ *    You would try to drag it and nothing would happen. It is labelled Start
+ *    now, drawn as a ring rather than a dot, and says where it is edited.
+ *  - The stops were numbered from 2, so the first one you added was "Stop 2".
+ *    They start at 1.
+ *  - The selected stop was a 2px outline. It now carries a halo, and the row
+ *    that edits it names it, so the two are visibly the same thing.
  */
 
 const RANGE = 100;  // per-cent of a frame, each way — the pad's own edges
@@ -46,6 +52,7 @@ export default function CameraPathPad({
   // accepts any pressed pointer that happens to pass over the pad, which is how
   // a drag on a neighbouring control ends up moving something here.
   const dragging = useRef<number | null>(null);
+  const full = stops.length >= max;
 
   const pct = (n: number) => ((n / RANGE + 1) / 2) * 100;
   const fromClient = (clientX: number, clientY: number) => {
@@ -69,12 +76,12 @@ export default function CameraPathPad({
     <div className="campath-wrap">
       <div
         ref={ref}
-        className="campath"
+        className={`campath ${full ? 'is-full' : ''}`}
         onPointerDown={(e) => {
-          // An empty patch of pad is a new stop, which is the only gesture that
-          // adds one: no button to find, and it lands where you pointed.
+          // An empty patch of pad is a new stop, which is the gesture the empty
+          // state advertises: no button to find, and it lands where you pointed.
           if ((e.target as HTMLElement).closest('.campath-dot')) return;
-          if (stops.length >= max) return;
+          if (full) return;
           const p = fromClient(e.clientX, e.clientY);
           if (p) onAddStop(p.x, p.y);
         }}
@@ -102,6 +109,22 @@ export default function CameraPathPad({
             />
           ))}
         </svg>
+        {/* The frame's own corners, so the pad reads as a picture rather than
+            as an empty box with dots in it. */}
+        <span className="campath-corner tl" aria-hidden />
+        <span className="campath-corner tr" aria-hidden />
+        <span className="campath-corner bl" aria-hidden />
+        <span className="campath-corner br" aria-hidden />
+
+        {stops.length === 0 && (
+          // The gesture, said where the gesture happens. This is the whole fix
+          // for "how do I click": the instruction used to live under the pad.
+          <div className="campath-empty" aria-hidden>
+            <span className="campath-plus">+</span>
+            <span>Click anywhere to add a stop</span>
+          </div>
+        )}
+
         {points.map((p) => {
           const isShot = p.index === -1;
           const size = dotSize(p.zoom);
@@ -111,7 +134,9 @@ export default function CameraPathPad({
               type="button"
               className={`campath-dot ${isShot ? 'is-shot' : ''} ${selected === p.index ? 'is-selected' : ''}`}
               style={{ left: `${pct(p.x)}%`, top: `${pct(p.y)}%`, width: size, height: size }}
-              title={isShot ? 'Where the shot starts — move it in Shot above' : `Stop ${p.index + 2}`}
+              title={isShot
+                ? 'Where the shot starts — move it with Zoom and Pan above'
+                : `Stop ${p.index + 1} — drag to move, click to edit its zoom`}
               onPointerDown={(e) => {
                 e.stopPropagation();
                 onSelect(p.index);
@@ -121,17 +146,18 @@ export default function CameraPathPad({
                 (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
               }}
             >
-              <span className="campath-num">{p.index + 2}</span>
+              <span className="campath-num">{isShot ? '' : p.index + 1}</span>
+              {isShot && <span className="campath-tag">Start</span>}
             </button>
           );
         })}
       </div>
       <div className="campath-hint">
         {stops.length === 0
-          ? 'Click the pad to add a stop. The camera travels there over the clip.'
-          : stops.length >= max
-            ? `${stops.length} stops — the most a clip this short can settle at.`
-            : 'Drag a stop to move it · click an empty spot to add another'}
+          ? 'Start is where the Shot above puts the camera.'
+          : full
+            ? `${stops.length} of ${max} stops — the most one clip can settle at.`
+            : 'Drag a stop to move it · a bigger dot is a closer shot'}
       </div>
     </div>
   );

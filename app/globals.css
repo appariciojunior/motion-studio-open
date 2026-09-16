@@ -6983,7 +6983,91 @@ select.field {
 
 .campath-dot.is-selected {
   outline: 2px solid var(--fg);
-  outline-offset: 2px;
+  outline-offset: 3px;
+  /* A halo as well as the ring: at 14px a 2px outline is easy to miss, and
+     the whole point is that the dot and the row below are one thing. */
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--fg) 14%, transparent);
+}
+
+/* ---- camera path: the pieces that say how to use it ---- */
+
+/* The frame's own corners. Without them the pad is a grey box with dots in
+   it; with them it reads as a picture the stops sit inside. */
+.campath-corner {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--fg-label);
+  opacity: 0.45;
+  pointer-events: none;
+}
+.campath-corner.tl { top: 6px; left: 6px; border-right: 0; border-bottom: 0; }
+.campath-corner.tr { top: 6px; right: 6px; border-left: 0; border-bottom: 0; }
+.campath-corner.bl { bottom: 6px; left: 6px; border-right: 0; border-top: 0; }
+.campath-corner.br { bottom: 6px; right: 6px; border-left: 0; border-top: 0; }
+
+/* The gesture, said where the gesture happens — along the BOTTOM and not in
+   the middle, because the middle is where Start usually stands and the two
+   printed straight through each other. */
+.campath-empty {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: var(--fg-label);
+  font-size: 11px;
+  pointer-events: none;
+}
+.campath-plus {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--fg-label);
+  border-radius: 50%;
+  font-size: 12px;
+  line-height: 1;
+}
+.campath.is-full { cursor: default; }
+
+/* Start is an anchor, not a handle, and now says so. */
+.campath-tag {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translate(-50%, 3px);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--fg-label);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.cam-move-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cam-move-head > span:first-child { flex: 1; }
+.cam-count {
+  font-size: 10px;
+  color: var(--fg-label);
+  font-variant-numeric: tabular-nums;
+}
+.cam-move-head .badge[disabled] { opacity: 0.4; cursor: default; }
+.cam-cta { width: 100%; }
+
+/* Names the row after the dot it edits, so the two read as one thing. */
+.cam-stop-head {
+  margin-top: 10px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-label);
 }
 
 .campath-num {

@@ -3,12 +3,12 @@
 const fs=require('fs'), path=require('path'), puppeteer=require('puppeteer-core');
 const CHROME=['C:/Program Files/Google/Chrome/Application/chrome.exe','C:/Program Files (x86)/Google/Chrome/Application/chrome.exe'].find(p=>{try{return fs.existsSync(p)}catch{return false}});
 const U=process.argv[2]||'http://localhost:3123', OUT=process.argv[3]||'.';
-const COM_CAM=process.env.MS_CAM!=='0';
+const COM_CAM=process.env.MS_CAM==='vazio'?'vazio':process.env.MS_CAM!=='0';
 const semear=function(COM_CAM){
   const s={activeTemplateId:'wall-01',tracks:[{id:'t0',templateId:'wall-01',values:{speed:0.2}}],
     width:810,height:1080,fps:30,duration:8,
     background:{source:'color',color:'#1a1a1a',gradient:false,color2:'#1a1a1a',imageUrl:null,blur:28},effects:[],
-    sceneCamera:COM_CAM?{_camZoom:100,_camPanX:-45,_camPanY:0,_camOrbitY:0,_camOrbitX:0,_camStop2:{x:20,y:0},_camStop2Zoom:150,_camStop3:{x:55,y:-35},_camStop3Zoom:110}:{}};
+    sceneCamera:COM_CAM==='vazio'?{_camOn:1,_camZoom:100,_camPanX:0,_camPanY:0,_camOrbitY:0,_camOrbitX:0}:COM_CAM?{_camOn:1,_camZoom:100,_camPanX:-45,_camPanY:0,_camOrbitY:0,_camOrbitX:0,_camStop2:{x:20,y:0},_camStop2Zoom:150,_camStop3:{x:55,y:-35},_camStop3Zoom:110}:{}};
   localStorage.setItem('motion-welcome-seen','1');localStorage.setItem('motion-tour-seen','1');
   localStorage.setItem('motion-scene-v1',JSON.stringify(s));
   localStorage.setItem('motion-project-shotcam',JSON.stringify(s));
@@ -44,7 +44,7 @@ const semear=function(COM_CAM){
     const a=cab.getBoundingClientRect(), z=ultimo.getBoundingClientRect();
     return {x:a.left+scrollX-10, y:a.top+scrollY-10, width:a.width+20, height:(z.bottom-a.top)+20};
   });
-  const arq=path.join(OUT, COM_CAM?'camera-panel.png':'camera-none.png');
+  const arq=path.join(OUT, COM_CAM==='vazio'?'camera-vazio.png':COM_CAM?'camera-panel.png':'camera-none.png');
   await p.screenshot({path:arq, clip:rect});
   console.log(arq+'  '+fs.statSync(arq).size+' bytes  ('+Math.round(rect.width)+'x'+Math.round(rect.height)+')');
   await b.close();
