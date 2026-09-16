@@ -4,73 +4,105 @@ import { useRef } from 'react';
 import type { CameraStop } from '@/lib/sceneCamera';
 
 /**
- * The whole camera path in ONE control.
+ * The path, drawn as what the camera actually SEES.
  *
- * The first version spent two rows per stop — a pad and a zoom — and at four
- * stops the panel was nine rows of camera. That is the wrong shape: a path is
- * one thing, and how many stops it has must not decide how tall the panel is.
- * So every stop lives inside this single pad and the row under it edits
- * whichever one is selected.
+ * Every earlier version of this drew a stop as a dot, and a dot is the wrong
+ * object. A stop is a framing — where the camera points AND how much it takes
+ * in — so a dot could only ever say half of it, and the other half lived in a
+ * slider underneath with nothing tying the two together. Worse, the dot's size
+ * was its zoom with bigger meaning CLOSER, which is backwards from how anyone
+ * reads a frame: a tight shot is a small rectangle, not a big blob.
  *
- * The pad is the FRAME, at ±100% of it on each axis, which is the unit Pan
- * already uses. A dot's SIZE is its zoom, so the path reads at a glance.
+ * So a stop is a rectangle, and it is the frame. Drag the rectangle to aim,
+ * drag its corner to zoom. One object, both halves, and the separate zoom row
+ * is gone. A small rectangle is a close shot because it is literally less of
+ * the scene.
  *
- * WHAT THIS VERSION FIXES, reported as "ficou confuso de como eu clicar":
+ * The pad is the reachable area: the frame at 100%, plus the pan range either
+ * side of it, which is two frames across. A frame at zoom Z is therefore 50/Z
+ * per cent of the pad wide.
  *
- *  - Nothing said the pad was clickable. The only instruction was a grey line
- *    of text below it. An empty pad now says so in the middle of itself, and
- *    there is an Add stop button as well, because a gesture nobody can see is
- *    not a feature.
- *  - Stop 1 was the Shot, drawn as a dot like the others and not draggable.
- *    You would try to drag it and nothing would happen. It is labelled Start
- *    now, drawn as a ring rather than a dot, and says where it is edited.
- *  - The stops were numbered from 2, so the first one you added was "Stop 2".
- *    They start at 1.
- *  - The selected stop was a 2px outline. It now carries a halo, and the row
- *    that edits it names it, so the two are visibly the same thing.
+ * This is the hand-editing surface and no longer the front door — a move is
+ * chosen by name in the panel above (lib/cameraMoves). It exists for placing a
+ * stop exactly where you want it, which the named moves deliberately cannot do.
  */
 
-const RANGE = 100;  // per-cent of a frame, each way — the pad's own edges
+const RANGE = 100;        // per-cent of a frame, each way — the pad's own edges
+const MIN_ZOOM = 25;
+const MAX_ZOOM = 300;
 
 export interface CameraPathPadProps {
-  /** Where the camera starts: the Shot, drawn as the anchor. */
   shot: { x: number; y: number; zoom: number };
   stops: CameraStop[];
   /** -1 while the Shot is selected, otherwise the index into `stops`. */
   selected: number;
   max: number;
+  /** Scene width / height, so a frame is drawn the shape it really is. */
+  frameAspect: number;
   onSelect: (index: number) => void;
   onMoveStop: (index: number, x: number, y: number) => void;
+  onZoomStop: (index: number, zoom: number) => void;
   onAddStop: (x: number, y: number) => void;
 }
 
+type Gesture = { index: number; kind: 'move' | 'zoom' };
+
 export default function CameraPathPad({
-  shot, stops, selected, max, onSelect, onMoveStop, onAddStop,
+  shot, stops, selected, max, frameAspect, onSelect, onMoveStop, onZoomStop, onAddStop,
 }: CameraPathPadProps) {
   const ref = useRef<HTMLDivElement>(null);
-  // Which stop this gesture owns. A pointermove that checks only `buttons === 1`
-  // accepts any pressed pointer that happens to pass over the pad, which is how
-  // a drag on a neighbouring control ends up moving something here.
-  const dragging = useRef<number | null>(null);
+  // Which stop this gesture owns, and which half of it. A pointermove that
+  // checks only `buttons === 1` accepts any pressed pointer that happens to
+  // cross the pad, which is how a drag on a neighbouring control ends up
+  // moving something in here.
+  const gesture = useRef<Gesture | null>(null);
   const full = stops.length >= max;
 
-  const pct = (n: number) => ((n / RANGE + 1) / 2) * 100;
+  // ---- the pad FITS the path ----
+  // Showing the full reach every time is what made this unreadable: a real
+  // move covers a third of a frame, so at a fixed +-100 the frames pile up in
+  // the middle on top of each other. The pad shows the path instead, with
+  // room around it, and never zooms in past the full reach so a one-stop move
+  // does not look enormous.
+  const todos = [{ ...shot, index: -1 }, ...stops.map((s2, i) => ({ ...s2, index: i }))];
+  const meia = (zoom: number) => 100 / Math.max(0.25, zoom / 100) / 2;
+  const limites = todos.reduce((acc, p) => {
+    const m = meia(p.zoom);
+    return {
+      x0: Math.min(acc.x0, p.x - m), x1: Math.max(acc.x1, p.x + m),
+      y0: Math.min(acc.y0, p.y - m), y1: Math.max(acc.y1, p.y + m),
+    };
+  }, { x0: Infinity, x1: -Infinity, y0: Infinity, y1: -Infinity });
+  const centro = { x: (limites.x0 + limites.x1) / 2, y: (limites.y0 + limites.y1) / 2 };
+  const VISTA = Math.min(
+    RANGE * 2,
+    Math.max(60, Math.max(limites.x1 - limites.x0, limites.y1 - limites.y0) * 1.25),
+  );
+  const pctX = (n: number) => ((n - centro.x) / VISTA + 0.5) * 100;
+  const pctY = (n: number) => ((n - centro.y) / VISTA + 0.5) * 100;
   const fromClient = (clientX: number, clientY: number) => {
     const rect = ref.current?.getBoundingClientRect();
     if (!rect) return null;
-    const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
-    const nx = clamp01((clientX - rect.left) / rect.width);
-    const ny = clamp01((clientY - rect.top) / rect.height);
-    return { x: Math.round((nx * 2 - 1) * RANGE), y: Math.round((ny * 2 - 1) * RANGE) };
+    const nx = (clientX - rect.left) / rect.width;
+    const ny = (clientY - rect.top) / rect.height;
+    const dentro = (n: number) => Math.max(-RANGE, Math.min(RANGE, Math.round(n)));
+    return { x: dentro((nx - 0.5) * VISTA + centro.x), y: dentro((ny - 0.5) * VISTA + centro.y) };
   };
 
-  // A stop's dot grows with its zoom, between roughly half and double the base.
-  const dotSize = (zoom: number) => 14 + Math.max(-6, Math.min(12, (zoom - 100) / 16));
+  // The frame at this zoom, as a share of the pad. The pad spans two frames, so
+  // a 100% frame is half of it and a 200% one a quarter.
+  const frameW = (zoom: number) => (meia(zoom) * 2 / VISTA) * 100;
+  const frameH = (zoom: number) => frameW(zoom) * (frameAspect > 0 ? 1 / frameAspect : 1);
 
-  const points = [
-    { x: shot.x, y: shot.y, zoom: shot.zoom, index: -1 },
-    ...stops.map((s, i) => ({ ...s, index: i })),
-  ];
+  // Dragging a corner sets the zoom: the further out you pull the corner, the
+  // wider the frame, so the smaller the zoom.
+  // Pulling the corner out opens the frame, so the zoom falls.
+  const zoomFromCorner = (cx: number, px: number) => {
+    const m = Math.max(2, Math.abs(px - cx));
+    return Math.round(Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, (100 / m) * 100)));
+  };
+
+  const points = todos;
 
   return (
     <div className="campath-wrap">
@@ -78,22 +110,24 @@ export default function CameraPathPad({
         ref={ref}
         className={`campath ${full ? 'is-full' : ''}`}
         onPointerDown={(e) => {
-          // An empty patch of pad is a new stop, which is the gesture the empty
-          // state advertises: no button to find, and it lands where you pointed.
-          if ((e.target as HTMLElement).closest('.campath-dot')) return;
+          if ((e.target as HTMLElement).closest('.camframe')) return;
           if (full) return;
           const p = fromClient(e.clientX, e.clientY);
           if (p) onAddStop(p.x, p.y);
         }}
         onPointerMove={(e) => {
-          const i = dragging.current;
-          if (i === null || e.buttons !== 1) return;
+          const g = gesture.current;
+          if (!g || e.buttons !== 1) return;
           const p = fromClient(e.clientX, e.clientY);
-          if (p) onMoveStop(i, p.x, p.y);
+          if (!p) return;
+          if (g.kind === 'move') { onMoveStop(g.index, p.x, p.y); return; }
+          const alvo = stops[g.index];
+          if (!alvo) return;
+          onZoomStop(g.index, zoomFromCorner(alvo.x, p.x));
         }}
-        onPointerUp={() => { dragging.current = null; }}
-        onPointerCancel={() => { dragging.current = null; }}
-        onLostPointerCapture={() => { dragging.current = null; }}
+        onPointerUp={() => { gesture.current = null; }}
+        onPointerCancel={() => { gesture.current = null; }}
+        onLostPointerCapture={() => { gesture.current = null; }}
       >
         <svg className="campath-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
           <line className="campath-mid" x1="50" y1="0" x2="50" y2="100" />
@@ -102,23 +136,13 @@ export default function CameraPathPad({
             <line
               key={i}
               className="campath-leg"
-              x1={pct(points[i].x)}
-              y1={pct(points[i].y)}
-              x2={pct(p.x)}
-              y2={pct(p.y)}
+              x1={pctX(points[i].x)} y1={pctY(points[i].y)}
+              x2={pctX(p.x)} y2={pctY(p.y)}
             />
           ))}
         </svg>
-        {/* The frame's own corners, so the pad reads as a picture rather than
-            as an empty box with dots in it. */}
-        <span className="campath-corner tl" aria-hidden />
-        <span className="campath-corner tr" aria-hidden />
-        <span className="campath-corner bl" aria-hidden />
-        <span className="campath-corner br" aria-hidden />
 
         {stops.length === 0 && (
-          // The gesture, said where the gesture happens. This is the whole fix
-          // for "how do I click": the instruction used to live under the pad.
           <div className="campath-empty" aria-hidden>
             <span className="campath-plus">+</span>
             <span>Click anywhere to add a stop</span>
@@ -127,37 +151,53 @@ export default function CameraPathPad({
 
         {points.map((p) => {
           const isShot = p.index === -1;
-          const size = dotSize(p.zoom);
+          const w = frameW(p.zoom);
+          const h = frameH(p.zoom);
           return (
-            <button
+            <div
               key={p.index}
-              type="button"
-              className={`campath-dot ${isShot ? 'is-shot' : ''} ${selected === p.index ? 'is-selected' : ''}`}
-              style={{ left: `${pct(p.x)}%`, top: `${pct(p.y)}%`, width: size, height: size }}
+              className={`camframe ${isShot ? 'is-shot' : ''} ${selected === p.index ? 'is-selected' : ''}`}
+              style={{
+                left: `${pctX(p.x)}%`, top: `${pctY(p.y)}%`,
+                width: `${w}%`, height: `${h}%`,
+              }}
+              role="button"
+              tabIndex={0}
               title={isShot
-                ? 'Where the shot starts — move it with Zoom and Pan above'
-                : `Stop ${p.index + 1} — drag to move, click to edit its zoom`}
+                ? 'Where the shot starts — sized by Zoom above'
+                : `Stop ${p.index + 1} — drag to aim, drag the corner to zoom`}
               onPointerDown={(e) => {
                 e.stopPropagation();
                 onSelect(p.index);
-                // The Shot is an anchor, not a handle: it is said above.
                 if (isShot) return;
-                dragging.current = p.index;
+                gesture.current = { index: p.index, kind: 'move' };
                 (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
               }}
             >
-              <span className="campath-num">{isShot ? '' : p.index + 1}</span>
-              {isShot && <span className="campath-tag">Start</span>}
-            </button>
+              <span className="camframe-num">{isShot ? 'Start' : p.index + 1}</span>
+              {selected === p.index && <span className="camframe-zoom">{Math.round(p.zoom)}%</span>}
+              {!isShot && selected === p.index && (
+                <span
+                  className="camframe-grip"
+                  title="Drag to zoom"
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                    onSelect(p.index);
+                    gesture.current = { index: p.index, kind: 'zoom' };
+                    (e.currentTarget.parentElement as HTMLElement)?.setPointerCapture?.(e.pointerId);
+                  }}
+                />
+              )}
+            </div>
           );
         })}
       </div>
       <div className="campath-hint">
         {stops.length === 0
-          ? 'Start is where the Shot above puts the camera.'
+          ? 'Each stop is a frame. Start is the one the Shot above sets.'
           : full
             ? `${stops.length} of ${max} stops — the most one clip can settle at.`
-            : 'Drag a stop to move it · a bigger dot is a closer shot'}
+            : 'Drag a frame to aim it · drag its corner to zoom · a smaller frame is a closer shot'}
       </div>
     </div>
   );

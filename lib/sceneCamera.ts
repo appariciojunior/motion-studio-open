@@ -312,7 +312,8 @@ export function gateSceneCamera(cam: SceneCameraValues, templates: HasControls[]
 // the active layer's silhouette from 105x182 to 136x363 and left the other
 // layer byte-identical at 104x182.
 // The xypad stores a pair, so this is no longer a bag of numbers.
-export type SceneCameraState = Record<string, number | { x: number; y: number }>;
+// A string lands here too: the chosen camera move is a name, not a number.
+export type SceneCameraState = Record<string, number | string | { x: number; y: number }>;
 
 // Whether this scene HAS a camera at all, which is not the same question as
 // whether the camera is currently doing anything. A camera just added sits
@@ -371,9 +372,16 @@ export function sanitizeSceneCamera(raw: unknown): SceneCameraState {
     const z = Number(bag[stopZoomKey(i)]);
     out[stopZoomKey(i)] = Number.isFinite(z) ? Math.min(zMax, Math.max(zMin, z)) : 100;
   }
-  // Carried by hand: this one is not a control, so the loop above never sees
-  // it, and without this line a scene would lose its camera on the next save.
+  // Carried by hand: these are not controls, so the loop above never sees
+  // them, and without these lines a scene would lose its camera on the next
+  // save — and forget which move it was built from.
   if (bag[SCENE_CAMERA_ON]) out[SCENE_CAMERA_ON] = 1;
+  if (typeof bag._camMove === 'string') out._camMove = bag._camMove;
+  for (const k of ['_camMoveAmount', '_camMoveDir']) {
+    const v = bag[k];
+    if (typeof v === 'number' && Number.isFinite(v)) out[k] = v;
+    else if (typeof v === 'string') out[k] = v;
+  }
   return out;
 }
 

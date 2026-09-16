@@ -206,7 +206,7 @@ export interface SceneState {
   // Several keys at once, and `null` REMOVES one — adding or dropping a stop
   // is two keys moving together, and a half-written stop would be a hole the
   // renderer has to guess about.
-  patchSceneCamera: (patch: Record<string, number | { x: number; y: number } | null>) => void;
+  patchSceneCamera: (patch: Record<string, number | string | { x: number; y: number } | null>) => void;
   resetSceneCamera: () => void;
   setVideoEnd: (mode: 'loop' | 'hold') => void;
 
@@ -787,7 +787,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     set((s) => ({ sceneCamera: sanitizeSceneCamera({ ...s.sceneCamera, [key]: value }) })),
   patchSceneCamera: (patch) =>
     set((s) => {
-      const next: Record<string, number | { x: number; y: number }> = { ...s.sceneCamera };
+      const next: SceneCameraState = { ...s.sceneCamera };
       for (const [k, v] of Object.entries(patch)) {
         if (v === null) delete next[k]; else next[k] = v;
       }

@@ -6957,38 +6957,82 @@ select.field {
   vector-effect: non-scaling-stroke;
 }
 
-.campath-dot {
+/* A stop is the FRAME the camera sees, not a dot. A dot could only say where
+   the camera points; the rectangle says that AND how much it takes in, which
+   is why the separate zoom row stopped being necessary. Small rectangle =
+   close shot, which is the right way round — the old dot grew as it zoomed
+   IN, the opposite of how anyone reads a frame. */
+/* Seven frames all drawn at full weight is a thicket. The one in focus is
+   solid and the rest are context, which is what makes the path readable at a
+   glance instead of something you have to untangle. */
+.camframe {
   position: absolute;
   transform: translate(-50%, -50%);
-  border: 0;
-  padding: 0;
-  border-radius: 50%;
-  background: var(--fg);
-  color: var(--card-inset);
-  font-size: 9px;
-  line-height: 1;
-  display: grid;
-  place-items: center;
+  border: 1px solid var(--fg);
+  border-radius: 2px;
+  background: transparent;
+  opacity: 0.4;
   cursor: grab;
   touch-action: none;
+  min-width: 14px;
+  min-height: 14px;
 }
-
-/* Stop 1 is the Shot: an anchor, not a handle — it is set in Shot above. */
-.campath-dot.is-shot {
+.camframe:hover { opacity: 0.75; }
+.camframe:active { cursor: grabbing; }
+.camframe.is-shot {
+  border-style: dashed;
+  border-color: var(--fg-label);
   background: transparent;
-  border: 1px solid var(--fg-label);
-  color: var(--fg-label);
+  opacity: 0.7;
   cursor: default;
 }
-
-.campath-dot.is-selected {
-  outline: 2px solid var(--fg);
-  outline-offset: 3px;
-  /* A halo as well as the ring: at 14px a 2px outline is easy to miss, and
-     the whole point is that the dot and the row below are one thing. */
-  box-shadow: 0 0 0 6px color-mix(in srgb, var(--fg) 14%, transparent);
+.camframe.is-selected {
+  opacity: 1;
+  border-width: 1.5px;
+  background: color-mix(in srgb, var(--fg) 12%, transparent);
+  z-index: 2;
 }
-
+.camframe-num {
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  padding: 1px 4px;
+  font-size: 9px;
+  line-height: 1.3;
+  background: var(--fg);
+  color: var(--card-inset);
+  border-radius: 2px 0 2px 0;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.camframe.is-shot .camframe-num {
+  background: transparent;
+  color: var(--fg-label);
+  border: 1px dashed var(--fg-label);
+}
+/* The zoom, on the frame that has it, instead of in a row somewhere else. */
+.camframe-zoom {
+  position: absolute;
+  bottom: 2px;
+  left: 4px;
+  font-size: 8px;
+  color: var(--fg-label);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+/* Corner handle: drag it and the frame opens or closes. */
+.camframe-grip {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid var(--fg);
+  border-top: 0;
+  border-left: 0;
+  cursor: nwse-resize;
+  touch-action: none;
+}
 /* ---- camera path: the pieces that say how to use it ---- */
 
 /* The frame's own corners. Without them the pad is a grey box with dots in
@@ -7079,3 +7123,44 @@ select.field {
   line-height: 1.4;
   color: var(--fg-faint);
 }
+
+/* ---- choosing a camera move ---- */
+
+.cam-moves {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 4px;
+}
+.cam-move {
+  border: 1px solid var(--handle);
+  background: var(--card-inset);
+  color: var(--fg-label);
+  border-radius: var(--r-ctrl);
+  padding: 6px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.cam-move:hover { color: var(--fg); }
+.cam-move.is-on {
+  border-color: var(--fg);
+  color: var(--fg);
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+}
+
+/* Hand editing, folded away: it is the 5% case now, not the front door. */
+.cam-disclose {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 12px;
+  padding: 7px 0;
+  border: 0;
+  border-top: 1px solid var(--handle);
+  background: transparent;
+  color: var(--fg-label);
+  font-size: 11px;
+  cursor: pointer;
+}
+.cam-disclose:hover { color: var(--fg); }

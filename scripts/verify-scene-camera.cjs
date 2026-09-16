@@ -30,6 +30,9 @@ const {
   readSceneCameraPath, sceneCameraTravels, cameraLegProgress, sceneCameraAt,
   NO_SCENE_CAMERA_PATH, cameraStopKeys,
 } = require('../lib/sceneCamera');
+const {
+  CAMERA_MOVES, CAMERA_MOVE_KEY, CUSTOM_MOVE, cameraMoveById, cameraMovePatch,
+} = require('../lib/cameraMoves');
 
 const near = (a, b, tol = 1e-7, what = '') => assert.ok(Math.abs(a - b) < tol, `${what} ${a} != ${b}`);
 const dist = (p, t) => Math.hypot(p.x - t.x, p.y - t.y, p.z - t.z);
@@ -364,6 +367,92 @@ assert.equal(readSceneCameraPath({ _camStop2: { x: NaN, y: 2 } }).stops[0].x, 0)
     }
   }
   cases += 6;
+}
+
+{
+  // MOVES YOU CHOOSE. The pad asks for coordinates over time, which is the
+  // hardest thing in this app and was the only way in; a move is a name and at
+  // most two knobs, and it writes the same stops the pad writes.
+  const ids = CAMERA_MOVES.map((m) => m.id);
+  assert.equal(new Set(ids).size, ids.length, "two moves cannot share an id");
+  assert.ok(!ids.includes(CUSTOM_MOVE), "custom is what a hand-edited path becomes, not a move you pick");
+  for (const m of CAMERA_MOVES) {
+    assert.ok(m.label && m.hint, `${m.id}: a move picked by name needs a name and a line saying what it does`);
+    assert.ok(m.knobs.length <= 2, `${m.id}: ${m.knobs.length} knobs — the whole point is at most two`);
+    cases += 2;
+  }
+  assert.equal(cameraMoveById(CUSTOM_MOVE), null);
+  assert.equal(cameraMoveById(undefined), null, "junk reads as no move rather than throwing");
+  cases += 4;
+}
+
+{
+  // Every move must actually MOVE, at every amount, and must produce a path
+  // the engine is happy with — the same no-freeze bar a hand-built one meets.
+  for (const m of CAMERA_MOVES) {
+    for (const amount of [10, 60, 100]) {
+      const patch = cameraMovePatch(m.id, amount, 'right');
+      assert.equal(patch[SCENE_CAMERA_ON], 1, `${m.id}: choosing a move gives the scene a camera`);
+      assert.equal(patch[CAMERA_MOVE_KEY], m.id);
+      const limpo = sanitizeSceneCamera(patch);
+      const c = readSceneCamera(limpo);
+      const caminho = readSceneCameraPath(limpo);
+      assert.ok(sceneCameraTravels(caminho), `${m.id} at ${amount}: a move that does not move is not a move`);
+      // 210 samples because that is the reference clip's own frame count, and
+      // this ratio is sensitive to how densely you sample: the same Survey
+      // reads 69x at 120 samples and 32x at 210, purely because at 120 one of
+      // its six legs happens to be sampled nearer its own boundary. Compare
+      // like with like or the number means nothing.
+      let ant = sceneCameraAt(c, caminho, 0);
+      let lento = Infinity, rapido = 0;
+      for (let i = 1; i <= 210; i++) {
+        const at = sceneCameraAt(c, caminho, i / 210);
+        const v = Math.hypot((at.panX - ant.panX) * 100, (at.panY - ant.panY) * 100)
+          + Math.abs(at.zoom - ant.zoom) * 100;
+        lento = Math.min(lento, v); rapido = Math.max(rapido, v);
+        ant = at;
+      }
+      assert.ok(lento > 0, `${m.id} at ${amount}: no frame of a move may be a freeze`);
+      // The clip measured 22x over six stops; our single-leg moves land at 18x
+      // and the six-stop Survey at 32x. 45 leaves headroom without letting a
+      // move sneak back towards a freeze.
+      assert.ok(rapido / lento < 45, `${m.id} at ${amount}: ${(rapido / lento).toFixed(0)}x between slowest and fastest frame`);
+      cases += 4;
+    }
+  }
+}
+
+{
+  // Amount scales the move and nothing else: more amount, more travel.
+  const viagem = (id, amount) => {
+    const limpo = sanitizeSceneCamera(cameraMovePatch(id, amount, 'right'));
+    const c = readSceneCamera(limpo);
+    const p = readSceneCameraPath(limpo);
+    const pontos = [{ x: c.panX * 100, y: c.panY * 100, zoom: c.zoom * 100 }, ...p.stops];
+    let d = 0;
+    for (let i = 1; i < pontos.length; i++) {
+      d += Math.hypot(pontos[i].x - pontos[i - 1].x, pontos[i].y - pontos[i - 1].y)
+        + Math.abs(pontos[i].zoom - pontos[i - 1].zoom);
+    }
+    return d;
+  };
+  for (const m of CAMERA_MOVES) {
+    assert.ok(viagem(m.id, 100) > viagem(m.id, 20) * 1.2,
+      `${m.id}: turning Amount up has to make the move bigger`);
+    cases++;
+  }
+}
+
+{
+  // THE leftover bug this guards: a short move chosen after a long one must
+  // not inherit the tail of it, or the camera visits somewhere nobody asked for.
+  const survey = sanitizeSceneCamera(cameraMovePatch('survey', 100, 'centre'));
+  const nSurvey = readSceneCameraPath(survey).stops.length;
+  assert.ok(nSurvey >= 4, `survey should be a tour, got ${nSurvey} stops`);
+  const depois = sanitizeSceneCamera({ ...survey, ...cameraMovePatch('push', 60, 'right') });
+  assert.equal(readSceneCameraPath(depois).stops.length, 1,
+    'a one-stop move after a six-stop one leaves exactly one stop');
+  cases += 2;
 }
 
 assert.equal(sceneCameraTravels(rota([])), false);
