@@ -6962,9 +6962,10 @@ select.field {
    is why the separate zoom row stopped being necessary. Small rectangle =
    close shot, which is the right way round — the old dot grew as it zoomed
    IN, the opposite of how anyone reads a frame. */
-/* Seven frames all drawn at full weight is a thicket. The one in focus is
-   solid and the rest are context, which is what makes the path readable at a
-   glance instead of something you have to untangle. */
+/* ONE stop at a time. Drawing them all together failed twice: as dots they
+   could not say the zoom, and as rectangles they came out concentric — stops
+   differ mostly in zoom — so half a dozen nested outlines inside 250px was a
+   thicket. The strip above carries the order; the pad carries one frame. */
 .camframe {
   position: absolute;
   transform: translate(-50%, -50%);
@@ -6977,7 +6978,11 @@ select.field {
   min-width: 14px;
   min-height: 14px;
 }
-.camframe:hover { opacity: 0.75; }
+/* Where the camera is coming from, behind where it is going. */
+.camframe.is-ghost {
+  opacity: 0.28;
+  border-style: dashed;
+}
 .camframe:active { cursor: grabbing; }
 .camframe.is-shot {
   border-style: dashed;
@@ -6992,6 +6997,35 @@ select.field {
   background: color-mix(in srgb, var(--fg) 12%, transparent);
   z-index: 2;
 }
+
+/* The path, as the ordered list it is. */
+.campath-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.campath-chip {
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
+  border: 1px solid var(--handle);
+  border-radius: var(--r-ctrl);
+  background: var(--card-inset);
+  color: var(--fg-label);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.campath-chip:hover { color: var(--fg); }
+.campath-chip.is-on {
+  border-color: var(--fg);
+  background: var(--fg);
+  color: var(--card-inset);
+}
+.campath-chip.is-shot { font-size: 10px; }
+.campath-chip.is-add { border-style: dashed; }
+.campath-chip[disabled] { opacity: 0.35; cursor: default; }
 .camframe-num {
   position: absolute;
   top: -1px;

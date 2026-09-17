@@ -61,12 +61,23 @@ const MOVIMENTO = process.argv[4] || 'Survey';
   // abre o pad e conta os QUADROS desenhados
   await p.evaluate(() => { const d = document.querySelector('.cam-disclose'); d && d.click(); });
   await new Promise((r) => setTimeout(r, 1200));
+  // escolhe uma parada do meio, para ver o fantasma e a perna
+  const chip = process.env.MS_CHIP || '3';
+  const escolheu = await p.evaluate((c) => {
+    const b = [...document.querySelectorAll('.campath-chip')].find((e) => e.textContent.trim() === c);
+    if (!b) return 'chip ' + c + ' nao existe';
+    b.click(); return 'ok';
+  }, chip);
+  console.log('chip', chip + ':', escolheu);
+  await new Promise((r) => setTimeout(r, 800));
   const pad = await p.evaluate(() => ({
     quadros: document.querySelectorAll('.camframe').length,
     rotulos: [...document.querySelectorAll('.camframe-num')].map((e) => e.textContent.trim()),
     zoomsNoPad: [...document.querySelectorAll('.camframe-zoom')].map((e) => e.textContent.trim()),
     temAlca: document.querySelectorAll('.camframe-grip').length,
     pontosVelhos: document.querySelectorAll('.campath-dot').length,
+    fantasma: document.querySelectorAll('.camframe.is-ghost').length,
+    chips: [...document.querySelectorAll('.campath-chip')].map(e=>e.textContent.trim()),
   }));
   console.log('pad:', JSON.stringify(pad));
 

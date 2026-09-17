@@ -298,7 +298,7 @@ export default function ScenePanel() {
             </button>
             {pathOpen && (
             <>
-            <div className="ctl-hint">Each stop is a frame: drag one to aim it, drag its corner to zoom. The camera settles into each in turn.</div>
+            <div className="ctl-hint">Pick a stop on the strip, aim it in the pad, set how close it is below. The camera settles into each in turn.</div>
             <CameraPathPad
               shot={{
                 x: Number(sceneCamera._camPanX) || 0,
@@ -311,14 +311,8 @@ export default function ScenePanel() {
               frameAspect={sceneW / Math.max(1, sceneH)}
               onSelect={setSelectedStop}
               onMoveStop={moveStop}
-              onZoomStop={zoomStop}
               onAddStop={addStop}
             />
-            <div className="ctl-row">
-              <div className="ctl-input cam-stop-actions">
-                <button type="button" className="badge" disabled={path.stops.length >= MAX_CAMERA_STOPS} onClick={addStopFromButton}>Add stop</button>
-              </div>
-            </div>
             {/* One row for whichever stop is selected, instead of a row per
                 stop: the panel stays the same height at one stop and at four. */}
             {stopAt && (
