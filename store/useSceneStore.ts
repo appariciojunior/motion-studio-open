@@ -7,6 +7,8 @@ import type { EffectScope } from '@/lib/types';
 import { DEMO_ASSETS, demoSourceForSlot, isDemoAssetSource } from '@/lib/demoAssets';
 import { idbPut, idbGet, idbDelete } from '@/lib/assetDb';
 import { DEFAULT_TRACK_TRANSFORM, TRACK_END, type BlendMode, type MotionTrack } from '@/lib/tracks';
+import { SCENE_CAMERA_DEFAULTS, sanitizeSceneCamera, type SceneCameraState } from '@/lib/sceneCamera';
+import { SHIPPED_COMPOSES, isShippedCompose } from '@/lib/composes';
 import { createGradientSpec, legacyColorsForGradient, normalizeGradientSpec, type GradientSpec } from '@/lib/gradient';
 
 // ---------- canvas dimension helpers ----------
@@ -69,13 +71,30 @@ export interface LogoSettings {
   size: number; // px
 }
 
-// A named snapshot of a template's tweaked values + easing ("Save as custom").
+// A named snapshot of a composition: the template, its values, its easing —
+// and the SHOT. A saved look whose camera did not come with it would replay
+// from wherever the camera happened to be standing, which for a composition
+// built around a camera move is not the same composition at all.
+//
+// `sceneCamera` is optional because everything saved before this field existed
+// is still a valid preset; it simply leaves the camera alone when applied.
 export interface CustomPreset {
   id: string;
   name: string;
   templateId: string;
   values: Record<string, any>;
   easing: EasingSpec;
+  sceneCamera?: SceneCameraState;
+  // What it was composed AGAINST. A wall of pages on white and the same wall on
+  // black are not the same composition: the gutter between the cards is the
+  // background, so the colour is part of the layout and not a preference laid
+  // over it. Measured on the reference clip, its two commonest colours are
+  // #f8f8f8 and #f0e8e8 and together they are 26% of every pixel in it.
+  //
+  // This is the SCENE background, which is content the user already sets. It is
+  // not the app palette, which stays where it is and belongs to its own work.
+  // Optional, so everything saved before this leaves the background alone.
+  background?: Partial<SceneState['background']>;
 }
 
 const PRESETS_KEY = 'motion-custom-presets';
@@ -125,6 +144,10 @@ export interface SceneState {
   // assets → layer slots
   assets: AssetItem[];
   cardShape: string; // scene-level crop aspect for cards: 'auto' or a CARD_SHAPES key
+  // The shot: where the camera stands, on top of whatever pose the template
+  // asks for (lib/sceneCamera). Scene-level and not per-track on purpose — two
+  // layers seen from two different camera positions are not one shot.
+  sceneCamera: SceneCameraState;
   // when a card video is shorter than the clip: restart it ('loop') or freeze
   // on its final frame ('hold') — applies to preview and export alike
   videoEnd: 'loop' | 'hold';
@@ -178,6 +201,13 @@ export interface SceneState {
   setAssetCrop: (id: string, crop: CropFocus) => void;
   setAllAssetCrops: (crop: CropFocus) => void;
   setCardShape: (shape: string) => void;
+  // `value` is a number for a slider and a pair for a stop pad.
+  setSceneCameraValue: (key: string, value: number | { x: number; y: number }) => void;
+  // Several keys at once, and `null` REMOVES one — adding or dropping a stop
+  // is two keys moving together, and a half-written stop would be a hole the
+  // renderer has to guess about.
+  patchSceneCamera: (patch: Record<string, number | string | { x: number; y: number } | null>) => void;
+  resetSceneCamera: () => void;
   setVideoEnd: (mode: 'loop' | 'hold') => void;
 
   // persistence (see lib/scenePersist)
@@ -337,6 +367,7 @@ function initialSceneState() {
     // start populated with the bundled demo set so every template shows real motion
     assets: DEMO_ASSETS.map((a) => ({ ...a, id: nid('asset'), visible: true, origin: 'demo' as const })),
     cardShape: 'auto',
+    sceneCamera: { ...SCENE_CAMERA_DEFAULTS },
     videoEnd: 'loop' as const,
     effects: [],
   };
@@ -751,6 +782,18 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setAllAssetCrops: (crop) =>
     set((s) => ({ assets: s.assets.map((a) => ({ ...a, crop })) })),
   setCardShape: (shape) => set(() => ({ cardShape: shape })),
+  // A new object every time: the autosave compares document fields by identity.
+  setSceneCameraValue: (key, value) =>
+    set((s) => ({ sceneCamera: sanitizeSceneCamera({ ...s.sceneCamera, [key]: value }) })),
+  patchSceneCamera: (patch) =>
+    set((s) => {
+      const next: SceneCameraState = { ...s.sceneCamera };
+      for (const [k, v] of Object.entries(patch)) {
+        if (v === null) delete next[k]; else next[k] = v;
+      }
+      return { sceneCamera: sanitizeSceneCamera(next) };
+    }),
+  resetSceneCamera: () => set(() => ({ sceneCamera: { ...SCENE_CAMERA_DEFAULTS } })),
   setVideoEnd: (mode) => set(() => ({ videoEnd: mode })),
 
   // Apply a persisted scene (from lib/scenePersist). Each track's `values` is
@@ -835,6 +878,9 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         ...partial,
         background,
         assets,
+        // Rebuilt, never inherited: a project saved before the shot existed must
+        // open neutral, not wearing whatever framing the last project had.
+        sceneCamera: sanitizeSceneCamera((partial as { sceneCamera?: unknown }).sceneCamera),
         ...projectActive(safeTracks, activeId),
         frame: 0, // always start at the clip head
       };
@@ -868,13 +914,17 @@ export const useSceneStore = create<SceneState>((set, get) => ({
 
   // Loaded lazily on the client (localStorage isn't available during SSR,
   // and seeding it at create() time would cause a hydration mismatch).
+  // The shipped composes are always in the list and are never in storage: only
+  // what the user saved is persisted, so editing the set in the repo changes
+  // what everyone sees instead of racing whatever a browser saved months ago.
   loadCustomPresets: () =>
     set(() => {
-      if (typeof window === 'undefined') return {};
+      if (typeof window === 'undefined') return { customPresets: SHIPPED_COMPOSES };
       try {
         const raw = localStorage.getItem(PRESETS_KEY);
-        return raw ? { customPresets: JSON.parse(raw) as CustomPreset[] } : {};
-      } catch { return {}; }
+        const salvos = raw ? (JSON.parse(raw) as CustomPreset[]).filter((p) => !isShippedCompose(p.id)) : [];
+        return { customPresets: [...SHIPPED_COMPOSES, ...salvos] };
+      } catch { return { customPresets: SHIPPED_COMPOSES }; }
     }),
   saveCustomPreset: (name) =>
     set((s) => {
@@ -884,9 +934,12 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         templateId: s.activeTemplateId,
         values: { ...s.values },
         easing: s.easing,
+        // The shot travels with it — see CustomPreset.
+        sceneCamera: { ...s.sceneCamera },
+        background: { ...s.background },
       };
       const next = [...s.customPresets, preset];
-      persistPresets(next);
+      persistPresets(next.filter((p) => !isShippedCompose(p.id)));
       return { customPresets: next };
     }),
   // A preset lands on the ACTIVE track, like picking a template does — the
@@ -902,13 +955,23 @@ export const useSceneStore = create<SceneState>((set, get) => ({
           values: { ...defaultsFor(p.templateId), ...p.values },
           easing: p.easing,
         }),
+        // A composition saved WITH a shot brings it back; one saved before the
+        // camera existed leaves it alone rather than resetting it to neutral.
+        ...(p.sceneCamera ? { sceneCamera: sanitizeSceneCamera(p.sceneCamera) } : {}),
+        // Same rule for the ground it was composed against: merged over the
+        // current one, so a compose that only names a colour does not silently
+        // drop the blur or an image the scene already had.
+        ...(p.background ? { background: { ...s.background, ...p.background } } : {}),
         frame: 0,
       };
     }),
   deleteCustomPreset: (id) =>
     set((s) => {
+      // A shipped compose would come straight back on the next load, and a
+      // delete that does not delete is worse than no delete at all.
+      if (isShippedCompose(id)) return {};
       const next = s.customPresets.filter((c) => c.id !== id);
-      persistPresets(next);
+      persistPresets(next.filter((p) => !isShippedCompose(p.id)));
       return { customPresets: next };
     }),
 

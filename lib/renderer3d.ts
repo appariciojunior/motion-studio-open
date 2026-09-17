@@ -11,7 +11,8 @@ import { cardAspectFor, coverCrop, cropKey, type CropFocus } from '@/lib/crop';
 import { advanceVideoForExport, createCardVideo, isVideoSource, prepareVideoForSequentialExport, useVideoProxies } from '@/lib/videoTexture';
 import { BASE_PATH, IS_STATIC_EXPORT } from '@/lib/paths';
 import type { IRenderer } from '@/lib/rendererTypes';
-import type { CameraPose, LayerTransform3D } from '@/lib/types';
+import type { CameraPose, LayerTransform3D, Template } from '@/lib/types';
+import { frameSceneCamera, gateSceneCamera, isNeutralSceneCamera, readSceneCamera, readSceneCameraPath, sceneCameraAt, sceneCameraCoverage, sceneLensShift, type SceneCameraValues } from '@/lib/sceneCamera';
 import { resolveTrackTime, trackAssetIndices, type MotionTrack } from '@/lib/tracks';
 import type { SceneState } from '@/store/useSceneStore';
 import { advancedRasterSize, gradientRasterMaxEdge, gradientSignature, normalizeGradientSpec, paintGradientCanvas } from '@/lib/gradient';
@@ -171,16 +172,47 @@ export class SceneRenderer3D implements IRenderer {
   // Map the house `perspective` control (0–200) onto the camera: low values =
   // long lens (near-ortho), high = wide-angle. Camera distance keeps the z=0
   // plane at exact preview-pixel scale for any fov.
-  private updateTrackCamera(camera: THREE.PerspectiveCamera | THREE.OrthographicCamera, perspective: number, pose?: CameraPose) {
+  //
+  // `cam` is the house camera (lib/sceneCamera) — the user's re-framing, applied
+  // ON TOP of whatever pose the template asked for. Neutral values skip the
+  // composition entirely, so an untouched scene renders the same numbers it did
+  // before the shot controls existed.
+  private updateTrackCamera(
+    camera: THREE.PerspectiveCamera | THREE.OrthographicCamera,
+    perspective: number,
+    pose?: CameraPose,
+    cam?: SceneCameraValues,
+  ) {
     if (camera instanceof THREE.OrthographicCamera) {
-      camera.left = -this.width / 2;
-      camera.right = this.width / 2;
-      camera.top = this.height / 2;
-      camera.bottom = -this.height / 2;
+      // A 2D track composited into a webgl scene renders through this. It has
+      // to honour the shot too, or a mixed stack ends up with its layers framed
+      // differently — the same defect, one renderer down, that moving the camera
+      // off the track already fixed for two webgl layers.
+      //
+      // A dolly on an orthographic camera is a frustum scale: halving the
+      // extent doubles the subject, so the divisor is the same `zoom` the
+      // perspective path applies to its distance. The pan is the very same lens
+      // shift. An ORBIT is dropped on purpose: there is no perspective here, so
+      // swinging this camera around a flat track would only squash it, which is
+      // a squash and not a point of view.
+      const frame = cam ? 1 / Math.max(0.05, cam.zoom) : 1;
+      camera.left = (-this.width / 2) * frame;
+      camera.right = (this.width / 2) * frame;
+      camera.top = (this.height / 2) * frame;
+      camera.bottom = (-this.height / 2) * frame;
       camera.near = -20000;
       camera.far = 20000;
       camera.position.set(0, 0, 1000);
       camera.lookAt(0, 0, 0);
+      const orthoShift = cam ? sceneLensShift(cam, this.width, this.height) : null;
+      if (orthoShift) {
+        camera.setViewOffset(
+          orthoShift.fullWidth, orthoShift.fullHeight,
+          orthoShift.x, orthoShift.y, orthoShift.width, orthoShift.height,
+        );
+      } else if (camera.view?.enabled) {
+        camera.clearViewOffset();
+      }
       camera.updateProjectionMatrix();
       return;
     }
@@ -194,13 +226,65 @@ export class SceneRenderer3D implements IRenderer {
     // the frame at the SAME fov, so the keystone/perspective feel is
     // unchanged — a different move than widening the lens). Templates that
     // set an explicit `position` bypass this entirely, same as before.
-    const position = pose?.position ?? { x: 0, y: 0, z: D * (pose?.distance ?? 1) };
-    const target = pose?.target ?? { x: 0, y: 0, z: 0 };
+    let position = pose?.position ?? { x: 0, y: 0, z: D * (pose?.distance ?? 1) };
+    let target = pose?.target ?? { x: 0, y: 0, z: 0 };
+    // The far plane has to clear wherever the SHOT put the camera. A template's
+    // own `far` is authored for its own pose, so pulling the camera back past it
+    // would clip the whole scene away — that has already erased two presets
+    // once, silently, with every suite green. Only a re-framed shot pays for
+    // this: a neutral camera keeps the exact far plane it had before, so its
+    // depth precision is untouched.
+    let framedFar: number | undefined;
+    if (cam && !isNeutralSceneCamera(cam)) {
+      const framed = frameSceneCamera(position, target, cam);
+      position = framed.position;
+      target = framed.target;
+      framedFar = Math.hypot(position.x - target.x, position.y - target.y, position.z - target.z) * 8;
+    }
     camera.position.set(position.x, -position.y, position.z);
     camera.lookAt(target.x, -target.y, target.z);
     camera.near = pose?.near ?? 0.1;
     camera.far = pose?.far ?? Math.max(D * 8, Math.abs(position.z) * 8);
+    if (framedFar !== undefined) camera.far = Math.max(camera.far, framedFar);
+    // Pan is a lens shift, so it lands on the PROJECTION and not on the pose:
+    // the frame slides and no angle in the picture changes. Always clear it
+    // when the value is back to zero — these cameras live for the whole
+    // session, and a view offset left behind would outlast the pan that set it.
+    const shift = cam ? sceneLensShift(cam, this.width, this.height) : null;
+    if (shift) {
+      camera.setViewOffset(shift.fullWidth, shift.fullHeight, shift.x, shift.y, shift.width, shift.height);
+    } else if (camera.view?.enabled) {
+      camera.clearViewOffset();
+    }
     camera.updateProjectionMatrix();
+  }
+
+  // The gate depends only on WHICH templates are visible, so it is recomputed
+  // when that set changes and not once per track per frame.
+  //
+  // EVERY visible layer counts, not only the webgl ones: the panel asks the
+  // same question of the same set, and if the two disagreed a control could be
+  // hidden in the panel while still steering the camera here.
+  private camGateKey = '';
+  private camGateTemplates: Template[] = [];
+  // See the Pixi renderer: the wall is built once, so the coverage is the
+  // worst the path ever asks for and not what this frame happens to need.
+  private coverageFor(s: SceneState): number {
+    return sceneCameraCoverage(readSceneCamera(s.sceneCamera), readSceneCameraPath(s.sceneCamera));
+  }
+
+  private sceneCameraFor(s: SceneState, frame: number, totalFrames: number): SceneCameraValues {
+    const visible = s.tracks.filter((t) => t.visible);
+    const key = visible.map((t) => t.templateId).join(',');
+    if (key !== this.camGateKey) {
+      this.camGateKey = key;
+      this.camGateTemplates = visible.map((t) => getTemplate(t.templateId));
+    }
+    const cam = gateSceneCamera(readSceneCamera(s.sceneCamera), this.camGateTemplates);
+    // Where the shot is at THIS point of the clip. The scene's own clock, not
+    // the track's: one camera for the whole picture means one timeline for it,
+    // or two layers on different windows would be filmed from two places.
+    return sceneCameraAt(cam, readSceneCameraPath(s.sceneCamera), frame / Math.max(1, totalFrames));
   }
 
   // Alvos que so existem quando alguem usa escopo fora de 'scene'. Uma cena sem
@@ -433,7 +517,7 @@ export class SceneRenderer3D implements IRenderer {
     const aspect = cardAspectFor(meta, s.width, s.height, s.cardShape);
     // Asked of the template — see the same call in lib/renderer.ts.
     const count = layerCountFor(track.templateId, track.values,
-      { width: s.width, height: s.height, cardAspect: aspect });
+      { width: s.width, height: s.height, cardAspect: aspect, coverage: this.coverageFor(s) });
     const pool = trackAssetIndices(track, s.assets).map((i) => s.assets[i]).filter(Boolean);
     const assetSig = (getTemplate(track.templateId).mediaIndex ? JSON.stringify([s.width, s.height, track.values]) : '') + (repeat ? 'R|' : '') + 'A' + aspect.toFixed(4) + '|' +
       pool.map((a) => a.id + ':' + a.url + ':' + a.visible + ':' + cropKey(a.url, aspect, a.crop)).join('|');
@@ -539,7 +623,7 @@ export class SceneRenderer3D implements IRenderer {
 
     rt.slots.forEach((slot, i) => {
       const mediaIndex = getTemplate(track.templateId).mediaIndex?.(i, count, track.values,
-        { width: s.width, height: s.height, cardAspect: aspect }) ?? i;
+        { width: s.width, height: s.height, cardAspect: aspect, coverage: this.coverageFor(s) }) ?? i;
       let asset = pool[assetIndexForSlot(mediaIndex, pool.length, repeat)];
       if (!asset && pool.length > 0) asset = pool[mediaIndex % pool.length];
       const binding = asset
@@ -823,7 +907,7 @@ export class SceneRenderer3D implements IRenderer {
       return base + ease(phase - base);
     };
     const ctx = {
-      fps: s.fps, width: s.width, height: s.height,
+      fps: s.fps, width: s.width, height: s.height, coverage: this.coverageFor(s),
       duration: s.duration,
       totalFrames: Math.max(1, Math.round(s.duration * s.fps)),
       ease, easedPhase,
@@ -1046,7 +1130,7 @@ export class SceneRenderer3D implements IRenderer {
       return base + ease(phase - base);
     };
     const ctx = {
-      fps: s.fps, width: s.width, height: s.height,
+      fps: s.fps, width: s.width, height: s.height, coverage: this.coverageFor(s),
       duration: time.localTotal / Math.max(1, s.fps),
       totalFrames: time.localTotal,
       ease, easedPhase,
@@ -1055,7 +1139,16 @@ export class SceneRenderer3D implements IRenderer {
       // shape updates the mesh but leaves the path geometry at its default.
       cardAspect: cardAspectFor(template.meta, s.width, s.height, s.cardShape),
     };
-    this.updateTrackCamera(rt.camera, Number(track.values.perspective ?? 100), template.camera?.(track.values, ctx));
+    this.updateTrackCamera(
+      rt.camera,
+      Number(track.values.perspective ?? 100),
+      template.camera?.(track.values, ctx),
+      // The scene's shot, not the track's: every layer is composited from the
+      // same camera position, or the stack is not one picture. Gated by the same
+      // rule the panel uses, so a value stored while a control was on offer can
+      // never steer the camera from behind a panel that no longer shows it.
+      this.sceneCameraFor(s, frame, sceneTotal),
+    );
     rt.group.position.set(track.transform.x, -track.transform.y, 0);
     rt.group.scale.setScalar(track.transform.scale);
     rt.group.rotation.set(0, 0, -(track.transform.rotation * Math.PI) / 180);

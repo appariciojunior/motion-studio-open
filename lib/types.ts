@@ -108,6 +108,14 @@ export interface TransformCtx {
   fps: number;
   width: number;
   height: number;
+  // How much wider than the canvas the scene has to be built, because the
+  // camera can pull back or pan off the edge of it (lib/sceneCamera
+  // sceneCameraCoverage). 1, and absent, when nothing is filming the scene.
+  //
+  // Deliberately NOT expressed by inflating `width`: that field also sets the
+  // authored scale (templates/lattice canvasScale), so growing it would make
+  // the cards bigger instead of making more of them.
+  coverage?: number;
   duration: number;     // clip length in seconds
   totalFrames: number;  // max(1, round(duration * fps)) — the loop length
   // The scene's active easing curve, t∈[0,1] → y (see lib/easing).
@@ -166,14 +174,14 @@ export interface Template {
   // card total is a design decision.
   layerCount?: (
     values: Record<string, any>,
-    ctx: Pick<TransformCtx, 'width' | 'height' | 'cardAspect'>,
+    ctx: Pick<TransformCtx, 'width' | 'height' | 'cardAspect' | 'coverage'>,
   ) => number;
   // Number of user-facing media slots, excluding offscreen render copies.
   mediaCount?: (values: Record<string, any>,
-    ctx: Pick<TransformCtx, 'width' | 'height' | 'cardAspect'>) => number;
+    ctx: Pick<TransformCtx, 'width' | 'height' | 'cardAspect' | 'coverage'>) => number;
   // Offscreen copies must retain the original card's media identity.
   mediaIndex?: (index: number, count: number, values: Record<string, any>,
-    ctx: Pick<TransformCtx, 'width' | 'height' | 'cardAspect'>) => number;
+    ctx: Pick<TransformCtx, 'width' | 'height' | 'cardAspect' | 'coverage'>) => number;
   transform: (
     frame: number,                            // absolute frame index
     index: number,                            // this layer's slot 0..count-1

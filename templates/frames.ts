@@ -159,4 +159,5 @@ export const framesVariants: Template[] = [
   preset(framesBase, 'wall-07', 'Frames 07', {
     cardSize: 465, gap: 0, hold: 0,
   }, { id: 'linear' }),
+
 ];

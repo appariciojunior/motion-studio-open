@@ -8,6 +8,7 @@ import TemplateThumb from './TemplateThumb';
 import { ControlRow } from './Controls';
 import { useMobileInteractions } from './MobileInteractions';
 import { ChevronRightIcon, CloseIcon, HeartIcon, SearchIcon } from './EditorIcons';
+import { isShippedCompose } from '@/lib/composes';
 
 const Chevron = ({ dir = 'right' }: { dir?: 'right' | 'left' }) => (
   <ChevronRightIcon size={12} style={dir === 'left' ? { transform: 'rotate(180deg)' } : undefined}/>
@@ -165,7 +166,7 @@ export default function TemplatesCard({
           {customPresetsEnabled && (
             <div className="tabs">
               <button className={`tab ${activeTab === 'templates' ? 'active' : ''}`} onClick={() => setTab('templates')}>Templates</button>
-              <button className={`tab ${activeTab === 'custom' ? 'active' : ''}`} onClick={() => setTab('custom')}>Custom</button>
+              <button className={`tab ${activeTab === 'custom' ? 'active' : ''}`} onClick={() => setTab('custom')}>Composes</button>
             </div>
           )}
         </div>
@@ -181,7 +182,7 @@ export default function TemplatesCard({
       <div className="tpl-list">
         {activeTab === 'custom' ? (
           customPresets.length === 0 ? (
-            <div className="tpl-group-label">No custom presets yet</div>
+            <div className="tpl-group-label">No composes yet — set up a scene, give it a camera, and save it here</div>
           ) : (
             <div className="tpl-grid">
               {customPresets.map((p) => {
@@ -202,13 +203,15 @@ export default function TemplatesCard({
                   >
                     {base && <TemplateThumb template={base} />}
                     <span className="tpl-card-label">{p.name}</span>
-                    <button
-                      className="icon-btn tpl-del"
-                      title="Delete preset"
-                      onClick={(e) => { e.stopPropagation(); deleteCustomPreset(p.id); }}
-                    >
-                      <CloseIcon size={10}/>
-                    </button>
+                    {!isShippedCompose(p.id) && (
+                      <button
+                        className="icon-btn tpl-del"
+                        title="Delete compose"
+                        onClick={(e) => { e.stopPropagation(); deleteCustomPreset(p.id); }}
+                      >
+                        <CloseIcon size={10}/>
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -352,7 +355,7 @@ export default function TemplatesCard({
               <button className="btn solid" onClick={commitPreset}>Save</button>
             </div>
           ) : (
-            <button className="btn full" onClick={() => setNaming(true)}>Save as custom</button>
+            <button className="btn full" onClick={() => setNaming(true)}>Save as compose</button>
           )}
         </div>
       )}
