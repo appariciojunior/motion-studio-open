@@ -34,6 +34,7 @@ import { cameraStopKeys, MAX_CAMERA_STOPS, SCENE_CAMERA_ON } from '@/lib/sceneCa
 export const CAMERA_MOVE_KEY = '_camMove';
 export const CAMERA_MOVE_AMOUNT = '_camMoveAmount';
 export const CAMERA_MOVE_DIR = '_camMoveDir';
+export const CAMERA_MOVE_STOPS = '_camMoveStops';
 
 /** What the move becomes once you hand-edit the path: these stops came from you. */
 export const CUSTOM_MOVE = 'custom';
@@ -42,6 +43,22 @@ export const CAMERA_MOVE_AMOUNT_CONTROL: ControlDef = {
   key: CAMERA_MOVE_AMOUNT, label: 'Amount', type: 'slider',
   min: 10, max: 100, step: 1, default: 60, unit: '%',
   description: 'How far the move goes. The shape of it does not change, only its size.',
+};
+
+// How many places the camera settles at. Survey shipped with six and every
+// other move with one, which is the whole of "o Contact Sheet permite colocar
+// várias câmeras numa parte só, deixe eu fazer isso em outros": a staged push
+// through three framings was only reachable by hand-placing pins and losing
+// the named move in the process.
+//
+// This is the third knob, and it breaks the two-knob rule I set for these on
+// purpose. That rule was there to stop a move turning back into the authoring
+// surface it replaced; how many times the camera settles is not authoring, it
+// is the shape of the move.
+export const CAMERA_MOVE_STOPS_CONTROL: ControlDef = {
+  key: CAMERA_MOVE_STOPS, label: 'Stops', type: 'slider',
+  min: 1, max: MAX_CAMERA_STOPS, step: 1, default: 1,
+  description: 'How many places the camera settles at along the way.',
 };
 
 export const CAMERA_MOVE_DIR_CONTROL: ControlDef = {
@@ -54,12 +71,26 @@ export interface CameraMove {
   id: string;
   label: string;
   hint: string;
-  /** At most two, and the panel shows exactly these. */
+  /** The panel shows exactly these, in this order. */
   knobs: ControlDef[];
-  build: (amount: number, dir: string) => {
+  /** What Stops sits at when you pick this move. */
+  defaultStops: number;
+  /** And the most it can go to. Survey is the reference clip's own six stops,
+   *  read off the footage — asking it for eight would mean inventing two. */
+  maxStops: number;
+  build: (amount: number, dir: string, stops: number) => {
     shot: { zoom: number; x: number; y: number };
     stops: CameraStop[];
   };
+}
+
+// n evenly spaced fractions of the way there: 1 stop is the whole move, 3 is
+// a third, two thirds and all of it. The camera settles at each.
+function passos(n: number): number[] {
+  const total = Math.max(1, Math.min(MAX_CAMERA_STOPS, Math.round(n)));
+  const out: number[] = [];
+  for (let i = 1; i <= total; i++) out.push(i / total);
+  return out;
 }
 
 // How far off-centre a move is allowed to look.
@@ -93,11 +124,19 @@ const PUSH_IN: CameraMove = {
   id: 'push',
   label: 'Push in',
   hint: 'Opens on the whole scene and closes on one part of it.',
-  knobs: [CAMERA_MOVE_AMOUNT_CONTROL, CAMERA_MOVE_DIR_CONTROL],
-  build: (amount, dir) => {
+  knobs: [CAMERA_MOVE_AMOUNT_CONTROL, CAMERA_MOVE_DIR_CONTROL, CAMERA_MOVE_STOPS_CONTROL],
+  defaultStops: 1,
+  maxStops: MAX_CAMERA_STOPS,
+  build: (amount, dir, n) => {
     const fim = Math.round(105 + amount * 1.15);   // 60 -> 174%, 100 -> 220%
     const p = towards(dir, amount);
-    return { shot: { zoom: 100, x: 0, y: 0 }, stops: [{ x: p.x, y: p.y, zoom: fim }] };
+    return {
+      shot: { zoom: 100, x: 0, y: 0 },
+      stops: passos(n).map((t) => ({
+        x: Math.round(p.x * t), y: Math.round(p.y * t),
+        zoom: Math.round(100 + (fim - 100) * t),
+      })),
+    };
   },
 };
 
@@ -105,11 +144,19 @@ const PULL_BACK: CameraMove = {
   id: 'pull',
   label: 'Pull back',
   hint: 'Opens close on one part and widens out onto the whole scene.',
-  knobs: [CAMERA_MOVE_AMOUNT_CONTROL, CAMERA_MOVE_DIR_CONTROL],
-  build: (amount, dir) => {
+  knobs: [CAMERA_MOVE_AMOUNT_CONTROL, CAMERA_MOVE_DIR_CONTROL, CAMERA_MOVE_STOPS_CONTROL],
+  defaultStops: 1,
+  maxStops: MAX_CAMERA_STOPS,
+  build: (amount, dir, n) => {
     const ini = Math.round(105 + amount * 1.15);
     const p = towards(dir, amount);
-    return { shot: { zoom: ini, x: p.x, y: p.y }, stops: [{ x: 0, y: 0, zoom: 100 }] };
+    return {
+      shot: { zoom: ini, x: p.x, y: p.y },
+      stops: passos(n).map((t) => ({
+        x: Math.round(p.x * (1 - t)), y: Math.round(p.y * (1 - t)),
+        zoom: Math.round(ini + (100 - ini) * t),
+      })),
+    };
   },
 };
 
@@ -122,8 +169,10 @@ const CROSS: CameraMove = {
     label: 'Direction',
     options: ['left', 'right', 'up', 'down'],
     default: 'right',
-  }],
-  build: (amount, dir) => {
+  }, CAMERA_MOVE_STOPS_CONTROL],
+  defaultStops: 1,
+  maxStops: MAX_CAMERA_STOPS,
+  build: (amount, dir, n) => {
     // A cross has to be zoomed IN to have anywhere to go: at 110% the frame can
     // only move 5% of itself before its own edge is in shot.
     const z = Math.round(120 + amount * 0.3);      // 60 -> 138%, 100 -> 150%
@@ -132,7 +181,14 @@ const CROSS: CameraMove = {
     const d = reach(amount);
     const de = vertical ? { x: 0, y: -sinal * d } : { x: -sinal * d, y: 0 };
     const para = vertical ? { x: 0, y: sinal * d } : { x: sinal * d, y: 0 };
-    return { shot: { zoom: z, ...de }, stops: [{ ...para, zoom: z }] };
+    return {
+      shot: { zoom: z, ...de },
+      stops: passos(n).map((t) => ({
+        x: Math.round(de.x + (para.x - de.x) * t),
+        y: Math.round(de.y + (para.y - de.y) * t),
+        zoom: z,
+      })),
+    };
   },
 };
 
@@ -140,14 +196,22 @@ const DRIFT: CameraMove = {
   id: 'drift',
   label: 'Drift',
   hint: 'Barely moves — a slow push with a lean, for a scene that is already busy.',
-  knobs: [CAMERA_MOVE_AMOUNT_CONTROL],
-  build: (amount) => {
+  knobs: [CAMERA_MOVE_AMOUNT_CONTROL, CAMERA_MOVE_STOPS_CONTROL],
+  defaultStops: 1,
+  maxStops: MAX_CAMERA_STOPS,
+  build: (amount, _dir, n) => {
     const ini = Math.round(104 + amount * 0.12);
     const fim = Math.round(ini + 6 + amount * 0.22);
     const d = reach(amount) * 0.35;
+    const de = { x: -d / 2, y: d / 3 };
+    const para = { x: d / 2, y: -d / 3 };
     return {
-      shot: { zoom: ini, x: -d / 2, y: d / 3 },
-      stops: [{ x: d / 2, y: -d / 3, zoom: fim }],
+      shot: { zoom: ini, ...de },
+      stops: passos(n).map((t) => ({
+        x: Math.round(de.x + (para.x - de.x) * t),
+        y: Math.round(de.y + (para.y - de.y) * t),
+        zoom: Math.round(ini + (fim - ini) * t),
+      })),
     };
   },
 };
@@ -156,8 +220,10 @@ const SURVEY: CameraMove = {
   id: 'survey',
   label: 'Survey',
   hint: 'Visits several places in turn, settling on each. The move the reference clip makes.',
-  knobs: [CAMERA_MOVE_AMOUNT_CONTROL],
-  build: (amount) => {
+  knobs: [CAMERA_MOVE_AMOUNT_CONTROL, CAMERA_MOVE_STOPS_CONTROL],
+  defaultStops: 6,
+  maxStops: 6,
+  build: (amount, _dir, n) => {
     // The reference clip's own path, as measured: 210 frames tracked one to the
     // next, cut at the six moments its camera slowed down, read off in per-cent
     // of a frame with the zoom it had reached by then. Rebased so nothing drops
@@ -178,7 +244,7 @@ const SURVEY: CameraMove = {
     const escala = 100 / 70;
     return {
       shot: { zoom: Math.round(100 * escala), x: 0, y: 0 },
-      stops: base.slice(0, MAX_CAMERA_STOPS).map((s) => ({
+      stops: base.slice(0, Math.max(1, Math.min(base.length, Math.round(n)))).map((s) => ({
         x: Math.round(s.x * k),
         y: Math.round(s.y * k),
         zoom: Math.round(s.zoom * escala),
@@ -202,6 +268,7 @@ export function cameraMovePatch(
   moveId: string,
   amount: number,
   dir: string,
+  stops?: number,
 ): Record<string, number | { x: number; y: number } | string | null> {
   const move = cameraMoveById(moveId);
   const patch: Record<string, number | { x: number; y: number } | string | null> = {
@@ -214,11 +281,13 @@ export function cameraMovePatch(
     patch[k.zoom] = null;
   }
   if (!move) return patch;
-  const { shot, stops } = move.build(amount, dir);
+  const quantas = Math.max(1, Math.min(move.maxStops, Math.round(stops ?? move.defaultStops)));
+  patch[CAMERA_MOVE_STOPS] = quantas;
+  const { shot, stops: paradas } = move.build(amount, dir, quantas);
   patch._camZoom = Math.round(shot.zoom);
   patch._camPanX = Math.round(shot.x);
   patch._camPanY = Math.round(shot.y);
-  stops.forEach((s, i) => {
+  paradas.forEach((s, i) => {
     const k = cameraStopKeys(i);
     patch[k.pad] = { x: Math.round(s.x), y: Math.round(s.y) };
     patch[k.zoom] = Math.round(s.zoom);
@@ -227,6 +296,6 @@ export function cameraMovePatch(
 }
 
 /** Reserved keys this module owns, for the sanitiser to carry through a save. */
-export const CAMERA_MOVE_KEYS = [CAMERA_MOVE_KEY, CAMERA_MOVE_AMOUNT, CAMERA_MOVE_DIR] as const;
+export const CAMERA_MOVE_KEYS = [CAMERA_MOVE_KEY, CAMERA_MOVE_AMOUNT, CAMERA_MOVE_DIR, CAMERA_MOVE_STOPS] as const;
 
 export type { SceneCameraState };

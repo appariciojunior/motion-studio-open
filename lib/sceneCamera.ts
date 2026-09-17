@@ -377,7 +377,7 @@ export function sanitizeSceneCamera(raw: unknown): SceneCameraState {
   // save — and forget which move it was built from.
   if (bag[SCENE_CAMERA_ON]) out[SCENE_CAMERA_ON] = 1;
   if (typeof bag._camMove === 'string') out._camMove = bag._camMove;
-  for (const k of ['_camMoveAmount', '_camMoveDir']) {
+  for (const k of ['_camMoveAmount', '_camMoveDir', '_camMoveStops']) {
     const v = bag[k];
     if (typeof v === 'number' && Number.isFinite(v)) out[k] = v;
     else if (typeof v === 'string') out[k] = v;

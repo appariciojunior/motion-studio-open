@@ -56,10 +56,42 @@ const MOVIMENTO = process.argv[4] || 'Survey';
     if (!b) return 'pill "' + nome + '" nao existe; ha: ' + [...document.querySelectorAll('.pill')].map((e) => e.textContent.trim()).join(', ');
     b.click(); return 'ok';
   }, MOVIMENTO);
+  if (process.env.MS_DIR) {
+    await new Promise((r) => setTimeout(r, 800));
+    await p.evaluate((d) => {
+      const rot = [...document.querySelectorAll('.ctl-label')].find((e) => e.textContent.trim() === 'Towards' || e.textContent.trim() === 'Direction');
+      const b = [...(rot?.closest('.ctl-row')?.querySelectorAll('.pill') ?? [])].find((e) => e.textContent.trim() === d);
+      b && b.click();
+    }, process.env.MS_DIR);
+  }
   console.log('clique em', MOVIMENTO + ':', clicou);
   await new Promise((r) => setTimeout(r, 1500));
   console.log('depois de escolher:', JSON.stringify(await camera()));
 
+  // MS_STOPS: sobe o controle de paradas do movimento escolhido, que e o
+  // ponto de "varias cameras numa parte so".
+  // MS_STOPS: sobe o controle de paradas do movimento escolhido, que e o
+  // ponto de "varias cameras numa parte so". O slider do app e uma trilha de
+  // arrasto com tabindex, nao um input[type=range] — entao vai pelo teclado.
+  if (process.env.MS_STOPS) {
+    const achou = await p.evaluate(() => {
+      const rot = [...document.querySelectorAll('.ctl-label')].find((e) => e.textContent.trim() === 'Stops');
+      const tr = rot?.closest('.ctl-row')?.querySelector('.strack');
+      if (!tr) return false;
+      tr.scrollIntoView({ block: 'center' });
+      tr.focus();
+      return true;
+    });
+    console.log('trilha de Stops:', achou ? 'encontrada' : 'NAO ENCONTRADA');
+    if (achou) {
+      for (let i = 1; i < Number(process.env.MS_STOPS); i++) {
+        await p.keyboard.press('ArrowRight');
+        await new Promise((x) => setTimeout(x, 220));
+      }
+      await new Promise((x) => setTimeout(x, 1000));
+      console.log('camera depois:', JSON.stringify(await camera()));
+    }
+  }
   // abre o pad e conta os QUADROS desenhados
   for (const el of await p.$$('.ctl-advanced-toggle')) {
     const t = await p.evaluate((e) => e.textContent, el);

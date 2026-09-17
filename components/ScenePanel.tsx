@@ -13,7 +13,7 @@ import {
 } from '@/lib/sceneCamera';
 import {
   CAMERA_MOVES, CAMERA_MOVE_AMOUNT, CAMERA_MOVE_DIR, CAMERA_MOVE_KEY,
-  CUSTOM_MOVE, cameraMoveById, cameraMovePatch,
+  CAMERA_MOVE_STOPS, CUSTOM_MOVE, cameraMoveById, cameraMovePatch,
 } from '@/lib/cameraMoves';
 import CameraPathGrid from './CameraPathGrid';
 import type { ControlDef } from '@/lib/types';
@@ -76,10 +76,17 @@ export default function ScenePanel() {
   const move = cameraMoveById(moveId);
   const moveAmount = Number(sceneCamera[CAMERA_MOVE_AMOUNT] ?? 60);
   const moveDir = String(sceneCamera[CAMERA_MOVE_DIR] ?? 'centre');
+  // How many places this move settles at. Falls back to the move's own default
+  // rather than to 1, so picking Survey gives you its six and not a stub.
+  const moveStops = Number(sceneCamera[CAMERA_MOVE_STOPS] ?? move?.defaultStops ?? 1);
   // Re-generating on every knob turn is the point: a move is a recipe, so the
   // stops are always whatever the recipe currently says.
-  const applyMove = (id: string, amount = moveAmount, dir = moveDir) =>
-    patchSceneCamera({ ...cameraMovePatch(id, amount, dir), [CAMERA_MOVE_AMOUNT]: amount, [CAMERA_MOVE_DIR]: dir });
+  const applyMove = (id: string, amount = moveAmount, dir = moveDir, stops?: number) =>
+    patchSceneCamera({
+      ...cameraMovePatch(id, amount, dir, stops),
+      [CAMERA_MOVE_AMOUNT]: amount,
+      [CAMERA_MOVE_DIR]: dir,
+    });
   // Touching the path by hand makes it yours: the chosen move stops being a
   // true description of the stops, so it stops claiming to be one.
   const markCustom = () => {
@@ -284,11 +291,16 @@ export default function ScenePanel() {
             {move?.knobs.map((def) => (
               <ControlRow
                 key={def.key}
-                def={def}
-                value={def.key === CAMERA_MOVE_AMOUNT ? moveAmount : moveDir}
-                onChange={(val) => (def.key === CAMERA_MOVE_AMOUNT
-                  ? applyMove(move.id, Number(val), moveDir)
-                  : applyMove(move.id, moveAmount, String(val)))}
+                // Survey tops out at the six stops measured off the clip, so
+                // its slider does too rather than promising two it cannot make.
+                def={def.key === CAMERA_MOVE_STOPS ? { ...def, max: move.maxStops } : def}
+                value={def.key === CAMERA_MOVE_AMOUNT ? moveAmount
+                  : def.key === CAMERA_MOVE_STOPS ? moveStops : moveDir}
+                onChange={(val) => {
+                  if (def.key === CAMERA_MOVE_AMOUNT) applyMove(move.id, Number(val), moveDir, moveStops);
+                  else if (def.key === CAMERA_MOVE_STOPS) applyMove(move.id, moveAmount, moveDir, Number(val));
+                  else applyMove(move.id, moveAmount, String(val), moveStops);
+                }}
               />
             ))}
 

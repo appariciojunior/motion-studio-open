@@ -31,7 +31,8 @@ const {
   NO_SCENE_CAMERA_PATH, cameraStopKeys,
 } = require('../lib/sceneCamera');
 const {
-  CAMERA_MOVES, CAMERA_MOVE_KEY, CUSTOM_MOVE, cameraMoveById, cameraMovePatch,
+  CAMERA_MOVES, CAMERA_MOVE_KEY, CAMERA_MOVE_STOPS, CUSTOM_MOVE,
+  cameraMoveById, cameraMovePatch, MAX_CAMERA_STOPS: MAX_MOVE_STOPS,
 } = require('../lib/cameraMoves');
 
 const near = (a, b, tol = 1e-7, what = '') => assert.ok(Math.abs(a - b) < tol, `${what} ${a} != ${b}`);
@@ -378,8 +379,12 @@ assert.equal(readSceneCameraPath({ _camStop2: { x: NaN, y: 2 } }).stops[0].x, 0)
   assert.ok(!ids.includes(CUSTOM_MOVE), "custom is what a hand-edited path becomes, not a move you pick");
   for (const m of CAMERA_MOVES) {
     assert.ok(m.label && m.hint, `${m.id}: a move picked by name needs a name and a line saying what it does`);
-    assert.ok(m.knobs.length <= 2, `${m.id}: ${m.knobs.length} knobs — the whole point is at most two`);
-    cases += 2;
+    // Three: Amount, a direction where one makes sense, and Stops. The rule
+    // used to be two, and Stops broke it deliberately — see lib/cameraMoves.
+    assert.ok(m.knobs.length <= 3, `${m.id}: ${m.knobs.length} knobs — a move is a choice, not a form`);
+    assert.ok(m.defaultStops >= 1 && m.defaultStops <= MAX_CAMERA_STOPS,
+      `${m.id}: defaultStops ${m.defaultStops} is outside what a path can hold`);
+    cases += 3;
   }
   assert.equal(cameraMoveById(CUSTOM_MOVE), null);
   assert.equal(cameraMoveById(undefined), null, "junk reads as no move rather than throwing");
@@ -452,6 +457,39 @@ assert.equal(readSceneCameraPath({ _camStop2: { x: NaN, y: 2 } }).stops[0].x, 0)
   const depois = sanitizeSceneCamera({ ...survey, ...cameraMovePatch('push', 60, 'right') });
   assert.equal(readSceneCameraPath(depois).stops.length, 1,
     'a one-stop move after a six-stop one leaves exactly one stop');
+  cases += 2;
+}
+
+{
+  // SEVERAL STOPS IN ANY MOVE. Survey shipped with six and every other move
+  // with one, so a staged push through three framings was only reachable by
+  // hand-placing pins and losing the named move doing it. Reported as "o
+  // Contact Sheet permite colocar várias câmeras numa parte só, deixe eu fazer
+  // isso em outros".
+  for (const m of CAMERA_MOVES) {
+    for (const pedido of [1, 2, 3, MAX_CAMERA_STOPS]) {
+      // Survey tops out at the six stops actually measured off the clip.
+      const n = Math.min(pedido, m.maxStops);
+      const limpo = sanitizeSceneCamera(cameraMovePatch(m.id, 60, 'right', pedido));
+      const caminho = readSceneCameraPath(limpo);
+      assert.equal(caminho.stops.length, n,
+        `${m.id} asked for ${pedido} stops (ceiling ${m.maxStops}) and produced ${caminho.stops.length}`);
+      assert.equal(Number(limpo[CAMERA_MOVE_STOPS]), n, `${m.id}: the count has to survive a save`);
+      // Every stop distinct from the one before it: a count that just repeats
+      // the same framing n times is a longer list, not a longer move.
+      const pontos = [{ x: Number(limpo._camPanX), y: Number(limpo._camPanY), zoom: Number(limpo._camZoom) },
+        ...caminho.stops];
+      for (let i = 1; i < pontos.length; i++) {
+        const d = Math.hypot(pontos[i].x - pontos[i - 1].x, pontos[i].y - pontos[i - 1].y)
+          + Math.abs(pontos[i].zoom - pontos[i - 1].zoom);
+        assert.ok(d > 0.5, `${m.id} at ${n} stops: stop ${i} sits on top of the one before it`);
+      }
+      cases += 2 + caminho.stops.length;
+    }
+  }
+  // And the default is the move's own: picking Survey gives its six, not a stub.
+  assert.equal(readSceneCameraPath(sanitizeSceneCamera(cameraMovePatch('survey', 60, 'centre'))).stops.length, 6);
+  assert.equal(readSceneCameraPath(sanitizeSceneCamera(cameraMovePatch('push', 60, 'right'))).stops.length, 1);
   cases += 2;
 }
 
