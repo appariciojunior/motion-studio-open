@@ -81,6 +81,8 @@ const MOVIMENTO = process.argv[4] || 'Survey';
   const pad = await p.evaluate(() => ({
     celulas: document.querySelectorAll('.cpg-cell').length,
     pinos: [...document.querySelectorAll('.cpg-pin')].map(e=>e.textContent.trim()),
+    faixa: document.querySelector('.cpg-range')?.textContent.trim(),
+    celulasComPino: [...document.querySelectorAll('.cpg-cell')].filter(c=>c.querySelector('.cpg-pin')).length,
     rotulos: [...document.querySelectorAll('.ctl-label')].map((e) => e.textContent.trim()).slice(-6),
     pills: [...document.querySelectorAll('.pill')].map(e=>e.textContent.trim()),
     bespoke: document.querySelectorAll('.cam-move, .campath-chip, .cam-disclose, .camframe').length,
