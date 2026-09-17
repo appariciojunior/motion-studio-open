@@ -50,8 +50,10 @@ const MOVIMENTO = process.argv[4] || 'Survey';
 
   console.log('antes de escolher:', JSON.stringify(await camera()));
   const clicou = await p.evaluate((nome) => {
-    const b = [...document.querySelectorAll('.cam-move')].find((e) => e.textContent.trim() === nome);
-    if (!b) return 'botao "' + nome + '" nao existe; ha: ' + [...document.querySelectorAll('.cam-move')].map((e) => e.textContent.trim()).join(', ');
+    const sel = [...document.querySelectorAll('select.field')].find((e)=>[...e.options].some(o=>o.value===nome));
+    if (sel) { const d=Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value'); d.set.call(sel,nome); sel.dispatchEvent(new Event('change',{bubbles:true})); return 'ok'; }
+    const b = [...document.querySelectorAll('.pill')].find((e) => e.textContent.trim() === nome);
+    if (!b) return 'pill "' + nome + '" nao existe; ha: ' + [...document.querySelectorAll('.pill')].map((e) => e.textContent.trim()).join(', ');
     b.click(); return 'ok';
   }, MOVIMENTO);
   console.log('clique em', MOVIMENTO + ':', clicou);
@@ -59,44 +61,46 @@ const MOVIMENTO = process.argv[4] || 'Survey';
   console.log('depois de escolher:', JSON.stringify(await camera()));
 
   // abre o pad e conta os QUADROS desenhados
-  await p.evaluate(() => { const d = document.querySelector('.cam-disclose'); d && d.click(); });
+  for (const el of await p.$$('.ctl-advanced-toggle')) {
+    const t = await p.evaluate((e) => e.textContent, el);
+    if (!t.includes('Edit the path')) continue;
+    await el.evaluate((e) => e.scrollIntoView({ block: 'center' }));
+    await new Promise((r) => setTimeout(r, 300));
+    await el.click();
+  }
   await new Promise((r) => setTimeout(r, 1200));
   // escolhe uma parada do meio, para ver o fantasma e a perna
   const chip = process.env.MS_CHIP || '3';
   const escolheu = await p.evaluate((c) => {
-    const b = [...document.querySelectorAll('.campath-chip')].find((e) => e.textContent.trim() === c);
+    const b = [...document.querySelectorAll('.cpg-pin')].find((e) => e.textContent.trim() === c);
     if (!b) return 'chip ' + c + ' nao existe';
     b.click(); return 'ok';
   }, chip);
   console.log('chip', chip + ':', escolheu);
   await new Promise((r) => setTimeout(r, 800));
   const pad = await p.evaluate(() => ({
-    quadros: document.querySelectorAll('.camframe').length,
-    rotulos: [...document.querySelectorAll('.camframe-num')].map((e) => e.textContent.trim()),
-    zoomsNoPad: [...document.querySelectorAll('.camframe-zoom')].map((e) => e.textContent.trim()),
-    temAlca: document.querySelectorAll('.camframe-grip').length,
+    celulas: document.querySelectorAll('.cpg-cell').length,
+    pinos: [...document.querySelectorAll('.cpg-pin')].map(e=>e.textContent.trim()),
+    rotulos: [...document.querySelectorAll('.ctl-label')].map((e) => e.textContent.trim()).slice(-6),
+    pills: [...document.querySelectorAll('.pill')].map(e=>e.textContent.trim()),
+    bespoke: document.querySelectorAll('.cam-move, .campath-chip, .cam-disclose, .camframe').length,
     pontosVelhos: document.querySelectorAll('.campath-dot').length,
-    fantasma: document.querySelectorAll('.camframe.is-ghost').length,
-    chips: [...document.querySelectorAll('.campath-chip')].map(e=>e.textContent.trim()),
+
   }));
   console.log('pad:', JSON.stringify(pad));
 
-  const rect = await p.evaluate(() => {
-    const cab = [...document.querySelectorAll('.section-head')].find((el) => el.querySelector('.eyebrow')?.textContent.trim() === 'Camera');
-    cab.scrollIntoView({ block: 'start' });
-    return null;
-  });
-  await new Promise((r) => setTimeout(r, 500));
-  const r2 = await p.evaluate(() => {
-    const cab = [...document.querySelectorAll('.section-head')].find((el) => el.querySelector('.eyebrow')?.textContent.trim() === 'Camera');
-    let n = cab, ultimo = cab;
-    while (n && !(n !== cab && n.classList.contains('hairline'))) { ultimo = n; n = n.nextElementSibling; }
-    const a = cab.getBoundingClientRect(), z = ultimo.getBoundingClientRect();
-    return { x: a.left + scrollX - 10, y: a.top + scrollY - 10, width: a.width + 20, height: (z.bottom - a.top) + 20 };
-  });
+  // Fotografa o ELEMENTO, nao um retangulo. O clip do puppeteer e espaco do
+  // DOCUMENTO: com o painel dentro de um container que rola, o recorte cai
+  // noutro lugar da pagina e a foto mente calada — foi o que aconteceu aqui,
+  // com celulas de 35px medidas e celulas gigantes na imagem.
   fs.mkdirSync(OUT, { recursive: true });
   const arq = path.join(OUT, 'moves.png');
-  await p.screenshot({ path: arq, clip: r2 });
+  const alvo = await p.evaluateHandle(() => {
+    const cab = [...document.querySelectorAll('.section-head')]
+      .find((el) => el.querySelector('.eyebrow')?.textContent.trim() === 'Camera');
+    return cab?.parentElement ?? document.body;
+  });
+  await alvo.asElement().screenshot({ path: arq });
   console.log(arq);
   await b.close();
 })();

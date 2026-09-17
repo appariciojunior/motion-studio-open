@@ -15,8 +15,12 @@ import {
   CAMERA_MOVES, CAMERA_MOVE_AMOUNT, CAMERA_MOVE_DIR, CAMERA_MOVE_KEY,
   CUSTOM_MOVE, cameraMoveById, cameraMovePatch,
 } from '@/lib/cameraMoves';
-import CameraPathPad from './CameraPathPad';
+import CameraPathGrid from './CameraPathGrid';
 import type { ControlDef } from '@/lib/types';
+
+// The entry in the Move row that is not a move: it says the stops came from
+// you rather than from a recipe.
+const CUSTOM_LABEL = 'Custom';
 
 // Renders the SCENE + TIMING sections (no card wrapper — the page composes cards).
 export default function ScenePanel() {
@@ -93,15 +97,18 @@ export default function ScenePanel() {
     });
     setSelectedStop(path.stops.length);
   };
-  // Where the BUTTON puts a new stop, as opposed to a click on the pad, which
-  // puts it where you pointed. A third of a frame on from wherever the path
-  // currently ends: dropping it at the centre would bury it under Start and
-  // look like the button did nothing.
-  const addStopFromButton = () => {
-    const ultimo = path.stops[path.stops.length - 1]
-      ?? { x: Number(sceneCamera._camPanX) || 0, y: Number(sceneCamera._camPanY) || 0 };
-    const dentro = (n: number) => Math.max(-100, Math.min(100, n));
-    addStop(dentro(ultimo.x + 33), dentro(ultimo.y - 22));
+
+  // Clears every stop and leaves the shot alone: Reset is about the PATH, and
+  // wiping where the camera stands as well would be a different button.
+  const resetPath = () => {
+    const patch: Record<string, null | string> = { [CAMERA_MOVE_KEY]: CUSTOM_MOVE };
+    for (let i = 0; i < MAX_CAMERA_STOPS; i++) {
+      const k = cameraStopKeys(i);
+      patch[k.pad] = null;
+      patch[k.zoom] = null;
+    }
+    patchSceneCamera(patch);
+    setSelectedStop(-1);
   };
   const moveStop = (i: number, x: number, y: number) => {
     markCustom();
@@ -246,35 +253,34 @@ export default function ScenePanel() {
               camera rather than a crop. */}
           {hasCamera && (
           <div className="section-body">
-            {/* CHOOSING a move, not building one. The pad below is folded away
-                because authoring coordinates over time is the hardest thing in
-                this app and it was the only way in. See lib/cameraMoves. */}
+            {/* Built from the controls this app already has, and that is the
+                whole point of this pass. The version before it invented four
+                of its own — a button grid, a chip strip, a disclosure and a
+                pad — so the camera looked like it came from a different
+                program than everything around it. Reported as "sem design com
+                cara de amador". Every row below is a ControlRow.
+
+                CHOOSING a move, not building one: see lib/cameraMoves. */}
             <div className="ctl-section-title">Move</div>
-            <div className="cam-moves">
-              {CAMERA_MOVES.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  className={`cam-move ${moveId === m.id ? 'is-on' : ''}`}
-                  title={m.hint}
-                  onClick={() => applyMove(m.id)}
-                >
-                  {m.label}
-                </button>
-              ))}
-              <button
-                type="button"
-                className={`cam-move ${moveId === CUSTOM_MOVE ? 'is-on' : ''}`}
-                title="Stops you placed yourself"
-                onClick={() => { patchSceneCamera({ [CAMERA_MOVE_KEY]: CUSTOM_MOVE }); setPathOpen(true); }}
-              >
-                Custom
-              </button>
-            </div>
+            <ControlRow
+              def={{
+                // A select and not pills: six names do not fit across a
+                // 300px panel — they overlapped into 'Push InPull BackCross'.
+                // The app's own control for more options than fit in a row.
+                key: '_camMovePick', label: 'Move', type: 'select',
+                options: [...CAMERA_MOVES.map((m) => m.label), CUSTOM_LABEL],
+                default: CUSTOM_LABEL,
+              }}
+              value={move ? move.label : CUSTOM_LABEL}
+              onChange={(val) => {
+                const escolhido = CAMERA_MOVES.find((m) => m.label === val);
+                if (escolhido) applyMove(escolhido.id);
+                else { patchSceneCamera({ [CAMERA_MOVE_KEY]: CUSTOM_MOVE }); setPathOpen(true); }
+              }}
+            />
             <div className="ctl-hint">
               {move ? move.hint : 'Stops you placed by hand. Open the path below to edit them.'}
             </div>
-            {/* At most two, and they belong to the chosen move. */}
             {move?.knobs.map((def) => (
               <ControlRow
                 key={def.key}
@@ -286,57 +292,56 @@ export default function ScenePanel() {
               />
             ))}
 
-            {/* ---- hand editing, folded ---- */}
-            <button
-              type="button"
-              className="cam-disclose"
-              aria-expanded={pathOpen}
-              onClick={() => setPathOpen((v) => !v)}
-            >
-              <span>{pathOpen ? 'Hide' : 'Edit'} the path</span>
-              <span className="cam-count">{path.stops.length} / {MAX_CAMERA_STOPS} stops</span>
-            </button>
-            {pathOpen && (
-            <>
-            <div className="ctl-hint">Pick a stop on the strip, aim it in the pad, set how close it is below. The camera settles into each in turn.</div>
-            <CameraPathPad
-              shot={{
-                x: Number(sceneCamera._camPanX) || 0,
-                y: Number(sceneCamera._camPanY) || 0,
-                zoom: Number(sceneCamera._camZoom) || 100,
-              }}
-              stops={path.stops}
-              selected={selectedStop}
-              max={MAX_CAMERA_STOPS}
-              frameAspect={sceneW / Math.max(1, sceneH)}
-              onSelect={setSelectedStop}
-              onMoveStop={moveStop}
-              onAddStop={addStop}
-            />
-            {/* One row for whichever stop is selected, instead of a row per
-                stop: the panel stays the same height at one stop and at four. */}
-            {stopAt && (
-              <>
-                {/* Named, so the row and the dot are visibly the same thing.
-                    Before this it said "Stop 2 zoom" next to a dot labelled 2
-                    that was the FIRST stop, because the Shot was counted as 1. */}
-                <div className="cam-stop-head">Selected · Stop {selectedStop + 1}</div>
-                <ControlRow
-                  def={{ ...SCENE_CAMERA_STOP_ZOOM, label: `Stop ${selectedStop + 1} zoom` }}
-                  value={stopAt.zoom}
-                  onChange={(val) => zoomStop(selectedStop, Number(val))}
-                />
-                {selectedStop === path.stops.length - 1 && (
-                  <div className="ctl-row">
-                    <div className="ctl-input cam-stop-actions">
-                      <button type="button" className="badge" onClick={removeStop}>Remove stop {selectedStop + 1}</button>
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-            </>
-            )}
+            {/* Hand editing, behind the same disclosure the panel already uses
+                for advanced controls — not a bespoke one that looks like it. */}
+            <div className="ctl-advanced">
+              <button
+                type="button"
+                className="ctl-advanced-toggle"
+                aria-expanded={pathOpen}
+                onClick={() => setPathOpen((v) => !v)}
+              >
+                Edit the path ({path.stops.length}/{MAX_CAMERA_STOPS}) <span>{pathOpen ? '−' : '+'}</span>
+              </button>
+              {pathOpen && (
+                <>
+                  {/* Pins on a grid of cells. Three continuous pads failed
+                      here first, all for the same reason: a continuous surface
+                      asks you to AIM, and aiming inside 250px is fiddly. Cells
+                      remove the aiming — there are 35 places a stop can be and
+                      you cannot miss one. */}
+                  <CameraPathGrid
+                    shot={{
+                      x: Number(sceneCamera._camPanX) || 0,
+                      y: Number(sceneCamera._camPanY) || 0,
+                    }}
+                    stops={path.stops}
+                    selected={selectedStop}
+                    max={MAX_CAMERA_STOPS}
+                    onSelect={setSelectedStop}
+                    onMoveStop={moveStop}
+                    onAddStop={addStop}
+                    onReset={resetPath}
+                  />
+                  {stopAt && (
+                    <>
+                      <ControlRow
+                        def={{ ...SCENE_CAMERA_STOP_ZOOM, label: `Stop ${selectedStop + 1} zoom` }}
+                        value={stopAt.zoom}
+                        onChange={(val) => zoomStop(selectedStop, Number(val))}
+                      />
+                      {selectedStop === path.stops.length - 1 && (
+                        <div className="ctl-row">
+                          <div className="ctl-input cam-stop-actions">
+                            <button type="button" className="badge" onClick={removeStop}>Remove pin {selectedStop + 1}</button>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+            </div>
           </div>
           )}
           <div className="hairline" />
