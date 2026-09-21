@@ -41,6 +41,11 @@ jobs:
         env:
           STATIC_EXPORT: '1'
           PAGES_BASE_PATH: /${{ github.event.repository.name }}
+          # 3D (OBJ) and Web ship unfinished and stay closed in ANY production
+          # build by default (see lib/deployment.ts EXPERIMENTS_ENABLED) — this
+          # explicit override is what opens them for the public GitHub Pages
+          # demo specifically.
+          NEXT_PUBLIC_EXPERIMENTS: '1'
 
       - name: Add .nojekyll
         run: touch out/.nojekyll
