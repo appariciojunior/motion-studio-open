@@ -43,20 +43,17 @@ export function buildThreeDPartial(s: ThreeDState) {
     screenMedia[slot] = m ? { ...m, url: '' } : null;
   }
 
+  const environments: ThreeDState['environments'] = {};
+  for (const [effectId, env] of Object.entries(s.environments)) {
+    environments[effectId] = env.sunMask?.startsWith('blob:') ? { ...env, sunMask: null } : env;
+  }
+
   return {
     effectId: s.effectId,
     params: s.params,
     models,
     partFills: s.partFills,
-    bgFill: s.bgFill,
-    bgTexAmount: s.bgTexAmount,
-    bgTexScale: s.bgTexScale,
-    sunIntensity: s.sunIntensity,
-    sunShadow: s.sunShadow,
-    sunMask: s.sunMask?.startsWith('blob:') ? null : s.sunMask,
-    sunMaskScale: s.sunMaskScale,
-    sunMaskOffsetX: s.sunMaskOffsetX,
-    sunMaskOffsetY: s.sunMaskOffsetY,
+    environments,
     mockupAnimation: s.mockupAnimation,
     mockupSpeed: s.mockupSpeed,
     mockupEasing: s.mockupEasing,

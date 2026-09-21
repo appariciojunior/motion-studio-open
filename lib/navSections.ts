@@ -12,32 +12,30 @@ export interface NavSection {
   id: NavSectionId;
   label: string;
   href: string;
-  /** Lives under the collapsible "Experiments" group in the rail. */
-  experimental?: boolean;
   /**
    * Unfinished, and closed to people using a built app. See EXPERIMENTS_ENABLED
    * in lib/deployment.ts.
-   *
-   * Gating Boards takes the React component export with it: BoardExportBar is
-   * the only caller of downloadSceneZip, and DesktopEditor only mounts it while
-   * the board section is active. That is a deliberate decision, not an
-   * oversight — the export needs a home outside Boards before it can come back,
-   * because lib/exportScene.ts packs boardPose/boardCompose and emits a board.
    */
   gated?: boolean;
 }
 
+// Board mode ('board' in NavSectionId, app/(editor)/board/page.tsx,
+// components/BoardStage.tsx + BoardPanel.tsx) is not listed here, so it draws
+// no rail button at all — not even a greyed-out one — and sectionFromPathname
+// falls back to the default section for it, in every build: composedPoseLayers
+// can crash the board stage when the scene has no active track/template (see
+// BoardStage.tsx), so the route stays closed until that is fixed. Dropping the
+// export costs a feature too: BoardExportBar is the only caller of
+// downloadSceneZip, and DesktopEditor only mounts it while the board section is
+// active — deliberate, not an oversight, since the export needs a home outside
+// Boards before it can come back (lib/exportScene.ts packs
+// boardPose/boardCompose and emits a board).
 export const NAV_SECTIONS: NavSection[] = [
   { id: 'projects', label: 'Projects', href: '/projects' },
   { id: 'library', label: 'Library', href: '/library' },
-  { id: 'mockup', label: 'Mockup', href: '/mockup' },
-  { id: '3d', label: '3D', href: '/3d', experimental: true, gated: true },
-  { id: 'web', label: 'Web', href: '/web', experimental: true, gated: true },
-  // Board mode — a DOM playground of arranged cards with hover interactions,
-  // and the entry point for the drop-in React component export. Its nav id is
-  // 'board' rather than the original 'new': the + button at the top of the rail
-  // now creates a project, so the two ids would collide. Kept last in the list.
-  { id: 'board', label: 'Boards', href: '/board', experimental: true, gated: true },
+  { id: 'mockup', label: 'Devices', href: '/mockup' },
+  { id: '3d', label: 'OBJ', href: '/3d', gated: true },
+  { id: 'web', label: 'Web', href: '/web', gated: true },
 ];
 
 /** What `/` renders, and the fallback for any path we don't recognise. */

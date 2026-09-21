@@ -8,11 +8,16 @@
 //  Web stage. Every panel and stage reads its section from sectionFromPathname,
 //  so that function is the door — and this suite opens it from the outside.
 //
-//  Boards is gated too, and that decision costs a feature: BoardExportBar is the
-//  only caller of downloadSceneZip, and DesktopEditor only mounts it while the
-//  board section is active, so a built app has no route to the React component
-//  export. The cost is asserted below rather than left to memory — if the export
-//  ever gets a home outside Boards, that assertion is the one to come back to.
+//  Boards is a different case: not merely unfinished but actively broken
+//  (composedPoseLayers can crash the board stage when the scene has no active
+//  track/template), so it carries no rail button at all — not gated, just
+//  absent from NAV_SECTIONS — and stays closed in every build, dev and
+//  NEXT_PUBLIC_EXPERIMENTS overrides included. That also costs a feature:
+//  BoardExportBar is the only caller of downloadSceneZip, and DesktopEditor
+//  only mounts it while the board section is active, so a built app has no
+//  route to the React component export either. The cost is asserted below
+//  rather than left to memory — if the export ever gets a home outside Boards,
+//  that assertion is the one to come back to.
 //
 //  Usage: node scripts/verify-gated-sections.cjs
 // ============================================================
@@ -50,7 +55,7 @@ function check(ok, message) {
   if (!ok) failures.push(message);
 }
 
-const GATED = ['3d', 'web', 'board'];
+const GATED = ['3d', 'web'];       // reopen under development or an explicit override
 const OPEN = ['projects', 'library', 'mockup'];
 
 // ---------- closed: a production build with no override ----------
@@ -70,12 +75,12 @@ const OPEN = ['projects', 'library', 'mockup'];
     check(nav.isSectionAvailable(id), `${id} must stay available`);
     check(nav.sectionFromPathname(`/${id}`) === id, `/${id} must still resolve to ${id}`);
   }
-  // Nothing openable may be experimental, and nothing experimental may be
-  // openable — the two groups have to line up, or a section added later without
-  // `gated` would quietly ship inside the Experiments drawer.
+  // Nothing openable may be gated, and nothing gated may be openable — the two
+  // groups have to line up, or a section added later without `gated` would
+  // quietly ship unclosed.
   for (const section of nav.NAV_SECTIONS) {
-    check(!!section.experimental === !nav.isSectionAvailable(section.id),
-      `${section.id}: experimental and gated must agree in a built app`);
+    check(!!section.gated === !nav.isSectionAvailable(section.id),
+      `${section.id}: gated and availability must agree in a built app`);
   }
 }
 
@@ -100,6 +105,18 @@ for (const env of [
   }
 }
 
+// ---------- board: no button, and the route never opens ----------
+for (const env of [
+  { NODE_ENV: 'production', NEXT_PUBLIC_EXPERIMENTS: undefined },
+  { NODE_ENV: 'development', NEXT_PUBLIC_EXPERIMENTS: undefined },
+  { NODE_ENV: 'production', NEXT_PUBLIC_EXPERIMENTS: '1' },
+]) {
+  const nav = loadNav(env);
+  check(!nav.NAV_SECTIONS.some((s) => s.id === 'board'), 'board must not be listed — no rail button, not even greyed');
+  check(!nav.isSectionAvailable('board'), 'board must never be available');
+  check(nav.sectionFromPathname('/board') === nav.DEFAULT_SECTION, '/board must fall back to the default section');
+}
+
 // ---------- unknown paths still fall back ----------
 {
   const nav = loadNav({ NODE_ENV: 'production' });
@@ -114,4 +131,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log(`Gated-section verification passed (${assertions} assertions; ${GATED.join(', ')} closed at the route, ${OPEN.join(', ')} open).`);
+console.log(`Gated-section verification passed (${assertions} assertions; ${GATED.join(', ')} closed at the route, board absent from the rail, ${OPEN.join(', ')} open).`);

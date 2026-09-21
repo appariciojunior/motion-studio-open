@@ -38,9 +38,9 @@ export const cartoonGroups: ControlGroup[] = [
   {
     title: 'Lights',
     controls: [
-      { key: 'keyLight', label: 'Key Light', type: 'slider', min: 0, max: 6, step: 0.1, default: 2.6 },
+      { key: 'keyLight', label: 'Key Light', type: 'slider', min: 0, max: 6, step: 0.1, default: 0.3 },
       { key: 'fillLight', label: 'Fill Light', type: 'slider', min: 0, max: 4, step: 0.1, default: 1 },
-      { key: 'ambient', label: 'Ambient', type: 'slider', min: 0, max: 3, step: 0.1, default: 0.5 },
+      { key: 'ambient', label: 'Ambient', type: 'slider', min: 0, max: 3, step: 0.1, default: 0.1 },
     ],
   },
 ];

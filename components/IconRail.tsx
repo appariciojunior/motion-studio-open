@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { isSectionAvailable, modeForSection, NAV_SECTIONS, sectionFromPathname, type NavSectionId } from '@/lib/navSections';
@@ -9,10 +8,10 @@ import { useUIStore } from '@/store/useUIStore';
 import { useProjectStore } from '@/store/useProjectStore';
 import { capturePoster } from '@/lib/projectPoster';
 import { preloadMockupProject } from '@/lib/mockupPreload';
-import { IS_HOSTED_DEPLOYMENT } from '@/lib/deployment';
+import { IS_HOSTED_DEPLOYMENT, REPO_URL } from '@/lib/deployment';
 import NewsNotifier from './NewsNotifier';
 import UpdateNotifier from './UpdateNotifier';
-import { AddIcon, BoardIcon, ChevronDownIcon, DocsIcon, ExperimentalsIcon, LibraryIcon, MockupIcon, ProjectsIcon, ThemeGlyph, ThreeDIcon, WebIcon } from './EditorIcons';
+import { AddIcon, BoardIcon, DocsIcon, GithubIcon, LibraryIcon, MockupIcon, ProjectsIcon, ThemeGlyph, ThreeDIcon, WebIcon } from './EditorIcons';
 
 const ICONS: Record<NavSectionId, React.ReactNode> = {
   projects: <ProjectsIcon />,
@@ -22,14 +21,6 @@ const ICONS: Record<NavSectionId, React.ReactNode> = {
   web: <WebIcon />,
   board: <BoardIcon />,
 };
-
-// A gated section still shows in the rail, greyed and inert: the work exists and
-// saying so is honest, but the route is closed (lib/navSections isSectionAvailable)
-// so it must not be a link — a link would navigate and land on the Library, which
-// reads as a bug rather than as "not yet".
-const NAV = NAV_SECTIONS.filter((section) => !section.experimental);
-const EXPERIMENTAL_NAV = NAV_SECTIONS.filter((section) => section.experimental);
-const HAS_EXPERIMENTS = EXPERIMENTAL_NAV.length > 0;
 
 export default function IconRail() {
   // The URL owns the active section (EditorShell mirrors it into the store for
@@ -42,8 +33,6 @@ export default function IconRail() {
   const toggleTheme = useUIStore((s) => s.toggleTheme);
   const createProject = useProjectStore((s) => s.create);
   const projectCount = useProjectStore((s) => s.projects.length);
-  const [experimentalsOpen, setExperimentalsOpen] = useState(false);
-  const experimentalActive = EXPERIMENTAL_NAV.some((item) => item.id === active);
 
   // Library and Mockup own different project documents. Hydrate the destination
   // before swapping the panel/stage so Mockup mounts once with its real model,
@@ -94,70 +83,41 @@ export default function IconRail() {
           </span>
           <span className="rail-label">New</span>
         </button>
-        {NAV.map((n) => (
-          <Link
-            key={n.id}
-            href={n.href}
-            // Setting the store on click as well as on the URL change keeps the
-            // panel swap on the same frame as the click: the mirror in
-            // EditorShell is an effect, which lands a frame later.
-            onClick={() => leaveSection(n.id)}
-            onPointerEnter={n.id === 'mockup' ? warmMockup : undefined}
-            onFocus={n.id === 'mockup' ? warmMockup : undefined}
-            aria-current={active === n.id ? 'page' : undefined}
-            className={`rail-item ${active === n.id ? 'active' : ''}`}
-          >
-            <span className="rail-ico">{ICONS[n.id]}</span>
-            <span className="rail-label">{n.label}</span>
-          </Link>
+        {NAV_SECTIONS.map((n) => (
+          isSectionAvailable(n.id) ? (
+            <Link
+              key={n.id}
+              href={n.href}
+              // Setting the store on click as well as on the URL change keeps the
+              // panel swap on the same frame as the click: the mirror in
+              // EditorShell is an effect, which lands a frame later.
+              onClick={() => leaveSection(n.id)}
+              onPointerEnter={n.id === 'mockup' ? warmMockup : undefined}
+              onFocus={n.id === 'mockup' ? warmMockup : undefined}
+              aria-current={active === n.id ? 'page' : undefined}
+              className={`rail-item ${active === n.id ? 'active' : ''}`}
+            >
+              <span className="rail-ico">{ICONS[n.id]}</span>
+              <span className="rail-label">{n.label}</span>
+            </Link>
+          ) : (
+            // A gated section still shows in the rail, greyed and inert: the work
+            // exists and saying so is honest, but the route is closed (lib/navSections
+            // isSectionAvailable) so it must not be a link — a link would navigate and
+            // land on the Library, which reads as a bug rather than as "not yet".
+            // Not a disabled <button> either: a button would still take focus on
+            // click in some browsers, and there is nothing to press.
+            <span
+              key={n.id}
+              aria-disabled="true"
+              title={`${n.label} is still being built — not available in this build`}
+              className="rail-item rail-locked"
+            >
+              <span className="rail-ico">{ICONS[n.id]}</span>
+              <span className="rail-label">{n.label}</span>
+            </span>
+          )
         ))}
-        {HAS_EXPERIMENTS && (<>
-        <button
-          className={`rail-item rail-experimentals ${experimentalActive ? 'active' : ''}`}
-          onClick={() => setExperimentalsOpen((open) => !open)}
-          aria-expanded={experimentalsOpen}
-          aria-controls="experimental-nav-items"
-        >
-          <span className="rail-ico"><ExperimentalsIcon /></span>
-          <span className="rail-label">Experiments</span>
-          <span className={`rail-exp-chevron ${experimentalsOpen ? 'open' : ''}`}><ChevronDownIcon size={10} /></span>
-        </button>
-        <div
-          id="experimental-nav-items"
-          className={`rail-experimental-items ${experimentalsOpen ? 'open' : 'closed'}`}
-          aria-hidden={!experimentalsOpen}
-        >
-          <div className="rail-experimental-inner">
-            {EXPERIMENTAL_NAV.map((n) => (
-              isSectionAvailable(n.id) ? (
-                <Link
-                  key={n.id}
-                  href={n.href}
-                  tabIndex={experimentalsOpen ? 0 : -1}
-                  onClick={() => leaveSection(n.id)}
-                  aria-current={active === n.id ? 'page' : undefined}
-                  className={`rail-item rail-subitem ${active === n.id ? 'active' : ''}`}
-                >
-                  <span className="rail-ico">{ICONS[n.id]}</span>
-                  <span className="rail-label">{n.label}</span>
-                </Link>
-              ) : (
-                // Not a Link and not a disabled <button>: a button would still take
-                // focus on click in some browsers, and there is nothing to press.
-                <span
-                  key={n.id}
-                  aria-disabled="true"
-                  title={`${n.label} is still being built — not available in this build`}
-                  className="rail-item rail-subitem rail-locked"
-                >
-                  <span className="rail-ico">{ICONS[n.id]}</span>
-                  <span className="rail-label">{n.label}</span>
-                </span>
-              )
-            ))}
-          </div>
-        </div>
-        </>)}
       </div>
       <div className="rail-bottom">
         {IS_HOSTED_DEPLOYMENT ? <NewsNotifier /> : <UpdateNotifier />}
@@ -171,6 +131,16 @@ export default function IconRail() {
           <span className="rail-ico"><DocsIcon /></span>
           <span className="rail-label">Docs</span>
         </Link>
+        <a
+          className="rail-item"
+          href={REPO_URL}
+          target="_blank"
+          rel="noreferrer noopener"
+          title="Source on GitHub"
+        >
+          <span className="rail-ico"><GithubIcon /></span>
+          <span className="rail-label">GitHub</span>
+        </a>
         <button
           className="rail-item rail-theme"
           onClick={toggleTheme}

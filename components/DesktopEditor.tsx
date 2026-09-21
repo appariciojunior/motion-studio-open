@@ -61,7 +61,7 @@ export default function DesktopEditor() {
   }, [isMockup, is3D]);
 
   return (
-    <div className={`app ${isWeb || isBoard ? 'app-web' : ''} ${isProjects ? 'app-projects' : ''} ${tplCollapsed ? 'app-tpl-collapsed' : ''} ${leftCollapsed ? 'left-collapsed' : ''} ${rightCollapsed ? 'right-collapsed' : ''}`}>
+    <div className={`app ${isWeb || isBoard ? 'app-web' : ''} ${isProjects ? 'app-projects' : ''} ${is3D ? 'app-3d' : ''} ${tplCollapsed ? 'app-tpl-collapsed' : ''} ${leftCollapsed ? 'left-collapsed' : ''} ${rightCollapsed ? 'right-collapsed' : ''}`}>
       <IconRail />
 
       {/* Projects is a tab of its own: it takes the middle of the screen (see
@@ -130,11 +130,18 @@ export default function DesktopEditor() {
 
       <footer className="card bottom">
         <Timeline
-          showExport={!isWeb && !isBoard}
-          // Mockup is a single persisted 3D studio. Its renderer never consumes
-          // the Library's motion-track stack, so exposing Add layer here created
-          // an invisible parallax track in the wrong document.
-          showLayers={!isMockup}
+          // The bar itself is hidden for the Painted Shader (.app-3d in
+          // globals.css) — no export of its own defined yet either.
+          showExport={!isWeb && !isBoard && !is3D}
+          // Mockup and the Painted Shader are both a single 3D scene, not a
+          // stack of 2D tracks — their renderer never consumes the Library's
+          // motion-track stack, so exposing Add layer here created an
+          // invisible parallax track in the wrong document.
+          showLayers={!isMockup && !is3D}
+          // The Painted Shader is an orbit-controlled still, not a played
+          // clip — nothing advances its clock on its own, so a play button
+          // and a scrubber for a frame that never moves read as broken.
+          showScrubber={!is3D}
           extra={isWeb ? <WebSourceBar /> : isBoard ? <BoardExportBar /> : undefined}
         />
       </footer>
