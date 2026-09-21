@@ -8,6 +8,7 @@ import { resolveEasing } from '@/lib/easing';
 import { assetIndexForSlot, clamp } from '@/lib/motion';
 import { resolveTrackTime, trackAssetIndices, type MotionTrack } from '@/lib/tracks';
 import { cardAspectFor, coverCrop, cropKey, type CropFocus } from '@/lib/crop';
+import { gateSceneCamera, readSceneCamera, readSceneCameraPath, sceneCameraAt, sceneCameraCoverage, sceneCameraFilterRect, sceneCameraFrameRect, sceneCameraPlanar } from '@/lib/sceneCamera';
 import { advanceVideoForExport, createCardVideo, isVideoSource, prepareVideoForSequentialExport, useVideoProxies, whenVideoReady } from '@/lib/videoTexture';
 import { BASE_PATH, IS_STATIC_EXPORT } from '@/lib/paths';
 import { advancedRasterSize, gradientRasterMaxEdge, gradientSignature, normalizeGradientSpec, paintGradientCanvas } from '@/lib/gradient';
@@ -286,7 +287,7 @@ export class SceneRenderer {
     // canvas. `countSig` below already keys the rebuild on this number, so a
     // resize or a card-size change re-pools on its own.
     const count = layerCountFor(track.templateId, track.values,
-      { width: s.width, height: s.height, cardAspect: aspect });
+      { width: s.width, height: s.height, cardAspect: aspect, coverage: this.coverageFor(s) });
     // Which scene assets feed this track, in track order.
     const indices = trackAssetIndices(track, s.assets);
     const pool = indices.map((i) => s.assets[i]).filter(Boolean);
@@ -326,7 +327,7 @@ export class SceneRenderer {
     // repeating); slots past the list cycle the set; hidden → placeholder
     rt.slots.forEach((slot, i) => {
       const mediaIndex = getTemplate(track.templateId).mediaIndex?.(i, count, track.values,
-        { width: s.width, height: s.height, cardAspect: aspect }) ?? i;
+        { width: s.width, height: s.height, cardAspect: aspect, coverage: this.coverageFor(s) }) ?? i;
       let asset = pool[assetIndexForSlot(mediaIndex, pool.length, repeat)];
       if (!asset && pool.length > 0) asset = pool[mediaIndex % pool.length];
       const binding = asset
@@ -526,6 +527,31 @@ export class SceneRenderer {
     return this.content;
   }
 
+  // The shot the scene asks for, gated by the same rule the panel uses so a
+  // hidden control is inert. Memoised on WHICH templates are visible, because
+  // that is all the gate depends on.
+  private camGateKey = '';
+  private camGateTemplates: ReturnType<typeof getTemplate>[] = [];
+  // The extra scene the camera needs, for the templates that build a lattice.
+  // Read from the path rather than from the current frame: the wall is built
+  // once and has to hold up at every moment of the clip, not just this one.
+  private coverageFor(s: SceneState): number {
+    return sceneCameraCoverage(readSceneCamera(s.sceneCamera), readSceneCameraPath(s.sceneCamera));
+  }
+
+  private sceneCameraFor(s: SceneState, frame: number) {
+    const visible = s.tracks.filter((t) => t.visible);
+    const key = visible.map((t) => t.templateId).join(',');
+    if (key !== this.camGateKey) {
+      this.camGateKey = key;
+      this.camGateTemplates = visible.map((t) => getTemplate(t.templateId));
+    }
+    const cam = gateSceneCamera(readSceneCamera(s.sceneCamera), this.camGateTemplates);
+    // The scene's own clock: one camera for the picture, one timeline for it.
+    const total = Math.max(1, Math.round(s.duration * s.fps));
+    return sceneCameraAt(cam, readSceneCameraPath(s.sceneCamera), frame / total);
+  }
+
   private syncEffects(frame: number) {
     const s = useSceneStore.getState();
     const active = s.effects.filter((e) => e.enabled);
@@ -565,7 +591,11 @@ export class SceneRenderer {
 
     // A area de filtro acompanha o canvas, e e reavaliada todo frame porque uma
     // camada pode ter acabado de nascer.
-    const area = new PIXI.Rectangle(-s.width / 2, -s.height / 2, s.width, s.height);
+    // In the artwork container's own coordinates, which the shot moves —
+    // `filterArea` is local, so a zoomed scene needs the inverse of the shot or
+    // an artwork-scope effect covers a fraction of the frame.
+    const rect = sceneCameraFilterRect(this.sceneCameraFor(s, frame), s.width, s.height);
+    const area = new PIXI.Rectangle(rect.x, rect.y, rect.width, rect.height);
     if (this.motion.filters && (this.motion.filters as PIXI.Filter[]).length) this.motion.filterArea = area;
     for (const rt of this.trackRTs.values()) {
       if (rt.container.filters && (rt.container.filters as PIXI.Filter[]).length) rt.container.filterArea = area;
@@ -734,6 +764,23 @@ export class SceneRenderer {
 
     const totalFrames = Math.max(1, Math.round(s.duration * s.fps));
 
+    // ---- the shot ----
+    // In 2D a dolly IS a scale and a pan IS a translation, so the whole camera
+    // lands on the artwork container. Deliberately not on `content`: the
+    // background stays put, the same way the webgl path frames the 3D content
+    // and leaves its background as a full-frame pass behind it.
+    //
+     // The gate is the panel's gate, so a control the panel hides is inert here
+    // too. Orbit never arrives in a 2D-only scene — `sceneCameraControlsFor`
+    // drops it where there is no perspective to swing.
+    const cam = this.sceneCameraFor(s, frame);
+    const shot = sceneCameraPlanar(cam, s.width, s.height);
+    this.motion.position.set(shot.x, shot.y);
+    this.motion.scale.set(shot.scale);
+    // What the camera can actually SEE, in the coordinates templates lay cards
+    // out in. The offscreen-copy cull below asks this and not the canvas.
+    const vista = sceneCameraFrameRect(cam, s.width, s.height);
+
     // Track the featured (front-most) card so a 'card' background can reflect
     // it. Later tracks draw on top, so their cards win ties — the background
     // reflects what the viewer actually sees in front.
@@ -772,6 +819,7 @@ export class SceneRenderer {
       // ctx.totalFrames, so each track loops seamlessly inside its own window.
       const ctx = {
         fps: s.fps, width: s.width, height: s.height,
+        coverage: this.coverageFor(s),
         duration: time.localTotal / Math.max(1, s.fps),
         totalFrames: time.localTotal,
         ease, easedPhase,
@@ -793,6 +841,14 @@ export class SceneRenderer {
         node.scale.set(norm * t.scale * (t.scaleX ?? 1), norm * t.scale * (t.scaleY ?? 1));
         // Repeated motifs need offscreen copies, but those copies must not spend
         // draw calls or text rasterization until their bounds enter the frame.
+        //
+        // THE FRAME, not the canvas. This read `s.width / 2` and was right for
+        // as long as nothing filmed the scene: with a camera it culled every
+        // copy outside the canvas while the camera was looking well past it, so
+        // pulling back shrank the wall instead of revealing more of it. Measured
+        // at 50% zoom: 625 cards laid out across 5282px, of which only the ones
+        // inside the 810px canvas painted -- five columns in a sea of background,
+        // with `renderable` false on every card beyond them.
         const long = SPRITE_BASE * t.scale;
         const cardW = long * Math.min(1, ctx.cardAspect), cardH = long * Math.min(1, 1 / ctx.cardAspect);
         // Match the sprite's affine transform, including projected ticker cards.
@@ -802,8 +858,8 @@ export class SceneRenderer {
         const bx = Math.abs(Math.sin(t.rotation - (t.skewX ?? 0))) * sy;
         const by = Math.abs(Math.cos(t.rotation - (t.skewX ?? 0))) * sy;
         node.renderable = !template.mediaIndex || (
-          Math.abs(t.x) <= s.width / 2 + (ax * cardW + bx * cardH) / 2 &&
-          Math.abs(t.y) <= s.height / 2 + (ay * cardW + by * cardH) / 2
+          Math.abs(t.x - vista.cx) <= vista.halfW + (ax * cardW + bx * cardH) / 2 &&
+          Math.abs(t.y - vista.cy) <= vista.halfH + (ay * cardW + by * cardH) / 2
         );
         node.rotation = t.rotation;
         node.alpha = t.alpha;

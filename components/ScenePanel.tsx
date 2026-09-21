@@ -1,12 +1,26 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useSceneStore } from '@/store/useSceneStore';
 import { catalogTemplateList, getTemplate } from '@/templates';
 import { ControlRow, controlVisible } from './Controls';
 import EasingPanel from './EasingPanel';
 import TrackInspector from './TrackInspector';
+import {
+  MAX_CAMERA_STOPS, SCENE_CAMERA_STOP_ZOOM,
+  SCENE_CAMERA_ON, cameraStopKeys, readSceneCameraPath, sceneCameraControlsFor,
+  sceneHasCamera,
+} from '@/lib/sceneCamera';
+import {
+  CAMERA_MOVES, CAMERA_MOVE_AMOUNT, CAMERA_MOVE_DIR, CAMERA_MOVE_KEY,
+  CAMERA_MOVE_STOPS, CUSTOM_MOVE, cameraMoveById, cameraMovePatch,
+} from '@/lib/cameraMoves';
+import CameraPathGrid from './CameraPathGrid';
 import type { ControlDef } from '@/lib/types';
+
+// The entry in the Move row that is not a move: it says the stops came from
+// you rather than from a recipe.
+const CUSTOM_LABEL = 'Custom';
 
 // Renders the SCENE + TIMING sections (no card wrapper — the page composes cards).
 export default function ScenePanel() {
@@ -20,6 +34,111 @@ export default function ScenePanel() {
   const trackCount = useSceneStore((s) => s.tracks.length);
   const activeTrackName = useSceneStore(
     (s) => s.tracks.find((t) => t.id === s.activeTrackId)?.name ?? '',
+  );
+  const sceneCamera = useSceneStore((s) => s.sceneCamera);
+  const sceneW = useSceneStore((s) => s.width);
+  const sceneH = useSceneStore((s) => s.height);
+  const setSceneCameraValue = useSceneStore((s) => s.setSceneCameraValue);
+  const resetSceneCamera = useSceneStore((s) => s.resetSceneCamera);
+  // Every VISIBLE layer decides, whatever engine draws it: both renderers apply
+  // the shot now, so both have to be asked whether they already offer the move.
+  const visibleTemplateIds = useSceneStore((s) => s.tracks
+    .filter((t) => t.visible)
+    .map((t) => t.templateId)
+    .join(','));
+  // Only the moves no visible layer already offers: a second knob for the same
+  // move makes the panel fiddlier, not more capable. See lib/sceneCamera.
+  const patchSceneCamera = useSceneStore((s) => s.patchSceneCamera);
+  // The path: the Shot is stop 1, and each of these is another one.
+  const path = readSceneCameraPath(sceneCamera);
+  // Does this scene HAVE a camera? A template that has never been given one
+  // shows no camera controls at all — the section collapses to the one row
+  // that offers to add it. Standard presets are finished work: growing a block
+  // of camera controls under every one of them changes how they read, and the
+  // camera is something you reach for when you are building a compose, not
+  // something every scene is carrying.
+  const hasCamera = sceneHasCamera(sceneCamera);
+  // Adding one starts it where the shot already is, so the picture does not
+  // jump the moment you ask for a camera. The first stop is what makes it move,
+  // and that is a click on the pad.
+  const addCamera = () => patchSceneCamera({ [SCENE_CAMERA_ON]: 1 });
+  // Which stop the pad is editing. -1 is the Shot, which the pad draws as the
+  // frame it starts from and does not let you drag: it is set by Shot above.
+  const [selectedStop, setSelectedStop] = useState(-1);
+  // Hand-editing the path is folded away. Choosing a move by name is the
+  // front door; placing stops yourself is the thing the named moves cannot do,
+  // and it was the only door before this.
+  const [pathOpen, setPathOpen] = useState(false);
+
+  // ---- the move, chosen by name ----
+  const moveId = typeof sceneCamera[CAMERA_MOVE_KEY] === 'string'
+    ? (sceneCamera[CAMERA_MOVE_KEY] as string) : CUSTOM_MOVE;
+  const move = cameraMoveById(moveId);
+  const moveAmount = Number(sceneCamera[CAMERA_MOVE_AMOUNT] ?? 60);
+  const moveDir = String(sceneCamera[CAMERA_MOVE_DIR] ?? 'centre');
+  // How many places this move settles at. Falls back to the move's own default
+  // rather than to 1, so picking Survey gives you its six and not a stub.
+  const moveStops = Number(sceneCamera[CAMERA_MOVE_STOPS] ?? move?.defaultStops ?? 1);
+  // Re-generating on every knob turn is the point: a move is a recipe, so the
+  // stops are always whatever the recipe currently says.
+  const applyMove = (id: string, amount = moveAmount, dir = moveDir, stops?: number) =>
+    patchSceneCamera({
+      ...cameraMovePatch(id, amount, dir, stops),
+      [CAMERA_MOVE_AMOUNT]: amount,
+      [CAMERA_MOVE_DIR]: dir,
+    });
+  // Touching the path by hand makes it yours: the chosen move stops being a
+  // true description of the stops, so it stops claiming to be one.
+  const markCustom = () => {
+    if (moveId !== CUSTOM_MOVE) patchSceneCamera({ [CAMERA_MOVE_KEY]: CUSTOM_MOVE });
+  };
+  const stopAt = path.stops[selectedStop];
+  // A stop added by clicking the pad lands where you pointed, at the zoom the
+  // camera already has — so the new leg is a move, not a move plus a surprise.
+  const addStop = (x: number, y: number) => {
+    markCustom();
+    const keys = cameraStopKeys(path.stops.length);
+    patchSceneCamera({
+      [keys.pad]: { x, y },
+      [keys.zoom]: Number(sceneCamera._camZoom) || 100,
+    });
+    setSelectedStop(path.stops.length);
+  };
+
+  // Clears every stop and leaves the shot alone: Reset is about the PATH, and
+  // wiping where the camera stands as well would be a different button.
+  const resetPath = () => {
+    const patch: Record<string, null | string> = { [CAMERA_MOVE_KEY]: CUSTOM_MOVE };
+    for (let i = 0; i < MAX_CAMERA_STOPS; i++) {
+      const k = cameraStopKeys(i);
+      patch[k.pad] = null;
+      patch[k.zoom] = null;
+    }
+    patchSceneCamera(patch);
+    setSelectedStop(-1);
+  };
+  const moveStop = (i: number, x: number, y: number) => {
+    markCustom();
+    patchSceneCamera({ [cameraStopKeys(i).pad]: { x, y } });
+  };
+  const zoomStop = (i: number, zoom: number) => {
+    markCustom();
+    patchSceneCamera({ [cameraStopKeys(i).zoom]: zoom });
+  };
+  // Only the LAST stop can go: dropping one from the middle would renumber
+  // every stop after it, and a path whose stop 3 silently became stop 2 is a
+  // path nobody can keep track of.
+  const removeStop = () => {
+    markCustom();
+    const keys = cameraStopKeys(path.stops.length - 1);
+    patchSceneCamera({ [keys.pad]: null, [keys.zoom]: null });
+    setSelectedStop((i) => (i >= path.stops.length - 1 ? -1 : i));
+  };
+  const cameraControls = useMemo(
+    () => (visibleTemplateIds
+      ? sceneCameraControlsFor(visibleTemplateIds.split(',').map((id) => getTemplate(id)))
+      : []),
+    [visibleTemplateIds],
   );
 
   const template = getTemplate(activeTemplateId);
@@ -89,6 +208,156 @@ export default function ScenePanel() {
       </div>
 
       <div className="hairline" />
+
+      {/* The shot: where the camera stands. Scene-level, so it sits OUTSIDE the
+          per-layer block above — two layers composited from two camera
+          positions are not one picture.
+
+          What shows up under Shot is only what is NOT already on the panel: 67
+          of the 82 webgl presets declare their own zoom, 61 their own offset,
+          31 their own yaw, and a 2D scene is offered no orbit because there is
+          no perspective to swing. A second knob for the same move is what makes
+          a panel feel fiddly instead of capable, so that half can come out
+          empty and only Move is left — which is the case for a preset that
+          already frames itself. Nothing in the catalogue moves the frame over
+          time, so Move is never a duplicate of anything. */}
+      <>
+          <div className="section-head">
+            <span className="eyebrow">Camera</span>
+            <button type="button" className="badge" onClick={hasCamera ? resetSceneCamera : addCamera}>
+              {hasCamera ? "Remove" : "Add"}
+            </button>
+          </div>
+          {!hasCamera && (
+            <div className="section-body">
+              <div className="ctl-hint">Nothing is filming this scene. A camera lets you frame it from somewhere else, and travel across it while it plays.</div>
+              {/* A real button and not only the badge in the header: the badge
+                  is where you turn a camera OFF once you have one, and it is
+                  too quiet to be the way you discover you can have one. */}
+              <div className="ctl-row">
+                <div className="ctl-input cam-stop-actions">
+                  <button type="button" className="badge cam-cta" onClick={addCamera}>Add a camera</button>
+                </div>
+              </div>
+            </div>
+          )}
+          {hasCamera && cameraControls.length > 0 && (
+          <div className="section-body">
+            <div className="ctl-section-title">Shot</div>
+            <div className="ctl-hint">Moves the camera, not the cards — the same motion seen from somewhere else.</div>
+            {cameraControls.map((def) => (
+              <ControlRow
+                key={def.key}
+                def={def}
+                value={sceneCamera[def.key] ?? def.default}
+                onChange={(val) => setSceneCameraValue(def.key, Number(val))}
+              />
+            ))}
+          </div>
+          )}
+          {/* Where it GOES. Separate block because it is a different question
+              from where it stands, and because it is the half that makes this a
+              camera rather than a crop. */}
+          {hasCamera && (
+          <div className="section-body">
+            {/* Built from the controls this app already has, and that is the
+                whole point of this pass. The version before it invented four
+                of its own — a button grid, a chip strip, a disclosure and a
+                pad — so the camera looked like it came from a different
+                program than everything around it. Reported as "sem design com
+                cara de amador". Every row below is a ControlRow.
+
+                CHOOSING a move, not building one: see lib/cameraMoves. */}
+            <div className="ctl-section-title">Move</div>
+            <ControlRow
+              def={{
+                // A select and not pills: six names do not fit across a
+                // 300px panel — they overlapped into 'Push InPull BackCross'.
+                // The app's own control for more options than fit in a row.
+                key: '_camMovePick', label: 'Move', type: 'select',
+                options: [...CAMERA_MOVES.map((m) => m.label), CUSTOM_LABEL],
+                default: CUSTOM_LABEL,
+              }}
+              value={move ? move.label : CUSTOM_LABEL}
+              onChange={(val) => {
+                const escolhido = CAMERA_MOVES.find((m) => m.label === val);
+                if (escolhido) applyMove(escolhido.id);
+                else { patchSceneCamera({ [CAMERA_MOVE_KEY]: CUSTOM_MOVE }); setPathOpen(true); }
+              }}
+            />
+            <div className="ctl-hint">
+              {move ? move.hint : 'Stops you placed by hand. Open the path below to edit them.'}
+            </div>
+            {move?.knobs.map((def) => (
+              <ControlRow
+                key={def.key}
+                // Survey tops out at the six stops measured off the clip, so
+                // its slider does too rather than promising two it cannot make.
+                def={def.key === CAMERA_MOVE_STOPS ? { ...def, max: move.maxStops } : def}
+                value={def.key === CAMERA_MOVE_AMOUNT ? moveAmount
+                  : def.key === CAMERA_MOVE_STOPS ? moveStops : moveDir}
+                onChange={(val) => {
+                  if (def.key === CAMERA_MOVE_AMOUNT) applyMove(move.id, Number(val), moveDir, moveStops);
+                  else if (def.key === CAMERA_MOVE_STOPS) applyMove(move.id, moveAmount, moveDir, Number(val));
+                  else applyMove(move.id, moveAmount, String(val), moveStops);
+                }}
+              />
+            ))}
+
+            {/* Hand editing, behind the same disclosure the panel already uses
+                for advanced controls — not a bespoke one that looks like it. */}
+            <div className="ctl-advanced">
+              <button
+                type="button"
+                className="ctl-advanced-toggle"
+                aria-expanded={pathOpen}
+                onClick={() => setPathOpen((v) => !v)}
+              >
+                Edit the path ({path.stops.length}/{MAX_CAMERA_STOPS}) <span>{pathOpen ? '−' : '+'}</span>
+              </button>
+              {pathOpen && (
+                <>
+                  {/* Pins on a grid of cells. Three continuous pads failed
+                      here first, all for the same reason: a continuous surface
+                      asks you to AIM, and aiming inside 250px is fiddly. Cells
+                      remove the aiming — there are 35 places a stop can be and
+                      you cannot miss one. */}
+                  <CameraPathGrid
+                    shot={{
+                      x: Number(sceneCamera._camPanX) || 0,
+                      y: Number(sceneCamera._camPanY) || 0,
+                    }}
+                    stops={path.stops}
+                    selected={selectedStop}
+                    max={MAX_CAMERA_STOPS}
+                    onSelect={setSelectedStop}
+                    onMoveStop={moveStop}
+                    onAddStop={addStop}
+                    onReset={resetPath}
+                  />
+                  {stopAt && (
+                    <>
+                      <ControlRow
+                        def={{ ...SCENE_CAMERA_STOP_ZOOM, label: `Stop ${selectedStop + 1} zoom` }}
+                        value={stopAt.zoom}
+                        onChange={(val) => zoomStop(selectedStop, Number(val))}
+                      />
+                      {selectedStop === path.stops.length - 1 && (
+                        <div className="ctl-row">
+                          <div className="ctl-input cam-stop-actions">
+                            <button type="button" className="badge" onClick={removeStop}>Remove pin {selectedStop + 1}</button>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+          )}
+          <div className="hairline" />
+      </>
 
       {/* layer compositing: opacity, blend, retiming, asset split. Only
           meaningful once a second layer exists. */}

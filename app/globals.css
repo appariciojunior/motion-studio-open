@@ -6858,3 +6858,101 @@ select.field {
     animation: none;
   }
 }
+
+
+/* The camera path, in ONE control: the frame as a pad, every stop a dot
+   inside it, and the dot size saying its zoom. Sized and coloured off the
+   xypad so the two read as the same family of control. */
+/* The camera section is built from the panel's own controls — pills, the XY
+   pad, sliders, the advanced disclosure — so it needs almost no CSS of its
+   own. It used to need 200 lines of it: a button grid, a chip strip, a
+   bespoke disclosure and two generations of a bespoke pad, all of them
+   lookalikes of things this panel already had. That is what made the camera
+   read as though it came from a different program. */
+.cam-stop-actions {
+  justify-content: flex-start;
+}
+.cam-cta { width: 100%; }
+
+/* ---- camera path: pins on cells ---- */
+
+.cpg {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-tight);
+  margin-top: 10px;
+}
+.cpg-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cpg-head .ctl-label { flex: 1; }
+/* A faixa que a grade cobre, dita em voz baixa: sem isso a celula muda de
+   significado sozinha quando o caminho encolhe. */
+.cpg-range {
+  color: var(--fg-label);
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+}
+.cpg-head .badge[disabled] { opacity: 0.4; cursor: default; }
+
+/* A lattice you cannot miss: every cell is a target, and a stop can only sit
+   in the middle of one. That is the whole reason this replaced a continuous
+   pad — aiming inside 250px is fiddly, and landing a pixel off says nothing. */
+/* The lattice is drawn by the GAPS: the grid paints the line colour and each
+   cell paints over it. The first version gave the cells the panel background
+   and the whole thing vanished into a grey square. */
+.cpg-grid {
+  display: grid;
+  /* As colunas usam minmax(0,1fr) no componente e nao 1fr: um filho com
+     aspect-ratio da a faixa um minimo automatico de min-content, e a grade
+     estoura para fora do painel. A ALTURA das linhas vem do proprio quadrado
+     da celula — fixar grid-auto-rows aqui briga com ele e abre faixas. */
+  gap: 1px;
+  padding: 1px;
+  background: var(--handle);
+  border-radius: var(--r-ctrl);
+  overflow: hidden;
+  touch-action: none;
+}
+.cpg-cell {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border: 0;
+  background: var(--card-inset);
+  padding: 0;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.cpg-cell:hover { background: color-mix(in srgb, var(--fg) 6%, var(--card-inset)); }
+.cpg-cell.is-cell-on { background: color-mix(in srgb, var(--fg) 14%, var(--card-inset)); }
+
+/* Absolute, so a fanned pin never grows its own cell: laid out in flow, two
+   pins in one cell pushed the whole ROW taller and opened a grey band across
+   the lattice. */
+.cpg-pin {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 9px;
+  line-height: 1;
+  background: var(--fg);
+  color: var(--card-inset);
+  cursor: grab;
+  touch-action: none;
+}
+.cpg-pin { transform: translate(-50%, -50%); }
+.cpg-pin.is-on { box-shadow: 0 0 0 3px color-mix(in srgb, var(--fg) 22%, transparent); }
+.cpg-pin.is-shot {
+  background: transparent;
+  color: var(--fg-label);
+  border: 1px dashed var(--fg-label);
+  cursor: default;
+}

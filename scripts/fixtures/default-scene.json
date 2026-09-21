@@ -1,0 +1,161 @@
+{
+ "width": 810,
+ "height": 1080,
+ "fps": 30,
+ "duration": 8,
+ "cardShape": "auto",
+ "assets": [
+  {
+   "name": "Typographic Motion 01",
+   "url": "/typographic-ultramarine-v5/type-01.png",
+   "id": "asset_2",
+   "visible": true,
+   "origin": "demo"
+  },
+  {
+   "name": "Typographic Motion 02",
+   "url": "/typographic-ultramarine-v5/type-02.png",
+   "id": "asset_3",
+   "visible": true,
+   "origin": "demo"
+  },
+  {
+   "name": "Typographic Motion 03",
+   "url": "/typographic-ultramarine-v5/type-03.png",
+   "id": "asset_4",
+   "visible": true,
+   "origin": "demo"
+  },
+  {
+   "name": "Typographic Motion 04",
+   "url": "/typographic-ultramarine-v5/type-04.png",
+   "id": "asset_5",
+   "visible": true,
+   "origin": "demo"
+  },
+  {
+   "name": "Typographic Motion 05",
+   "url": "/typographic-ultramarine-v5/type-05.png",
+   "id": "asset_6",
+   "visible": true,
+   "origin": "demo"
+  },
+  {
+   "name": "Typographic Motion 06",
+   "url": "/typographic-ultramarine-v5/type-06.png",
+   "id": "asset_7",
+   "visible": true,
+   "origin": "demo"
+  },
+  {
+   "name": "Typographic Motion 07",
+   "url": "/typographic-ultramarine-v5/type-07.png",
+   "id": "asset_8",
+   "visible": true,
+   "origin": "demo"
+  },
+  {
+   "name": "Typographic Motion 08",
+   "url": "/typographic-ultramarine-v5/type-08.png",
+   "id": "asset_9",
+   "visible": true,
+   "origin": "demo"
+  }
+ ],
+ "tracks": [
+  {
+   "id": "track_1",
+   "name": "Layer 1",
+   "templateId": "carousel",
+   "values": {
+    "direction": "left",
+    "display": "strip",
+    "count": 6,
+    "cardSize": 340,
+    "cornerRadius": 12,
+    "gap": 360,
+    "bigScale": 120,
+    "scaleFocus": "center",
+    "perspective": 0,
+    "tiltStyle": "off",
+    "tiltAmount": 8,
+    "offset": {
+     "x": 0,
+     "y": 0
+    },
+    "fade": 0,
+    "outerFade": 100,
+    "speed": 0.6,
+    "stagger": 0,
+    "hold": 0
+   },
+   "easing": {
+    "id": "glide"
+   },
+   "assetIds": [],
+   "visible": true,
+   "opacity": 1,
+   "blend": "normal",
+   "inFrame": 0,
+   "outFrame": 1000000000,
+   "offset": 0,
+   "timeScale": 1,
+   "fade": 0,
+   "transform": {
+    "x": 0,
+    "y": 0,
+    "scale": 1,
+    "rotation": 0
+   }
+  }
+ ],
+ "background": {
+  "source": "color",
+  "color": "#0d0d0d",
+  "alpha": 100,
+  "gradient": false,
+  "color2": "#1f1f1f",
+  "gradientSpec": {
+   "version": 2,
+   "mode": "basic",
+   "shape": "linear",
+   "stops": [
+    {
+     "id": "stop-0",
+     "color": "#0d0d0d",
+     "position": 0,
+     "opacity": 1
+    },
+    {
+     "id": "stop-1",
+     "color": "#1f1f1f",
+     "position": 1,
+     "opacity": 1
+    }
+   ],
+   "softness": 0,
+   "angle": 90,
+   "center": {
+    "x": 0.5,
+    "y": 0.5
+   },
+   "radius": 0.72,
+   "advanced": {
+    "warp": 0.3,
+    "flow": 0,
+    "scale": 1.3,
+    "detail": 1,
+    "contrast": 1.1
+   },
+   "mapping3d": "uv"
+  },
+  "imageUrl": null,
+  "blur": 28
+ },
+ "effects": [],
+ "easing": {
+  "id": "glide"
+ },
+ "activeTemplateId": "carousel",
+ "activeTrackId": "track_1"
+}

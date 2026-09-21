@@ -36,6 +36,10 @@ const KEYS = [
   'aspect', 'width', 'height', 'customW', 'customH',
   'safeArea', 'background', 'logo', 'audioUrl',
   'assets', 'cardShape', 'videoEnd', 'effects',
+  // The shot has to be here: `apply` restores through `hydrate`, which rebuilds
+  // sceneCamera from the partial it is given, so a snapshot missing this key
+  // does not leave the camera alone — it resets it to neutral.
+  'sceneCamera',
 ] as const;
 
 type Snapshot = Pick<SceneState, (typeof KEYS)[number]>;

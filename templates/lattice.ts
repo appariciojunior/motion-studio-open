@@ -1,6 +1,6 @@
 import type { TransformCtx } from '@/lib/types';
 
-type CanvasCtx = Pick<TransformCtx, 'width' | 'height' | 'cardAspect'>;
+type CanvasCtx = Pick<TransformCtx, 'width' | 'height' | 'cardAspect' | 'coverage'>;
 
 /** Authored sizes use a 1080px long edge; output resolution is not geometry. */
 export const canvasScale = (ctx: Pick<CanvasCtx, 'width' | 'height'>) =>
@@ -47,8 +47,13 @@ export function solveLattice(v: Record<string, any>, ctx: CanvasCtx, declaredAsp
   const ox = Math.abs(Number(v.offset?.x ?? 0)) * scale;
   const oy = Math.abs(Number(v.offset?.y ?? 0)) * scale;
   const minSwell = v.breath === 'on' ? Math.max(0.1, 1 - (Number(v.pulseAmt) || 0) / 200) : 1;
-  const extentX = (c * (ctx.width + 2 * ox) + s * (ctx.height + 2 * oy)) / minSwell + cardW;
-  const extentY = (s * (ctx.width + 2 * ox) + c * (ctx.height + 2 * oy)) / minSwell + cardH;
+  // The camera can see past the canvas, and the wall has to be there when it
+  // looks. Only the EXTENT grows: `scale` above is what sets card size, and it
+  // is deliberately left alone so a camera makes more cards, not bigger ones.
+  const cover = Math.max(1, Number(ctx.coverage) || 1);
+  const vw = ctx.width * cover, vh = ctx.height * cover;
+  const extentX = (c * (vw + 2 * ox) + s * (vh + 2 * oy)) / minSwell + cardW;
+  const extentY = (s * (vw + 2 * ox) + c * (vh + 2 * oy)) / minSwell + cardH;
   const copiesX = oddCover(extentX + 2 * motifCols * pitchX, motifCols * pitchX);
   const copiesY = oddCover(extentY + 2 * motifRows * pitchY, motifRows * pitchY);
   let cols = motifCols * copiesX, rows = motifRows * copiesY;
