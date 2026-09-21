@@ -27,15 +27,13 @@ export interface ThreeDState {
   parts: string[];                        // detected colourable group keys
   partFills: Record<string, FillSpec>;    // key → fill (absent = original)
   selectedPart: string | null;            // click-to-pick selection
-  bgFill: FillSpec;                        // stage background — same FillSpec pattern
-  bgTexAmount: number;                     // paint-stroke texture on the background (0..100)
-  bgTexScale: number;                      // background texture tiling
-  sunIntensity: number;                    // warm midday sun overlay on top of everything (0..100)
-  sunShadow: number;                       // directional sun that casts model shadow on the wall (0..100)
-  sunMask: string | null;                  // alpha mask (e.g. window) — sun shows only inside it
-  sunMaskScale: number;                     // window gobo size (0..100)
-  sunMaskOffsetX: number;                   // window gobo offset (-100..100)
-  sunMaskOffsetY: number;
+  // Background + sun, per effect id — same reasoning as `models`. Painted
+  // Shader wants a moody, dark backdrop; Mockup wants a bright product-studio
+  // one. One shared slot meant tuning either one's Background/Sunlight panel
+  // silently retuned the other, and opening a Mockup project (hydrate3D
+  // applies its saved slice over the whole store) overwrote whatever the
+  // Painted Shader was showing even while it wasn't the active effect.
+  environments: Record<string, Environment>;
   // Mockup mode — device animation preset/speed, and the image/video composited
   // onto the active device's "Screen" mesh (three3d/mockup.ts + ScreenContent).
   mockupAnimation: string;
@@ -109,6 +107,20 @@ export interface ThreeDState {
   setSunMaskOffset: (x: number, y: number) => void;
 }
 
+// Stage background + sun rig for one effect. Same FillSpec pattern as a
+// model part's colour.
+export interface Environment {
+  bgFill: FillSpec;
+  bgTexAmount: number;     // paint-stroke texture on the background (0..100)
+  bgTexScale: number;      // background texture tiling
+  sunIntensity: number;    // warm midday sun overlay on top of everything (0..100)
+  sunShadow: number;       // directional sun that casts model shadow on the wall (0..100)
+  sunMask: string | null;  // alpha mask (e.g. window) — sun shows only inside it
+  sunMaskScale: number;    // window gobo size (0..100)
+  sunMaskOffsetX: number;  // window gobo offset (-100..100)
+  sunMaskOffsetY: number;
+}
+
 // A part's fill: solid, or a two-colour gradient (linear along Y bottom→top,
 // or radial centre→edge). c1 = start/centre, c2 = end/edge.
 export interface FillSpec {
@@ -148,13 +160,14 @@ const DEFAULT_FILLS: Record<string, FillSpec> = {
   Plane: { type: 'linear', c1: '#ffffff', c2: '#9a9a9a', gradient: createGradientSpec('#ffffff', '#9a9a9a') },
 };
 
-// Default nudge that centres the bundled dayse model in the stage.
-const DEF_OFFSET = { x: -0.8, y: 0.7 };
+// three3d/frame.ts's fitAndCenter() already recentres the model's own bbox
+// centroid onto the pivot's local origin on load, so (0, 0) here IS canvas
+// centre — no hand nudge needed on top of it.
+const DEF_OFFSET = { x: 0, y: 0 };
 const MODEL_DEFAULT: ModelState = { scale: 0.7, rotX: 0, rotY: 0, rotZ: 0, offsetX: DEF_OFFSET.x, offsetY: DEF_OFFSET.y, offsetZ: 0, url: null, name: null, centerNonce: 0 };
 
-// Mockup starts from a different baseline: device meshes are already
-// bbox-centred, so they want (0, 0) and scale 1 rather than the daisy's
-// hand-tuned nudge, and no bundled model at all until a device is picked.
+// Mockup starts from the same (0, 0): device meshes are already bbox-centred
+// too, and no bundled model at all until a device is picked.
 const MOCKUP_MODEL_DEFAULT: ModelState = { scale: 1, rotX: 0, rotY: 0, rotZ: 0, offsetX: 0, offsetY: 0, offsetZ: 0, url: null, name: null, centerNonce: 0 };
 
 // The model transform is held PER EFFECT, not globally. It used to be one
@@ -176,6 +189,54 @@ function patchModel(
   patch: Partial<ModelState>,
 ) {
   return { models: { ...s.models, [s.effectId]: { ...modelOf(s), ...patch } } };
+}
+
+// Painted Shader's own moody, dark-walled default — what this effect always
+// looked like before Mockup's bright product-studio default landed in the one
+// shared `bgFill` slot the two used to fight over.
+const CARTOON_ENV_DEFAULT: Environment = {
+  bgFill: {
+    type: 'linear', c1: '#c4cdd8', c2: '#3a3f47',
+    gradient: createGradientSpec('#c4cdd8', '#3a3f47'),
+  },
+  bgTexAmount: 32,
+  bgTexScale: 4.1,
+  sunIntensity: 85,
+  sunShadow: 0,
+  sunMask: '/3d/textures/window.png',
+  sunMaskScale: 46,
+  sunMaskOffsetX: 0,
+  sunMaskOffsetY: -2,
+};
+
+// Mockup's bright product-studio default.
+const MOCKUP_ENV_DEFAULT: Environment = {
+  bgFill: {
+    type: 'linear', c1: '#fbfbfc', c2: '#e6e8eb',
+    gradient: createGradientSpec('#fbfbfc', '#e6e8eb'),
+  },
+  bgTexAmount: 32,
+  bgTexScale: 4.1,
+  sunIntensity: 85,
+  sunShadow: 0,
+  sunMask: '/3d/textures/window.png',
+  sunMaskScale: 46,
+  sunMaskOffsetX: 0,
+  sunMaskOffsetY: -2,
+};
+
+export function defaultEnvironmentFor(effectId: string): Environment {
+  return effectId === 'mockup' ? { ...MOCKUP_ENV_DEFAULT } : { ...CARTOON_ENV_DEFAULT };
+}
+
+function environmentOf(s: { effectId: string; environments: Record<string, Environment> }): Environment {
+  return s.environments[s.effectId] ?? defaultEnvironmentFor(s.effectId);
+}
+function patchEnvironment(
+  s: { effectId: string; environments: Record<string, Environment> },
+  patch: Partial<Environment>,
+) {
+  return { environments: { ...s.environments, [s.effectId]: { ...environmentOf(s), ...patch } } };
 }
 
 // Everything in this store that is DOCUMENT rather than behaviour. Named so the
@@ -203,18 +264,7 @@ function initial3DState(): ThreeDDoc {
     parts: [],
     partFills: {},
     selectedPart: null,
-    bgFill: {
-      type: 'linear', c1: '#fbfbfc', c2: '#e6e8eb',
-      gradient: createGradientSpec('#fbfbfc', '#e6e8eb'),
-    },
-    bgTexAmount: 32,
-    bgTexScale: 4.1,
-    sunIntensity: 85,
-    sunShadow: 0,
-    sunMask: '/3d/textures/window.png',
-    sunMaskScale: 46,
-    sunMaskOffsetX: 0,
-    sunMaskOffsetY: -2,
+    environments: { cartoon: { ...CARTOON_ENV_DEFAULT }, mockup: { ...MOCKUP_ENV_DEFAULT } },
     mockupAnimation: 'static',
     mockupSpeed: 1,
     mockupEasing: 'preset',
@@ -321,12 +371,34 @@ export const use3DStore = create<ThreeDState>((set) => ({
   // not restored: the effect reports its own colourable groups on load, and a
   // click-selection is session state, not a document.
   hydrate3D: (partial) => set((s) => {
-    const rawBg = partial.bgFill ?? s.bgFill;
     const rawParts = partial.partFills ?? s.partFills;
+    // A blob saved before `environments` existed carries the OLD flat
+    // bgFill/sunIntensity/… fields instead. Persistence only ever wrote those
+    // for a mockup-mode project (writeProjectThreeD's guard in
+    // lib/three3dPersist.ts), so a flat `bgFill` here IS the Mockup
+    // environment — migrate it there and leave Painted Shader's untouched.
+    const legacy = partial as Partial<Environment> & { bgFill?: FillSpec };
+    const mockupEnv = environmentOf({ effectId: 'mockup', environments: s.environments });
+    const environments = partial.environments ?? (legacy.bgFill ? {
+      ...s.environments,
+      mockup: {
+        bgFill: legacy.bgFill,
+        bgTexAmount: legacy.bgTexAmount ?? mockupEnv.bgTexAmount,
+        bgTexScale: legacy.bgTexScale ?? mockupEnv.bgTexScale,
+        sunIntensity: legacy.sunIntensity ?? mockupEnv.sunIntensity,
+        sunShadow: legacy.sunShadow ?? mockupEnv.sunShadow,
+        sunMask: legacy.sunMask !== undefined ? legacy.sunMask : mockupEnv.sunMask,
+        sunMaskScale: legacy.sunMaskScale ?? mockupEnv.sunMaskScale,
+        sunMaskOffsetX: legacy.sunMaskOffsetX ?? mockupEnv.sunMaskOffsetX,
+        sunMaskOffsetY: legacy.sunMaskOffsetY ?? mockupEnv.sunMaskOffsetY,
+      },
+    } : s.environments);
     return {
       ...s,
       ...partial,
-      bgFill: migrateFill(rawBg),
+      environments: Object.fromEntries(
+        Object.entries(environments).map(([id, env]) => [id, { ...env, bgFill: migrateFill(env.bgFill) }]),
+      ),
       partFills: Object.fromEntries(Object.entries(rawParts).map(([key, fill]) => [key, migrateFill(fill)])),
       parts: [],
       selectedPart: null,
@@ -391,16 +463,16 @@ export const use3DStore = create<ThreeDState>((set) => ({
   }),
   selectPart: (key) => set({ selectedPart: key }),
   setBgFill: (patch) => set((s) => {
-    const next = { ...s.bgFill, ...patch } as FillSpec;
-    return { bgFill: patch.gradient ? migrateFill(next) : next };
+    const next = { ...environmentOf(s).bgFill, ...patch } as FillSpec;
+    return patchEnvironment(s, { bgFill: patch.gradient ? migrateFill(next) : next });
   }),
-  setBgTexAmount: (v) => set({ bgTexAmount: v }),
-  setBgTexScale: (v) => set({ bgTexScale: v }),
-  setSunIntensity: (v) => set({ sunIntensity: v }),
-  setSunShadow: (v) => set({ sunShadow: v }),
-  setSunMask: (url) => set({ sunMask: url }),
-  setSunMaskScale: (v) => set({ sunMaskScale: v }),
-  setSunMaskOffset: (x, y) => set({ sunMaskOffsetX: x, sunMaskOffsetY: y }),
+  setBgTexAmount: (v) => set((s) => patchEnvironment(s, { bgTexAmount: v })),
+  setBgTexScale: (v) => set((s) => patchEnvironment(s, { bgTexScale: v })),
+  setSunIntensity: (v) => set((s) => patchEnvironment(s, { sunIntensity: v })),
+  setSunShadow: (v) => set((s) => patchEnvironment(s, { sunShadow: v })),
+  setSunMask: (url) => set((s) => patchEnvironment(s, { sunMask: url })),
+  setSunMaskScale: (v) => set((s) => patchEnvironment(s, { sunMaskScale: v })),
+  setSunMaskOffset: (x, y) => set((s) => patchEnvironment(s, { sunMaskOffsetX: x, sunMaskOffsetY: y })),
 }));
 
 /**

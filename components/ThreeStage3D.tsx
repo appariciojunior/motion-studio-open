@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { getThreeEffect, threeDefaults, threeEffects } from '@/three3d';
-import { use3DStore, defaultModelFor } from '@/store/use3DStore';
+import { use3DStore, defaultModelFor, defaultEnvironmentFor } from '@/store/use3DStore';
 import { useSceneStore } from '@/store/useSceneStore';
 import { isOn } from '@/three3d/asciiControls';
 import { findDevice } from '@/three3d/devices';
@@ -58,14 +58,20 @@ export default function ThreeStage3D({ effectId: forcedEffectId }: { effectId?: 
       getSelectedPart: () => use3DStore.getState().selectedPart,
       onParts: (keys) => use3DStore.getState().setParts(keys),
       onPickPart: (key) => use3DStore.getState().selectPart(key),
-      getBgFill: () => use3DStore.getState().bgFill,
-      getBgTex: () => ({ amount: use3DStore.getState().bgTexAmount, scale: use3DStore.getState().bgTexScale }),
-      getSunShadow: () => use3DStore.getState().sunShadow,
-      getSunlight: () => use3DStore.getState().sunIntensity,
-      getSunMask: () => use3DStore.getState().sunMask,
+      // Keyed on the effect THIS stage renders (see the `modelUrl` comment
+      // above) — not the store's active effectId, so a Mockup project's
+      // background/sun never leaks into the Painted Shader stage or vice versa.
+      getBgFill: () => (use3DStore.getState().environments[effectId] ?? defaultEnvironmentFor(effectId)).bgFill,
+      getBgTex: () => {
+        const env = use3DStore.getState().environments[effectId] ?? defaultEnvironmentFor(effectId);
+        return { amount: env.bgTexAmount, scale: env.bgTexScale };
+      },
+      getSunShadow: () => (use3DStore.getState().environments[effectId] ?? defaultEnvironmentFor(effectId)).sunShadow,
+      getSunlight: () => (use3DStore.getState().environments[effectId] ?? defaultEnvironmentFor(effectId)).sunIntensity,
+      getSunMask: () => (use3DStore.getState().environments[effectId] ?? defaultEnvironmentFor(effectId)).sunMask,
       getSunMaskTransform: () => {
-        const s = use3DStore.getState();
-        return { scale: s.sunMaskScale, offX: s.sunMaskOffsetX, offY: s.sunMaskOffsetY };
+        const env = use3DStore.getState().environments[effectId] ?? defaultEnvironmentFor(effectId);
+        return { scale: env.sunMaskScale, offX: env.sunMaskOffsetX, offY: env.sunMaskOffsetY };
       },
       onCamera: setRig,
       getScreenMedia: () => {
@@ -183,7 +189,7 @@ export default function ThreeStage3D({ effectId: forcedEffectId }: { effectId?: 
     ...(effectId === 'mockup' ? { opacity: 1 } : null),
   };
 
-  const bgFill = use3DStore((s) => s.bgFill);
+  const bgFill = use3DStore((s) => (s.environments[effectId] ?? defaultEnvironmentFor(effectId)).bgFill);
   const backgroundGradient = bgFill.type === 'linear' || bgFill.type === 'radial'
     ? gradientFromFill(bgFill)
     : null;

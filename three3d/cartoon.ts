@@ -6,9 +6,7 @@ import { isOn } from './asciiControls';
 import { fitAndCenter } from './frame';
 import { asset } from '@/lib/paths';
 import { makeCameraRig } from './cameraRig';
-import { use3DStore } from '../store/use3DStore';
 import { useSceneStore } from '../store/useSceneStore';
-import { apply3DAnimation } from './animations';
 import {
   advancedRasterSize,
   gradientFromFill,
@@ -67,6 +65,13 @@ export function initCartoon(
   renderer.setClearColor(0x000000, 0);   // transparent → stage bg-gradient shows
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // Deliberately NoToneMapping (the default): ACESFilmicToneMapping was tried
+  // here to stop the sun hard-clipping to flat white, but its filmic curve
+  // lifts shadows/midtones too — against a dark wall that reads as a wash
+  // across the whole scene, not just the highlight. The actual wash-out was
+  // the wrong default background (see use3DStore's CARTOON_ENV_DEFAULT); a
+  // correctly-dark wall clips the sun's own hot core same as it always did,
+  // same as three3d/mockup.ts's HDR studio scene doesn't need to.
 
   // Paint textures (brush strokes). Shared across all materials.
   const texLoader = new THREE.TextureLoader();
@@ -167,8 +172,8 @@ vec4 stochNormalW(sampler2D tex, vec2 uv){
   wall.receiveShadow = true;
   scene.add(wall);
 
-  const ambient = new THREE.AmbientLight(0xffffff, 0.5); scene.add(ambient);
-  const key = new THREE.DirectionalLight(0xffffff, 2.6); key.position.set(3, 6, 4); scene.add(key);
+  const ambient = new THREE.AmbientLight(0xffffff, 0.1); scene.add(ambient);
+  const key = new THREE.DirectionalLight(0xffffff, 0.3); key.position.set(3, 6, 4); scene.add(key);
   const fill = new THREE.DirectionalLight(0xffffff, 1.0); fill.position.set(-4, 2, -3); scene.add(fill);
 
   // Sun — casts the model's shadow onto the wall (from the front). Intensity via control.
@@ -233,8 +238,6 @@ vec4 stochNormalW(sampler2D tex, vec2 uv){
 
   const MODEL_SIZE = 2.4;
   let modelHalf = MODEL_SIZE / 2;
-  const INIT_AZIMUTH = 0;
-  const INIT_ELEVATION = 0;
   function frameCamera() {
     const halfV = Math.tan((45 * Math.PI / 180) / 2);
     const halfH = halfV * camera.aspect;
@@ -480,9 +483,9 @@ vec4 stochNormal(sampler2D tex, vec2 uv){
     const p = P();
 
     // lights
-    key.intensity = Number(p.keyLight ?? 2.6);
+    key.intensity = Number(p.keyLight ?? 0.3);
     fill.intensity = Number(p.fillLight ?? 1);
-    ambient.intensity = Number(p.ambient ?? 0.5);
+    ambient.intensity = Number(p.ambient ?? 0.1);
 
     // toon steps → rebuild gradient map when changed
     const steps = Math.max(2, Math.round(Number(p.gradientSteps ?? 3)));
@@ -585,29 +588,6 @@ vec4 stochNormal(sampler2D tex, vec2 uv){
       }
     }
 
-    const animState = use3DStore.getState();
-    const sceneState = useSceneStore.getState();
-    const duration = Math.max(0.1, sceneState.duration);
-    const fps = Math.max(1, sceneState.fps);
-    const progress = ((sceneState.frame / (duration * fps)) * (animState.mockupSpeed || 1)) % 1;
-    apply3DAnimation(
-      animState.mockupAnimation || 'static',
-      progress,
-      camera,
-      controls,
-      pivot,
-      INIT_CAM,
-      INIT_TARGET,
-      INIT_AZIMUTH,
-      INIT_ELEVATION,
-      modelHalf,
-      md?.rotX ?? 0,
-      md?.rotY ?? 0,
-      md?.offsetX ?? 0,
-      md?.offsetY ?? 0,
-      md?.scale ?? 1.0,
-    );
-
     // wall (background) uniforms — gradient + stroke amount
     const wsh = wallMat.userData.shader as any;
     const bf = opts.getBgFill?.();
@@ -640,38 +620,27 @@ vec4 stochNormal(sampler2D tex, vec2 uv){
     } else if (sun.map) { sun.map = null; }
 
     rig.update();       // gizmo snap tween — writes camera.position
-    if (controls.enabled) controls.update();  // re-derives its spherical state from that position
+    controls.update();  // re-derives its spherical state from that position
     renderer.render(scene, camera);
   }
 
+  // Deterministic capture at an arbitrary frame — no animation choreography
+  // here, the Painted Shader has none of its own; only the model's own
+  // rotate/offset/scale controls, same as loop()'s per-frame model transform.
   const renderFrameAt = (frame: number) => {
     if (disposed) return;
     const sceneState = useSceneStore.getState();
     sceneState.setFrame(frame);
-    const animState = use3DStore.getState();
-    const duration = Math.max(0.1, sceneState.duration);
-    const fps = Math.max(1, sceneState.fps);
-    const progress = ((frame / (duration * fps)) * (animState.mockupSpeed || 1)) % 1;
-    const md = opts.getModel?.() ?? { scale: 1, rotX: 0, rotY: 0, offsetX: 0, offsetY: 0, centerNonce: 0 };
-    apply3DAnimation(
-      animState.mockupAnimation || 'static',
-      progress,
-      camera,
-      controls,
-      pivot,
-      INIT_CAM,
-      INIT_TARGET,
-      INIT_AZIMUTH,
-      INIT_ELEVATION,
-      modelHalf,
-      md?.rotX ?? 0,
-      md?.rotY ?? 0,
-      md?.offsetX ?? 0,
-      md?.offsetY ?? 0,
-      md?.scale ?? 1.0,
-    );
+    const md = opts.getModel?.();
+    if (md) {
+      pivot.scale.setScalar(Math.max(0.05, md.scale));
+      pivot.rotation.set(md.rotX, md.rotY, 0);
+      pivot.position.set(md.offsetX ?? 0, md.offsetY ?? 0, 0);
+      sun.target.position.set(md.offsetX ?? 0, md.offsetY ?? 0, 0);
+      sun.target.updateMatrixWorld();
+    }
     rig.update();
-    if (controls.enabled) controls.update();
+    controls.update();
     renderer.render(scene, camera);
   };
 

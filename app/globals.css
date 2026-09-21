@@ -331,82 +331,6 @@ input[type=range] {
   font-weight: 600;
 }
 
-.rail-exp-chevron {
-  position: absolute;
-  right: 4px;
-  top: 16px;
-  width: 10px;
-  height: 10px;
-  display: grid;
-  place-items: center;
-  transition: transform var(--t-fast);
-}
-
-.rail-exp-chevron.open {
-  transform: rotate(180deg);
-}
-
-.rail-experimental-items {
-  width: 100%;
-  max-height: 0;
-  margin: 0;
-  overflow: hidden;
-  pointer-events: none;
-  transition: max-height 340ms cubic-bezier(.22, 1, .36, 1), margin 340ms cubic-bezier(.22, 1, .36, 1);
-}
-
-.rail-experimental-items.open {
-  max-height: 162px;
-  margin-bottom: 4px;
-  pointer-events: auto;
-}
-
-.rail-experimental-inner {
-  opacity: 0;
-  transform: translateY(-34px);
-  transition: opacity 180ms ease, transform 340ms cubic-bezier(.22, 1, .36, 1);
-}
-
-.rail-experimental-items.open .rail-experimental-inner {
-  opacity: 1;
-  transform: translateY(0);
-  animation: rail-experiments-open 340ms cubic-bezier(.22, 1, .36, 1) both;
-}
-
-.rail-experimental-items.closed .rail-experimental-inner {
-  animation: rail-experiments-close 340ms cubic-bezier(.55, 0, 1, .45) both;
-}
-
-@keyframes rail-experiments-open {
-  from {
-    opacity: 0;
-    transform: translateY(-24px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes rail-experiments-close {
-  from {
-    opacity: 1;
-    transform: translateY(0);
-  }
-
-  to {
-    opacity: 0;
-    transform: translateY(-24px);
-  }
-}
-
-.rail-item.rail-subitem {
-  width: 100%;
-  height: 52px;
-  margin-bottom: 2px;
-}
-
 /* A section that exists but this build does not open. It stays visible on
    purpose — hiding it would make the work invisible — so it reads as "not yet"
    rather than as a button that does nothing: dimmer than the resting item,
@@ -6219,8 +6143,17 @@ select.field {
   line-height: 15px;
 }
 
-/* Standard PNG transparency checkerboard (Photoshop / Figma / After Effects style) */
-.stage-canvas {
+/* Standard PNG transparency checkerboard (Photoshop / Figma / After Effects
+   style) — a class of its own, not folded into `.stage-canvas`. That layout
+   class (box-shadow, max-width/height, above) is shared with ThreeStage3D's
+   wrapper div, which paints its OWN chosen background (solid/gradient) via an
+   inline style; the `!important` here used to win the cascade over that inline
+   style regardless, so the Painted Shader section (and anything else reusing
+   `.stage-canvas` for its card look) showed this checkerboard permanently
+   instead of the background the user picked. Apply this class only to a
+   canvas that draws fully opaque pixels over it — the checker is then only
+   ever seen through genuinely transparent pixels, its intended job. */
+.stage-transparency-checker {
   background-color: #ffffff !important;
   background-image:
     linear-gradient(45deg, #cbcbd2 25%, transparent 25%),
@@ -6363,6 +6296,19 @@ select.field {
   grid-template-columns: var(--rail-w) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   grid-template-areas: "rail stage";
+}
+
+/* Painted Shader: an orbit-controlled still with no export of its own (see
+   DesktopEditor's `is3D` branch) — the bottom bar would otherwise render
+   empty. Same "hidden, not unmounted" reasoning as .app-projects: the row
+   just collapses to nothing rather than the panel being torn down. */
+.app-3d {
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: "rail templates stage controls right";
+}
+
+.app-3d .bottom {
+  display: none;
 }
 
 .app-projects .templates,

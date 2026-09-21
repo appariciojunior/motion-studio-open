@@ -98,7 +98,7 @@ export default function PreviewStage() {
     const guardado = palcos.get(engine);
     // O canvas deste engine: o que ja existe, ou um novo na primeira vez.
     const canvas = guardado?.canvas ?? document.createElement('canvas');
-    canvas.className = 'stage-canvas';
+    canvas.className = 'stage-canvas stage-transparency-checker';
     // The canvas belongs to this exact renderer generation. Keeping it in a
     // local variable prevents an obsolete async Pixi init/cleanup from ever
     // claiming the canvas created for Three (or vice versa).
@@ -178,7 +178,7 @@ export default function PreviewStage() {
         if (!mounted || initGeneration !== initGenerationRef.current) return;
         // A criacao vencedora pode ter usado o canvas da outra tentativa.
         if (entrada.canvas !== canvas) {
-          entrada.canvas.className = 'stage-canvas';
+          entrada.canvas.className = 'stage-canvas stage-transparency-checker';
           stageRef.current?.replaceChildren(entrada.canvas);
         }
         renderer = entrada.renderer;

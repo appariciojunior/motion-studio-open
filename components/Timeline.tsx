@@ -69,10 +69,15 @@ function buildRuler(duration: number, width: number) {
 export default function Timeline({
   showExport = true,
   showLayers = true,
+  showScrubber = true,
   extra,
 }: {
   showExport?: boolean;
   showLayers?: boolean;
+  // Off for the Painted Shader: nothing there advances the clock over time —
+  // it's an orbit-controlled still, not a played clip — so a play button and
+  // a scrubber for a frame that never moves on its own just read as broken.
+  showScrubber?: boolean;
   extra?: React.ReactNode;
 }) {
   const frame = useSceneStore((s) => s.frame);
@@ -163,39 +168,50 @@ export default function Timeline({
   return (
     <div className={`timeline-shell ${lanesOpen ? 'lanes-open' : ''}`} ref={shellRef}>
     <div className="timeline">
-      <button className="play-btn" onClick={() => setPlaying(!playing)} title={playing ? 'Pause' : 'Play'}>
-        {playing ? (
-          <PauseIcon size={14} />
-        ) : (
-          <PlayIcon size={14} />
-        )}
-      </button>
+      {showScrubber && (
+        <button className="play-btn" onClick={() => setPlaying(!playing)} title={playing ? 'Pause' : 'Play'}>
+          {playing ? (
+            <PauseIcon size={14} />
+          ) : (
+            <PlayIcon size={14} />
+          )}
+        </button>
+      )}
 
-      <span className="time-readout"><b>{fmt(curTime)}</b> / {fmt(duration)}s</span>
+      {showScrubber && <span className="time-readout"><b>{fmt(curTime)}</b> / {fmt(duration)}s</span>}
 
-      <div className="scrubber" ref={scrubberRef}>
-        <div className="tl-trackbar" />
-        <div className="ruler">
-          {dashes.map((pos, i) => (
-            <span key={`d${i}`} className="ruler-dash" style={{ left: pos }} />
-          ))}
-          {labels.map(({ t, pct }) => (
-            <span key={`l${t}`} className="ruler-label" style={{ left: `${pct}%` }}>{t}s</span>
-          ))}
+      {/* With the scrubber gone, its `flex: 1` spacer goes with it — this
+          keeps whatever's left (Export, extra) pinned to the right edge
+          instead of collapsing to the left where the scrubber used to start. */}
+      {!showScrubber && <div style={{ flex: 1 }} />}
+
+      {showScrubber && (
+        <div className="scrubber" ref={scrubberRef}>
+          <div className="tl-trackbar" />
+          <div className="ruler">
+            {dashes.map((pos, i) => (
+              <span key={`d${i}`} className="ruler-dash" style={{ left: pos }} />
+            ))}
+            {labels.map(({ t, pct }) => (
+              <span key={`l${t}`} className="ruler-label" style={{ left: `${pct}%` }}>{t}s</span>
+            ))}
+          </div>
+          <div className="playhead" style={{ left: `${progress}%` }}>
+            <span className="playhead-chip">{curTime.toFixed(1)}s</span>
+          </div>
+          <input
+            type="range" min={0} max={totalFrames - 1} step={1} value={frame}
+            onChange={(e) => { setPlaying(false); setFrame(Number(e.target.value)); }}
+          />
         </div>
-        <div className="playhead" style={{ left: `${progress}%` }}>
-          <span className="playhead-chip">{curTime.toFixed(1)}s</span>
-        </div>
-        <input
-          type="range" min={0} max={totalFrames - 1} step={1} value={frame}
-          onChange={(e) => { setPlaying(false); setFrame(Number(e.target.value)); }}
-        />
-      </div>
+      )}
 
-      <label className="dur-field">
-        <input type="number" min={1} max={60} step={1} value={duration} onChange={(e) => setDuration(Math.max(1, Number(e.target.value)))} />
-        <span>s</span>
-      </label>
+      {showScrubber && (
+        <label className="dur-field">
+          <input type="number" min={1} max={60} step={1} value={duration} onChange={(e) => setDuration(Math.max(1, Number(e.target.value)))} />
+          <span>s</span>
+        </label>
+      )}
 
       {/* Motion layers: the stack of tracks sharing this one timeline. */}
       {showLayers && (

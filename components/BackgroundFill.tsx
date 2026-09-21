@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef } from 'react';
-import { use3DStore } from '@/store/use3DStore';
+import { use3DStore, defaultEnvironmentFor } from '@/store/use3DStore';
 import { ControlRow } from './Controls';
 import FillRow from './FillRow';
 import type { ControlDef } from '@/lib/types';
@@ -21,22 +21,19 @@ const mOffYDef: ControlDef = { key: 'my', label: 'Mask Offset Y', type: 'slider'
 // `hideTexture` drops the two paint-relief rows — Mockup mode has no painted
 // wall to apply them to (its background is the stage CSS gradient).
 export default function BackgroundFill({ hideTexture }: { hideTexture?: boolean } = {}) {
-  const bgFill = use3DStore((s) => s.bgFill);
+  // Reads/writes the ACTIVE effect's own environment (setBgFill & co. already
+  // patch use3DStore.getState().effectId's slot) — so this one panel, shared
+  // between the 3D and Mockup nav tabs, never bleeds one effect's background
+  // into the other's.
+  const env = use3DStore((s) => s.environments[s.effectId] ?? defaultEnvironmentFor(s.effectId));
+  const { bgFill, bgTexAmount, bgTexScale, sunIntensity, sunShadow, sunMask, sunMaskScale, sunMaskOffsetX, sunMaskOffsetY } = env;
   const setBgFill = use3DStore((s) => s.setBgFill);
-  const bgTexAmount = use3DStore((s) => s.bgTexAmount);
-  const bgTexScale = use3DStore((s) => s.bgTexScale);
   const setBgTexAmount = use3DStore((s) => s.setBgTexAmount);
   const setBgTexScale = use3DStore((s) => s.setBgTexScale);
-  const sunIntensity = use3DStore((s) => s.sunIntensity);
   const setSunIntensity = use3DStore((s) => s.setSunIntensity);
-  const sunShadow = use3DStore((s) => s.sunShadow);
   const setSunShadow = use3DStore((s) => s.setSunShadow);
-  const sunMask = use3DStore((s) => s.sunMask);
   const setSunMask = use3DStore((s) => s.setSunMask);
-  const sunMaskScale = use3DStore((s) => s.sunMaskScale);
   const setSunMaskScale = use3DStore((s) => s.setSunMaskScale);
-  const sunMaskOffsetX = use3DStore((s) => s.sunMaskOffsetX);
-  const sunMaskOffsetY = use3DStore((s) => s.sunMaskOffsetY);
   const setSunMaskOffset = use3DStore((s) => s.setSunMaskOffset);
   const maskRef = useRef<HTMLInputElement>(null);
 

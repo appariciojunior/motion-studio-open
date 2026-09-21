@@ -8,8 +8,9 @@ export const DEPLOYMENT_MODE: DeploymentMode =
 
 export const IS_HOSTED_DEPLOYMENT = DEPLOYMENT_MODE === 'hosted';
 
-export const RELEASE_NOTES_URL =
-  'https://github.com/appariciojunior/motion-studio-open/commits/main/';
+export const REPO_URL = 'https://github.com/appariciojunior/motion-studio-open';
+
+export const RELEASE_NOTES_URL = `${REPO_URL}/commits/main/`;
 
 // Two sections live in the repository without being finished: the 3D stage and
 // the Web stage. A built app closes them, because an unfinished section is not
