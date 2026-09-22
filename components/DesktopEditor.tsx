@@ -60,6 +60,14 @@ export default function DesktopEditor() {
     else if (is3D && s.effectId === 'mockup') s.setEffect('cartoon');
   }, [isMockup, is3D]);
 
+  // /web is now the device-sessions flow (see app/(editor)/web/page.tsx,
+  // formerly the standalone /web-mvp route) — it renders its own full shell
+  // (rail, stage, panels) as EditorShell's `children`, not through this
+  // component. The old paste-HTML/animate/export flow's wiring below
+  // (WebStage, WebSourceBar, WebSelectionPanel, WebScenePanel, WebCodeModal)
+  // is left in place but unreachable now that isWeb bails out here first.
+  if (isWeb) return null;
+
   return (
     <div className={`app ${isWeb || isBoard ? 'app-web' : ''} ${isProjects ? 'app-projects' : ''} ${is3D ? 'app-3d' : ''} ${tplCollapsed ? 'app-tpl-collapsed' : ''} ${leftCollapsed ? 'left-collapsed' : ''} ${rightCollapsed ? 'right-collapsed' : ''}`}>
       <IconRail />
